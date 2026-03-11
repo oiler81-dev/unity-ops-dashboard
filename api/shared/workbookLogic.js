@@ -87,11 +87,6 @@ function computeVariance(metricKey, value, targetValue) {
   const numericTarget = toNumber(targetValue);
 
   if (numericValue === null || numericTarget === null) return null;
-
-  if (["noShowRate", "cancellationRate", "abandonedCallRate"].includes(metricKey)) {
-    return numericValue - numericTarget;
-  }
-
   return numericValue - numericTarget;
 }
 
@@ -162,8 +157,43 @@ function normalizeEntityRow(entity, inputMap = {}, status = "Draft") {
   };
 }
 
-function buildExecutiveFromRows(weekEnding, entityRows, entityReferenceMaps = {}) {
+function getPreviousWeekEnding(weekEnding) {
+  const d = new Date(`${weekEnding}T12:00:00`);
+  d.setDate(d.getDate() - 7);
+  return d.toISOString().slice(0, 10);
+}
+
+function buildExecutiveFromRows(weekEnding, entityRows, entityReferenceMaps = {}, previousEntityRows = [], narratives = {}) {
   const totals = entityRows.reduce(
+    (acc, row) => {
+      const visitVolume = toNumber(row.raw?.visitVolume);
+      const callVolume = toNumber(row.raw?.callVolume);
+      const noShowRate = toNumber(row.raw?.noShowRate);
+      const abandonedCallRate = toNumber(row.raw?.abandonedCallRate);
+
+      if (visitVolume !== null) acc.visitVolume += visitVolume;
+      if (callVolume !== null) acc.callVolume += callVolume;
+      if (noShowRate !== null) {
+        acc.noShowRateSum += noShowRate;
+        acc.noShowRateCount += 1;
+      }
+      if (abandonedCallRate !== null) {
+        acc.abandonedCallRateSum += abandonedCallRate;
+        acc.abandonedCallRateCount += 1;
+      }
+      return acc;
+    },
+    {
+      visitVolume: 0,
+      callVolume: 0,
+      noShowRateSum: 0,
+      noShowRateCount: 0,
+      abandonedCallRateSum: 0,
+      abandonedCallRateCount: 0
+    }
+  );
+
+  const prevTotals = previousEntityRows.reduce(
     (acc, row) => {
       const visitVolume = toNumber(row.raw?.visitVolume);
       const callVolume = toNumber(row.raw?.callVolume);
@@ -200,10 +230,85 @@ function buildExecutiveFromRows(weekEnding, entityRows, entityReferenceMaps = {}
       ? totals.abandonedCallRateSum / totals.abandonedCallRateCount
       : null;
 
+  const prevAvgNoShowRate =
+    prevTotals.noShowRateCount > 0 ? prevTotals.noShowRateSum / prevTotals.noShowRateCount : null;
+
+  const prevAvgAbandonedCallRate =
+    prevTotals.abandonedCallRateCount > 0
+      ? prevTotals.abandonedCallRateSum / prevTotals.abandonedCallRateCount
+      : null;
+
   const firstEntityRef = entityReferenceMaps[ENTITIES[0]] || {};
+
+  const comparison = [
+    {
+      key: "visitVolume",
+      label: "Visit Volume",
+      current: totals.visitVolume || 0,
+      previous: prevTotals.visitVolume || 0,
+      change: (totals.visitVolume || 0) - (prevTotals.visitVolume || 0),
+      format: "whole"
+    },
+    {
+      key: "callVolume",
+      label: "Call Volume",
+      current: totals.callVolume || 0,
+      previous: prevTotals.callVolume || 0,
+      change: (totals.callVolume || 0) - (prevTotals.callVolume || 0),
+      format: "whole"
+    },
+    {
+      key: "noShowRate",
+      label: "No Show Rate",
+      current: avgNoShowRate,
+      previous: prevAvgNoShowRate,
+      change: avgNoShowRate !== null && prevAvgNoShowRate !== null ? avgNoShowRate - prevAvgNoShowRate : null,
+      format: "percent1"
+    },
+    {
+      key: "abandonedCallRate",
+      label: "Abandoned Call Rate",
+      current: avgAbandonedCallRate,
+      previous: prevAvgAbandonedCallRate,
+      change: avgAbandonedCallRate !== null && prevAvgAbandonedCallRate !== null ? avgAbandonedCallRate - prevAvgAbandonedCallRate : null,
+      format: "percent1"
+    }
+  ];
+
+  const riskMetrics = [];
+  for (const row of entityRows) {
+    const entityRef = entityReferenceMaps[row.entity] || {};
+    ["noShowRate", "abandonedCallRate"].forEach((metricKey) => {
+      const ref = entityRef[metricKey] || {};
+      const value = toNumber(row.raw?.[metricKey]);
+      if (value === null) return;
+      riskMetrics.push({
+        entity: row.entity,
+        metricKey,
+        label: metricKey === "noShowRate" ? "No Show Rate" : "Abandoned Call Rate",
+        value,
+        formattedValue: formatValue(metricKey, value),
+        statusColor: computeThresholdStatus(metricKey, value, ref.threshold),
+        targetValue: ref.targetValue ?? null
+      });
+    });
+  }
+
+  riskMetrics.sort((a, b) => {
+    const order = { red: 0, yellow: 1, green: 2 };
+    return (order[a.statusColor] ?? 9) - (order[b.statusColor] ?? 9);
+  });
+
+  const commentaryRollup = ENTITIES.map((entity) => ({
+    entity,
+    commentary: narratives[entity]?.commentary || "",
+    blockers: narratives[entity]?.blockers || "",
+    opportunities: narratives[entity]?.opportunities || ""
+  })).filter((x) => x.commentary || x.blockers || x.opportunities);
 
   return {
     weekEnding,
+    previousWeekEnding: getPreviousWeekEnding(weekEnding),
     kpis: [
       buildMetricCard({
         metricKey: "visitVolume",
@@ -238,7 +343,10 @@ function buildExecutiveFromRows(weekEnding, entityRows, entityReferenceMaps = {}
         fallbackMeta: "Average across entities"
       })
     ],
-    entities: entityRows.map((row) => normalizeEntityRow(row.entity, row.raw, row.status))
+    entities: entityRows.map((row) => normalizeEntityRow(row.entity, row.raw, row.status)),
+    comparison,
+    riskMetrics: riskMetrics.slice(0, 6),
+    commentaryRollup
   };
 }
 
@@ -246,9 +354,6 @@ module.exports = {
   ENTITIES,
   toNumber,
   formatValue,
-  computeThresholdStatus,
-  computeVariance,
-  buildMetricCard,
   buildRegionKpis,
   buildExecutiveFromRows
 };
