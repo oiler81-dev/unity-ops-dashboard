@@ -1,4 +1,5 @@
 import { getRegionSections, getAllMetricKeysForEntity } from "./definitions.js";
+import { calculateRegionSummaries } from "./calculations.js";
 
 const state = {
   me: null,
@@ -6,7 +7,8 @@ const state = {
   currentEntity: null,
   currentSharedPage: null,
   currentWeekEnding: getDefaultWeekEnding(),
-  pageData: null
+  pageData: null,
+  activeRegionSectionKey: null
 };
 
 const els = {
@@ -68,6 +70,16 @@ function bindEvents() {
     if (route === "admin") return setRoute("admin");
 
     return setRoute("executive");
+  });
+
+  document.addEventListener("click", async (e) => {
+    const tab = e.target.closest(".section-tab");
+    if (tab) {
+      state.activeRegionSectionKey = tab.dataset.sectionKey;
+      if (state.currentRoute === "region" && state.currentEntity) {
+        await renderRegion(state.currentEntity);
+      }
+    }
   });
 
   els.goAssignedRegionBtn.addEventListener("click", () => {
@@ -138,6 +150,11 @@ async function setRoute(route, entity = null, sharedPage = null) {
   const activeBtn = document.querySelector(selector);
   if (activeBtn) activeBtn.classList.add("active");
 
+  if (route === "region") {
+    const sections = getRegionSections(entity);
+    state.activeRegionSectionKey = sections[0]?.key || null;
+  }
+
   await loadCurrentRoute();
 }
 
@@ -161,7 +178,7 @@ async function renderExecutive() {
   els.pageContent.innerHTML = `
     <div class="section-head">
       <h3>Companywide Overview</h3>
-      <p class="section-copy">Meeting-ready summary across LAOSS, NES, SpineOne, and MRO.</p>
+      <p class="section-copy">Live summary across LAOSS, NES, SpineOne, and MRO based on saved weekly inputs.</p>
     </div>
 
     <div class="split-grid">
@@ -182,11 +199,11 @@ async function renderExecutive() {
             ${(data.entities || []).map((row) => `
               <tr>
                 <td>${escapeHtml(row.entity)}</td>
-                <td>${escapeHtml(String(row.visitVolume ?? "-"))}</td>
-                <td>${escapeHtml(String(row.callVolume ?? "-"))}</td>
-                <td>${escapeHtml(String(row.noShowRate ?? "-"))}</td>
-                <td>${escapeHtml(String(row.cancellationRate ?? "-"))}</td>
-                <td>${escapeHtml(String(row.abandonedCallRate ?? "-"))}</td>
+                <td>${escapeHtml(String(row.visitVolume ?? "—"))}</td>
+                <td>${escapeHtml(String(row.callVolume ?? "—"))}</td>
+                <td>${escapeHtml(String(row.noShowRate ?? "—"))}</td>
+                <td>${escapeHtml(String(row.cancellationRate ?? "—"))}</td>
+                <td>${escapeHtml(String(row.abandonedCallRate ?? "—"))}</td>
                 <td>${escapeHtml(row.status ?? "Draft")}</td>
               </tr>
             `).join("")}
@@ -197,7 +214,7 @@ async function renderExecutive() {
       <div class="note-panel">
         <h4>Executive Notes</h4>
         <p>
-          The shell is live. Region inputs now render from a central definition model so edits and additions can happen much faster.
+          The executive page is now reading live saved values instead of static samples. As we expand the workbook map, this page will become the real meeting summary.
         </p>
       </div>
     </div>
@@ -216,18 +233,43 @@ async function renderRegion(entity) {
 
   const canEdit = Boolean(state.me?.isAdmin || state.me?.entity === entity);
   const sections = getRegionSections(entity);
+  const activeSection =
+    sections.find((section) => section.key === state.activeRegionSectionKey) || sections[0];
+
+  state.activeRegionSectionKey = activeSection?.key || null;
+
+  const summaries = calculateRegionSummaries(data.inputs || {});
 
   els.pageContent.innerHTML = `
     <div class="section-head">
       <h3>${entity} Weekly Inputs</h3>
       <p class="section-copy">
-        This page is now definition-driven. New fields can be added centrally without rewriting the whole form.
+        This page is definition-driven and tabbed. New fields can be added centrally without rewriting the whole page.
       </p>
     </div>
 
-    <div class="region-sections">
-      ${sections.map((section) => renderSectionBlock(section, data.inputs || {}, canEdit)).join("")}
+    <div class="summary-mini-grid">
+      ${summaries.map((item) => `
+        <div class="summary-mini-card">
+          <span class="summary-mini-label">${escapeHtml(item.label)}</span>
+          <strong class="summary-mini-value">${escapeHtml(String(item.value))}</strong>
+          <span class="summary-mini-meta">${escapeHtml(item.meta || "")}</span>
+        </div>
+      `).join("")}
     </div>
+
+    <div class="section-tabs">
+      ${sections.map((section) => `
+        <button
+          class="section-tab ${section.key === activeSection.key ? "active" : ""}"
+          data-section-key="${escapeAttr(section.key)}"
+        >
+          ${escapeHtml(section.title)}
+        </button>
+      `).join("")}
+    </div>
+
+    ${renderSectionBlock(activeSection, data.inputs || {}, canEdit)}
 
     <div class="split-grid" style="margin-top:18px;">
       <div class="note-panel">
@@ -255,7 +297,7 @@ async function renderRegion(entity) {
 
 function renderSectionBlock(section, inputs, canEdit) {
   return `
-    <section class="section-block" style="margin-bottom:18px;">
+    <section class="section-block">
       <div class="section-head">
         <h3>${escapeHtml(section.title)}</h3>
         <p class="section-copy">${escapeHtml(section.description || "")}</p>
