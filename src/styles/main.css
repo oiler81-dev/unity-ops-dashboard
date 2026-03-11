@@ -513,3 +513,11 @@ tbody tr:hover{ background:rgba(255,255,255,.045); }
   }
   .btn, .btn-primary, .btn-secondary, button{ width:100%; }
 }
+.region-sections{
+  display:grid;
+  gap:18px;
+}
+
+.section-block + .section-block{
+  margin-top:0;
+}
