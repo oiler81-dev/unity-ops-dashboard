@@ -9,6 +9,24 @@ function formatPercent(value) {
   return value === null || value === undefined ? "—" : `${Number(value).toFixed(1)}%`;
 }
 
+function formatWhole(value) {
+  return value === null || value === undefined ? "—" : Number(value).toLocaleString();
+}
+
+function formatValue(metricKey, value) {
+  if (value === null || value === undefined || value === "") return "—";
+
+  if (["noShowRate", "cancellationRate", "abandonedCallRate", "capacityUtilization", "slotFillRate"].includes(metricKey)) {
+    return `${Number(value).toFixed(1)}%`;
+  }
+
+  if (typeof value === "number") {
+    return Number(value).toLocaleString();
+  }
+
+  return String(value);
+}
+
 function computeStatusColor(metricKey, value) {
   if (value === null || value === undefined || value === "") return "yellow";
 
@@ -33,37 +51,97 @@ function computeStatusColor(metricKey, value) {
   return "yellow";
 }
 
-function buildRegionKpis(inputs = {}) {
-  return [
-    {
-      label: "Visit Volume",
-      value: inputs.visitVolume ?? "—",
-      meta: "Weekly total visits",
-      status: "Tracking",
-      statusColor: computeStatusColor("visitVolume", inputs.visitVolume)
-    },
-    {
-      label: "Call Volume",
-      value: inputs.callVolume ?? "—",
-      meta: "Weekly total calls",
-      status: "Tracking",
-      statusColor: computeStatusColor("callVolume", inputs.callVolume)
-    },
-    {
-      label: "No Show Rate",
-      value: inputs.noShowRate !== null && inputs.noShowRate !== undefined ? `${inputs.noShowRate}%` : "—",
-      meta: "Weekly no show percentage",
-      status: "Tracking",
-      statusColor: computeStatusColor("noShowRate", inputs.noShowRate)
-    },
-    {
-      label: "Abandoned Call Rate",
-      value: inputs.abandonedCallRate !== null && inputs.abandonedCallRate !== undefined ? `${inputs.abandonedCallRate}%` : "—",
-      meta: "Weekly abandoned call percentage",
-      status: "Tracking",
-      statusColor: computeStatusColor("abandonedCallRate", inputs.abandonedCallRate)
-    }
+function computeThresholdStatus(metricKey, value, threshold) {
+  if (value === null || value === undefined || !threshold) {
+    return computeStatusColor(metricKey, value);
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return "yellow";
+
+  const comparisonType = String(threshold.comparisonType || "").toLowerCase();
+
+  if (comparisonType === "higher_better") {
+    const greenMin = toNumber(threshold.greenMin);
+    const yellowMin = toNumber(threshold.yellowMin);
+
+    if (greenMin !== null && numericValue >= greenMin) return "green";
+    if (yellowMin !== null && numericValue >= yellowMin) return "yellow";
+    return "red";
+  }
+
+  if (comparisonType === "lower_better") {
+    const greenMax = toNumber(threshold.greenMax);
+    const yellowMax = toNumber(threshold.yellowMax);
+
+    if (greenMax !== null && numericValue <= greenMax) return "green";
+    if (yellowMax !== null && numericValue <= yellowMax) return "yellow";
+    return "red";
+  }
+
+  return computeStatusColor(metricKey, numericValue);
+}
+
+function computeVariance(metricKey, value, targetValue) {
+  const numericValue = toNumber(value);
+  const numericTarget = toNumber(targetValue);
+
+  if (numericValue === null || numericTarget === null) return null;
+
+  if (["noShowRate", "cancellationRate", "abandonedCallRate"].includes(metricKey)) {
+    return numericValue - numericTarget;
+  }
+
+  return numericValue - numericTarget;
+}
+
+function buildMetricCard({ metricKey, label, value, targetValue, threshold, fallbackMeta }) {
+  const statusColor = computeThresholdStatus(metricKey, value, threshold);
+  const variance = computeVariance(metricKey, value, targetValue);
+
+  let meta = fallbackMeta || "";
+  if (targetValue !== null && targetValue !== undefined && targetValue !== "") {
+    const varianceText =
+      variance === null
+        ? "—"
+        : ["noShowRate", "cancellationRate", "abandonedCallRate"].includes(metricKey)
+          ? `${variance >= 0 ? "+" : ""}${variance.toFixed(1)} pts vs target`
+          : `${variance >= 0 ? "+" : ""}${variance.toLocaleString()} vs target`;
+
+    meta = `Target: ${formatValue(metricKey, targetValue)} • ${varianceText}`;
+  }
+
+  return {
+    label,
+    value: formatValue(metricKey, value),
+    rawValue: value,
+    targetValue,
+    variance,
+    meta,
+    status: "Tracking",
+    statusColor
+  };
+}
+
+function buildRegionKpis(inputs = {}, referenceMap = {}) {
+  const metrics = [
+    { metricKey: "visitVolume", label: "Visit Volume", fallbackMeta: "Weekly total visits" },
+    { metricKey: "callVolume", label: "Call Volume", fallbackMeta: "Weekly total calls" },
+    { metricKey: "noShowRate", label: "No Show Rate", fallbackMeta: "Weekly no show percentage" },
+    { metricKey: "abandonedCallRate", label: "Abandoned Call Rate", fallbackMeta: "Weekly abandoned call percentage" }
   ];
+
+  return metrics.map((metric) => {
+    const ref = referenceMap[metric.metricKey] || {};
+    return buildMetricCard({
+      metricKey: metric.metricKey,
+      label: metric.label,
+      value: inputs[metric.metricKey],
+      targetValue: ref.targetValue,
+      threshold: ref.threshold,
+      fallbackMeta: metric.fallbackMeta
+    });
+  });
 }
 
 function normalizeEntityRow(entity, inputMap = {}, status = "Draft") {
@@ -84,7 +162,7 @@ function normalizeEntityRow(entity, inputMap = {}, status = "Draft") {
   };
 }
 
-function buildExecutiveFromRows(weekEnding, entityRows) {
+function buildExecutiveFromRows(weekEnding, entityRows, entityReferenceMaps = {}) {
   const totals = entityRows.reduce(
     (acc, row) => {
       const visitVolume = toNumber(row.raw?.visitVolume);
@@ -122,37 +200,43 @@ function buildExecutiveFromRows(weekEnding, entityRows) {
       ? totals.abandonedCallRateSum / totals.abandonedCallRateCount
       : null;
 
+  const firstEntityRef = entityReferenceMaps[ENTITIES[0]] || {};
+
   return {
     weekEnding,
     kpis: [
-      {
+      buildMetricCard({
+        metricKey: "visitVolume",
         label: "Visit Volume",
-        value: totals.visitVolume ? totals.visitVolume.toLocaleString() : "—",
-        meta: "All entities combined",
-        status: "Live",
-        statusColor: computeStatusColor("visitVolume", totals.visitVolume)
-      },
-      {
+        value: totals.visitVolume || null,
+        targetValue: null,
+        threshold: null,
+        fallbackMeta: "All entities combined"
+      }),
+      buildMetricCard({
+        metricKey: "callVolume",
         label: "Call Volume",
-        value: totals.callVolume ? totals.callVolume.toLocaleString() : "—",
-        meta: "All entities combined",
-        status: "Live",
-        statusColor: computeStatusColor("callVolume", totals.callVolume)
-      },
-      {
+        value: totals.callVolume || null,
+        targetValue: null,
+        threshold: null,
+        fallbackMeta: "All entities combined"
+      }),
+      buildMetricCard({
+        metricKey: "noShowRate",
         label: "No Show Rate",
-        value: avgNoShowRate !== null ? `${avgNoShowRate.toFixed(1)}%` : "—",
-        meta: "Average across entities",
-        status: "Live",
-        statusColor: computeStatusColor("noShowRate", avgNoShowRate)
-      },
-      {
+        value: avgNoShowRate,
+        targetValue: firstEntityRef.noShowRate?.targetValue ?? null,
+        threshold: firstEntityRef.noShowRate?.threshold ?? null,
+        fallbackMeta: "Average across entities"
+      }),
+      buildMetricCard({
+        metricKey: "abandonedCallRate",
         label: "Abandoned Call Rate",
-        value: avgAbandonedCallRate !== null ? `${avgAbandonedCallRate.toFixed(1)}%` : "—",
-        meta: "Average across entities",
-        status: "Live",
-        statusColor: computeStatusColor("abandonedCallRate", avgAbandonedCallRate)
-      }
+        value: avgAbandonedCallRate,
+        targetValue: firstEntityRef.abandonedCallRate?.targetValue ?? null,
+        threshold: firstEntityRef.abandonedCallRate?.threshold ?? null,
+        fallbackMeta: "Average across entities"
+      })
     ],
     entities: entityRows.map((row) => normalizeEntityRow(row.entity, row.raw, row.status))
   };
@@ -160,6 +244,11 @@ function buildExecutiveFromRows(weekEnding, entityRows) {
 
 module.exports = {
   ENTITIES,
+  toNumber,
+  formatValue,
+  computeThresholdStatus,
+  computeVariance,
+  buildMetricCard,
   buildRegionKpis,
   buildExecutiveFromRows
 };
