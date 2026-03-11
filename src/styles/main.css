@@ -868,3 +868,6 @@ tbody tr:hover{ background:rgba(255,255,255,.045); }
     grid-template-columns:1fr;
   }
 }
+.admin-filter-bar .hidden{
+  display:none !important;
+}
