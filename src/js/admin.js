@@ -71,10 +71,24 @@ export function renderTargetsEditor(entity, rows = []) {
               <tr>
                 <td>${metric.key}</td>
                 <td>
-                  <input class="admin-input" data-admin-kind="target" data-metric-key="${metric.key}" data-field="label" value="${escapeAttr(row.label ?? metric.label)}" />
+                  <input
+                    class="admin-input"
+                    data-admin-kind="target"
+                    data-metric-key="${metric.key}"
+                    data-field="label"
+                    value="${escapeAttr(row.label ?? metric.label)}"
+                  />
                 </td>
                 <td>
-                  <input class="admin-input" type="number" step="0.01" data-admin-kind="target" data-metric-key="${metric.key}" data-field="targetValue" value="${escapeAttr(row.targetValue ?? "")}" />
+                  <input
+                    class="admin-input"
+                    type="number"
+                    step="0.01"
+                    data-admin-kind="target"
+                    data-metric-key="${metric.key}"
+                    data-field="targetValue"
+                    value="${escapeAttr(row.targetValue ?? "")}"
+                  />
                 </td>
               </tr>
             `;
@@ -117,15 +131,60 @@ export function renderThresholdsEditor(entity, rows = []) {
               <tr>
                 <td>${metric.key}</td>
                 <td>
-                  <select class="admin-input" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="comparisonType">
+                  <select
+                    class="admin-input"
+                    data-admin-kind="threshold"
+                    data-metric-key="${metric.key}"
+                    data-field="comparisonType"
+                  >
                     <option value="higher_better" ${row.comparisonType === "higher_better" ? "selected" : ""}>higher_better</option>
                     <option value="lower_better" ${row.comparisonType === "lower_better" ? "selected" : ""}>lower_better</option>
                   </select>
                 </td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="greenMin" value="${escapeAttr(row.greenMin ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="yellowMin" value="${escapeAttr(row.yellowMin ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="greenMax" value="${escapeAttr(row.greenMax ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="yellowMax" value="${escapeAttr(row.yellowMax ?? "")}" /></td>
+                <td>
+                  <input
+                    class="admin-input"
+                    type="number"
+                    step="0.01"
+                    data-admin-kind="threshold"
+                    data-metric-key="${metric.key}"
+                    data-field="greenMin"
+                    value="${escapeAttr(row.greenMin ?? "")}"
+                  />
+                </td>
+                <td>
+                  <input
+                    class="admin-input"
+                    type="number"
+                    step="0.01"
+                    data-admin-kind="threshold"
+                    data-metric-key="${metric.key}"
+                    data-field="yellowMin"
+                    value="${escapeAttr(row.yellowMin ?? "")}"
+                  />
+                </td>
+                <td>
+                  <input
+                    class="admin-input"
+                    type="number"
+                    step="0.01"
+                    data-admin-kind="threshold"
+                    data-metric-key="${metric.key}"
+                    data-field="greenMax"
+                    value="${escapeAttr(row.greenMax ?? "")}"
+                  />
+                </td>
+                <td>
+                  <input
+                    class="admin-input"
+                    type="number"
+                    step="0.01"
+                    data-admin-kind="threshold"
+                    data-metric-key="${metric.key}"
+                    data-field="yellowMax"
+                    value="${escapeAttr(row.yellowMax ?? "")}"
+                  />
+                </td>
               </tr>
             `;
           }).join("")}
@@ -159,8 +218,25 @@ export function renderHolidaysEditor(year, rows = []) {
         <tbody id="holidayRows">
           ${normalized.map((row, index) => `
             <tr>
-              <td><input class="admin-input" type="date" data-admin-kind="holiday" data-row-index="${index}" data-field="date" value="${escapeAttr(row.date ?? "")}" /></td>
-              <td><input class="admin-input" data-admin-kind="holiday" data-row-index="${index}" data-field="holidayName" value="${escapeAttr(row.holidayName ?? "")}" /></td>
+              <td>
+                <input
+                  class="admin-input"
+                  type="date"
+                  data-admin-kind="holiday"
+                  data-row-index="${index}"
+                  data-field="date"
+                  value="${escapeAttr(row.date ?? "")}"
+                />
+              </td>
+              <td>
+                <input
+                  class="admin-input"
+                  data-admin-kind="holiday"
+                  data-row-index="${index}"
+                  data-field="holidayName"
+                  value="${escapeAttr(row.holidayName ?? "")}"
+                />
+              </td>
             </tr>
           `).join("")}
           ${renderEmptyHolidayRows(normalized.length, 8)}
@@ -176,7 +252,7 @@ export function renderHolidaysEditor(year, rows = []) {
 
 export function renderBudgetEditor(entity, rows = []) {
   const rowMap = new Map(rows.map((r) => [r.monthKey, r]));
-  const months = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+  const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 
   return `
     <div class="section-head">
@@ -199,8 +275,28 @@ export function renderBudgetEditor(entity, rows = []) {
             return `
               <tr>
                 <td>${month}</td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="budget" data-month-key="${month}" data-field="budgetVisits" value="${escapeAttr(row.budgetVisits ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="budget" data-month-key="${month}" data-field="budgetRevenue" value="${escapeAttr(row.budgetRevenue ?? "")}" /></td>
+                <td>
+                  <input
+                    class="admin-input"
+                    type="number"
+                    step="0.01"
+                    data-admin-kind="budget"
+                    data-month-key="${month}"
+                    data-field="budgetVisits"
+                    value="${escapeAttr(row.budgetVisits ?? "")}"
+                  />
+                </td>
+                <td>
+                  <input
+                    class="admin-input"
+                    type="number"
+                    step="0.01"
+                    data-admin-kind="budget"
+                    data-month-key="${month}"
+                    data-field="budgetRevenue"
+                    value="${escapeAttr(row.budgetRevenue ?? "")}"
+                  />
+                </td>
               </tr>
             `;
           }).join("")}
@@ -321,33 +417,50 @@ export function renderAuditViewer(data) {
 export function collectAdminRows(kind) {
   if (kind === "holiday") {
     const map = new Map();
+
     document.querySelectorAll(`.admin-input[data-admin-kind="holiday"]`).forEach((el) => {
       const rowIndex = el.dataset.rowIndex;
       const field = el.dataset.field;
-      if (!map.has(rowIndex)) map.set(rowIndex, {});
+
+      if (!map.has(rowIndex)) {
+        map.set(rowIndex, {});
+      }
+
       const row = map.get(rowIndex);
       row[field] = el.value === "" ? null : el.value;
     });
+
     return Array.from(map.values()).filter((row) => row.date || row.holidayName);
   }
 
   if (kind === "budget") {
     const map = new Map();
+
     document.querySelectorAll(`.admin-input[data-admin-kind="budget"]`).forEach((el) => {
       const monthKey = el.dataset.monthKey;
       const field = el.dataset.field;
-      if (!map.has(monthKey)) map.set(monthKey, { monthKey });
+
+      if (!map.has(monthKey)) {
+        map.set(monthKey, { monthKey });
+      }
+
       const row = map.get(monthKey);
       row[field] = el.value === "" ? null : el.value;
     });
+
     return Array.from(map.values());
   }
 
   const map = new Map();
+
   document.querySelectorAll(`.admin-input[data-admin-kind="${kind}"]`).forEach((el) => {
     const metricKey = el.dataset.metricKey;
     const field = el.dataset.field;
-    if (!map.has(metricKey)) map.set(metricKey, { metricKey });
+
+    if (!map.has(metricKey)) {
+      map.set(metricKey, { metricKey });
+    }
+
     const row = map.get(metricKey);
     row[field] = el.value === "" ? null : el.value;
   });
@@ -357,12 +470,30 @@ export function collectAdminRows(kind) {
 
 function renderEmptyHolidayRows(existingCount, totalRows) {
   const rowsNeeded = Math.max(totalRows - existingCount, 0);
+
   return Array.from({ length: rowsNeeded }).map((_, i) => {
     const rowIndex = existingCount + i;
     return `
       <tr>
-        <td><input class="admin-input" type="date" data-admin-kind="holiday" data-row-index="${rowIndex}" data-field="date" value="" /></td>
-        <td><input class="admin-input" data-admin-kind="holiday" data-row-index="${rowIndex}" data-field="holidayName" value="" /></td>
+        <td>
+          <input
+            class="admin-input"
+            type="date"
+            data-admin-kind="holiday"
+            data-row-index="${rowIndex}"
+            data-field="date"
+            value=""
+          />
+        </td>
+        <td>
+          <input
+            class="admin-input"
+            data-admin-kind="holiday"
+            data-row-index="${rowIndex}"
+            data-field="holidayName"
+            value=""
+          />
+        </td>
       </tr>
     `;
   }).join("");
