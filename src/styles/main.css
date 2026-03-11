@@ -871,3 +871,6 @@ tbody tr:hover{ background:rgba(255,255,255,.045); }
 .admin-filter-bar .hidden{
   display:none !important;
 }
+.admin-filter-bar .hidden{
+  display:none !important;
+}
