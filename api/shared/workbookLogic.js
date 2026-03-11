@@ -7,9 +7,15 @@ function computeStatusColor(metricKey, value) {
     return "red";
   }
 
-  if (["visitVolume", "callVolume", "newPatients"].includes(metricKey)) {
+  if (["visitVolume", "callVolume", "newPatients", "ptUnits"].includes(metricKey)) {
     if (Number(value) >= 100) return "green";
     if (Number(value) >= 50) return "yellow";
+    return "red";
+  }
+
+  if (metricKey === "capacityUtilization") {
+    if (Number(value) >= 90) return "green";
+    if (Number(value) >= 75) return "yellow";
     return "red";
   }
 
