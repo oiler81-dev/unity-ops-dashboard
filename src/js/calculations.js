@@ -15,6 +15,26 @@ export function formatWhole(value) {
     : Number(value).toLocaleString();
 }
 
+export function formatDecimal(value, digits = 2) {
+  return value === null || value === undefined || value === ""
+    ? "—"
+    : Number(value).toFixed(digits);
+}
+
+export function formatByType(value, format) {
+  switch (format) {
+    case "percent1":
+      return formatPercent(value);
+    case "whole":
+      return formatWhole(value);
+    case "decimal1":
+      return formatDecimal(value, 1);
+    case "decimal2":
+    default:
+      return formatDecimal(value, 2);
+  }
+}
+
 export function calculateRegionSummaries(inputs = {}) {
   const visitVolume = toNumber(inputs.visitVolume);
   const callVolume = toNumber(inputs.callVolume);
@@ -49,6 +69,64 @@ export function calculateRegionSummaries(inputs = {}) {
   ];
 }
 
+export function getRegionCalculatedValues(inputs = {}) {
+  const visitVolume = toNumber(inputs.visitVolume);
+  const callVolume = toNumber(inputs.callVolume);
+  const newPatients = toNumber(inputs.newPatients);
+  const noShowRate = toNumber(inputs.noShowRate);
+  const cancellationRate = toNumber(inputs.cancellationRate);
+  const abandonedCallRate = toNumber(inputs.abandonedCallRate);
+  const capacityUtilization = toNumber(inputs.capacityUtilization);
+  const ptUnits = toNumber(inputs.ptUnits);
+  const scheduledVisits = toNumber(inputs.scheduledVisits);
+  const providerClinicDays = toNumber(inputs.providerClinicDays);
+
+  const callToVisitRatio =
+    visitVolume && callVolume ? callVolume / Math.max(visitVolume, 1) : null;
+
+  const newPatientMix =
+    visitVolume && newPatients ? (newPatients / Math.max(visitVolume, 1)) * 100 : null;
+
+  const keptAppointmentRate =
+    noShowRate !== null || cancellationRate !== null
+      ? 100 - (noShowRate || 0) - (cancellationRate || 0)
+      : null;
+
+  const accessPressureScore =
+    [noShowRate, cancellationRate, abandonedCallRate]
+      .filter((v) => Number.isFinite(v))
+      .reduce((sum, v) => sum + v, 0);
+
+  const unusedCapacity =
+    capacityUtilization !== null ? 100 - capacityUtilization : null;
+
+  const ptUnitsPerVisit =
+    ptUnits !== null && visitVolume
+      ? ptUnits / Math.max(visitVolume, 1)
+      : null;
+
+  const visitsPerClinicDay =
+    visitVolume !== null && providerClinicDays
+      ? visitVolume / Math.max(providerClinicDays, 1)
+      : null;
+
+  const scheduleConversionRate =
+    visitVolume !== null && scheduledVisits
+      ? (visitVolume / Math.max(scheduledVisits, 1)) * 100
+      : null;
+
+  return {
+    callToVisitRatio,
+    newPatientMix,
+    keptAppointmentRate,
+    accessPressureScore,
+    unusedCapacity,
+    ptUnitsPerVisit,
+    visitsPerClinicDay,
+    scheduleConversionRate
+  };
+}
+
 export function calculateSharedSummaries(pageName, inputs = {}) {
   switch (pageName) {
     case "PT": {
@@ -71,7 +149,6 @@ export function calculateSharedSummaries(pageName, inputs = {}) {
       const callVolume = toNumber(inputs.callVolume);
       const scheduledVisits = toNumber(inputs.scheduledVisits);
       const noShowRate = toNumber(inputs.noShowRate);
-      const cancellationRate = toNumber(inputs.cancellationRate);
       const abandonedCallRate = toNumber(inputs.abandonedCallRate);
 
       const conversionRate =
@@ -127,5 +204,132 @@ export function calculateSharedSummaries(pageName, inputs = {}) {
 
     default:
       return [];
+  }
+}
+
+export function getSharedCalculatedValues(pageName, inputs = {}) {
+  switch (pageName) {
+    case "PT": {
+      const ptVisits = toNumber(inputs.ptVisits);
+      const ptNewEvaluations = toNumber(inputs.ptNewEvaluations);
+      const ptUnits = toNumber(inputs.ptUnits);
+      const ptVisitsPerProvider = toNumber(inputs.ptVisitsPerProvider);
+      const ptUnitsPerVisit = toNumber(inputs.ptUnitsPerVisit);
+
+      const ptEvalMix =
+        ptVisits && ptNewEvaluations
+          ? (ptNewEvaluations / Math.max(ptVisits, 1)) * 100
+          : null;
+
+      const autoPtUnitsPerVisit =
+        ptUnits !== null && ptVisits
+          ? ptUnits / Math.max(ptVisits, 1)
+          : null;
+
+      const ptProductivityScore =
+        ptVisitsPerProvider !== null && ptUnitsPerVisit !== null
+          ? (ptVisitsPerProvider * 0.6) + (ptUnitsPerVisit * 0.4)
+          : null;
+
+      return {
+        ptEvalMix,
+        ptUnitsPerVisit: autoPtUnitsPerVisit,
+        ptProductivityScore
+      };
+    }
+
+    case "CXNS": {
+      const callVolume = toNumber(inputs.callVolume);
+      const scheduledVisits = toNumber(inputs.scheduledVisits);
+      const newPatients = toNumber(inputs.newPatients);
+      const noShowRate = toNumber(inputs.noShowRate);
+      const cancellationRate = toNumber(inputs.cancellationRate);
+      const abandonedCallRate = toNumber(inputs.abandonedCallRate);
+
+      const callConversionRate =
+        callVolume && scheduledVisits
+          ? (scheduledVisits / Math.max(callVolume, 1)) * 100
+          : null;
+
+      const newPatientRate =
+        scheduledVisits && newPatients
+          ? (newPatients / Math.max(scheduledVisits, 1)) * 100
+          : null;
+
+      const keptAppointmentRate =
+        noShowRate !== null || cancellationRate !== null
+          ? 100 - (noShowRate || 0) - (cancellationRate || 0)
+          : null;
+
+      const accessPressureScore =
+        [noShowRate, cancellationRate, abandonedCallRate]
+          .filter((v) => Number.isFinite(v))
+          .reduce((sum, v) => sum + v, 0);
+
+      return {
+        callConversionRate,
+        newPatientRate,
+        keptAppointmentRate,
+        accessPressureScore
+      };
+    }
+
+    case "Capacity": {
+      const providerClinicDays = toNumber(inputs.providerClinicDays);
+      const availableVisitSlots = toNumber(inputs.availableVisitSlots);
+      const bookedVisitSlots = toNumber(inputs.bookedVisitSlots);
+      const capacityUtilization = toNumber(inputs.capacityUtilization);
+
+      const openSlots =
+        Number.isFinite(availableVisitSlots) && Number.isFinite(bookedVisitSlots)
+          ? availableVisitSlots - bookedVisitSlots
+          : null;
+
+      const visitsPerClinicDay =
+        bookedVisitSlots !== null && providerClinicDays
+          ? bookedVisitSlots / Math.max(providerClinicDays, 1)
+          : null;
+
+      const unusedCapacity =
+        capacityUtilization !== null ? 100 - capacityUtilization : null;
+
+      return {
+        openSlots,
+        visitsPerClinicDay,
+        unusedCapacity
+      };
+    }
+
+    case "Productivity Builder": {
+      const providerCount = toNumber(inputs.providerCount);
+      const clinicSupportFte = toNumber(inputs.clinicSupportFte);
+      const visitVolume = toNumber(inputs.visitVolume);
+      const visitsPerProvider = toNumber(inputs.visitsPerProvider);
+      const visitsPerSupportFte = toNumber(inputs.visitsPerSupportFte);
+
+      const visitsPerProviderAuto =
+        visitVolume !== null && providerCount
+          ? visitVolume / Math.max(providerCount, 1)
+          : null;
+
+      const visitsPerSupportFteAuto =
+        visitVolume !== null && clinicSupportFte
+          ? visitVolume / Math.max(clinicSupportFte, 1)
+          : null;
+
+      const productivityAlignmentScore =
+        visitsPerProvider !== null && visitsPerProviderAuto !== null
+          ? visitsPerProvider - visitsPerProviderAuto
+          : null;
+
+      return {
+        visitsPerProviderAuto,
+        visitsPerSupportFteAuto,
+        productivityAlignmentScore
+      };
+    }
+
+    default:
+      return {};
   }
 }
