@@ -1,5 +1,10 @@
-import { getRegionSections, getAllMetricKeysForEntity } from "./definitions.js";
-import { calculateRegionSummaries } from "./calculations.js";
+import {
+  getRegionSections,
+  getAllMetricKeysForEntity,
+  getSharedPageDefinition,
+  getAllMetricKeysForSharedPage
+} from "./definitions.js";
+import { calculateRegionSummaries, calculateSharedSummaries } from "./calculations.js";
 
 const state = {
   me: null,
@@ -8,7 +13,8 @@ const state = {
   currentSharedPage: null,
   currentWeekEnding: getDefaultWeekEnding(),
   pageData: null,
-  activeRegionSectionKey: null
+  activeRegionSectionKey: null,
+  activeSharedSectionKey: null
 };
 
 const els = {
@@ -73,11 +79,20 @@ function bindEvents() {
   });
 
   document.addEventListener("click", async (e) => {
-    const tab = e.target.closest(".section-tab");
-    if (tab) {
-      state.activeRegionSectionKey = tab.dataset.sectionKey;
+    const regionTab = e.target.closest(".section-tab.region-tab");
+    if (regionTab) {
+      state.activeRegionSectionKey = regionTab.dataset.sectionKey;
       if (state.currentRoute === "region" && state.currentEntity) {
         await renderRegion(state.currentEntity);
+      }
+      return;
+    }
+
+    const sharedTab = e.target.closest(".section-tab.shared-tab");
+    if (sharedTab) {
+      state.activeSharedSectionKey = sharedTab.dataset.sectionKey;
+      if (state.currentRoute === "shared" && state.currentSharedPage) {
+        await renderSharedPage(state.currentSharedPage);
       }
     }
   });
@@ -93,16 +108,25 @@ function bindEvents() {
   });
 
   els.saveBtn.addEventListener("click", async () => {
-    if (state.currentRoute !== "region") {
-      alert("Save is only active on region pages right now.");
+    if (state.currentRoute === "region") {
+      const payload = collectRegionFormValues();
+      const res = await apiPost("/api/weekly-save", payload);
+      els.submissionStatusText.textContent = res.status || "Draft";
+      alert("Saved successfully.");
+      await loadCurrentRoute();
       return;
     }
 
-    const payload = collectRegionFormValues();
-    const res = await apiPost("/api/weekly-save", payload);
-    els.submissionStatusText.textContent = res.status || "Draft";
-    alert("Saved successfully.");
-    await loadCurrentRoute();
+    if (state.currentRoute === "shared") {
+      const payload = collectSharedFormValues();
+      const res = await apiPost("/api/shared-save", payload);
+      els.submissionStatusText.textContent = res.status || "Draft";
+      alert("Shared page saved successfully.");
+      await loadCurrentRoute();
+      return;
+    }
+
+    alert("Save is only active on region and shared pages.");
   });
 
   els.submitBtn.addEventListener("click", async () => {
@@ -153,6 +177,11 @@ async function setRoute(route, entity = null, sharedPage = null) {
   if (route === "region") {
     const sections = getRegionSections(entity);
     state.activeRegionSectionKey = sections[0]?.key || null;
+  }
+
+  if (route === "shared") {
+    const def = getSharedPageDefinition(sharedPage);
+    state.activeSharedSectionKey = def?.sections?.[0]?.key || null;
   }
 
   await loadCurrentRoute();
@@ -214,7 +243,7 @@ async function renderExecutive() {
       <div class="note-panel">
         <h4>Executive Notes</h4>
         <p>
-          The executive page is now reading live saved values instead of static samples. As we expand the workbook map, this page will become the real meeting summary.
+          Shared pages are now moving into the same engine as regional pages, so PT, CXNS, Capacity, and Productivity Builder can be built without reinventing the interface each time.
         </p>
       </div>
     </div>
@@ -233,9 +262,7 @@ async function renderRegion(entity) {
 
   const canEdit = Boolean(state.me?.isAdmin || state.me?.entity === entity);
   const sections = getRegionSections(entity);
-  const activeSection =
-    sections.find((section) => section.key === state.activeRegionSectionKey) || sections[0];
-
+  const activeSection = sections.find((section) => section.key === state.activeRegionSectionKey) || sections[0];
   state.activeRegionSectionKey = activeSection?.key || null;
 
   const summaries = calculateRegionSummaries(data.inputs || {});
@@ -249,19 +276,13 @@ async function renderRegion(entity) {
     </div>
 
     <div class="summary-mini-grid">
-      ${summaries.map((item) => `
-        <div class="summary-mini-card">
-          <span class="summary-mini-label">${escapeHtml(item.label)}</span>
-          <strong class="summary-mini-value">${escapeHtml(String(item.value))}</strong>
-          <span class="summary-mini-meta">${escapeHtml(item.meta || "")}</span>
-        </div>
-      `).join("")}
+      ${summaries.map(renderSummaryMiniCard).join("")}
     </div>
 
     <div class="section-tabs">
       ${sections.map((section) => `
         <button
-          class="section-tab ${section.key === activeSection.key ? "active" : ""}"
+          class="section-tab region-tab ${section.key === activeSection.key ? "active" : ""}"
           data-section-key="${escapeAttr(section.key)}"
         >
           ${escapeHtml(section.title)}
@@ -291,6 +312,67 @@ async function renderRegion(entity) {
           <textarea id="opportunities" ${canEdit ? "" : "disabled"}>${escapeHtml(data.narrative?.opportunities ?? "")}</textarea>
         </div>
       </div>
+    </div>
+  `;
+}
+
+async function renderSharedPage(pageName) {
+  const def = getSharedPageDefinition(pageName);
+  if (!def) {
+    els.pageTitle.textContent = pageName;
+    els.pageSubtitle.textContent = "Shared page definition not found.";
+    els.pageContent.innerHTML = `<div class="note-panel"><h4>Missing Definition</h4><p>No definition exists for this shared page yet.</p></div>`;
+    return;
+  }
+
+  els.pageTitle.textContent = def.title;
+  els.pageSubtitle.textContent = def.description;
+
+  const data = await apiGet(`/api/shared?page=${encodeURIComponent(pageName)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
+  state.pageData = data;
+
+  const activeSection = def.sections.find((section) => section.key === state.activeSharedSectionKey) || def.sections[0];
+  state.activeSharedSectionKey = activeSection?.key || null;
+
+  const summaries = calculateSharedSummaries(pageName, data.inputs || {});
+  renderKpiCards((data.kpis || []).length ? data.kpis : summaries.map((s) => ({
+    label: s.label,
+    value: s.value,
+    meta: s.meta,
+    status: "Tracking",
+    statusColor: "yellow"
+  })));
+
+  els.submissionStatusText.textContent = data.status || "Draft";
+
+  els.pageContent.innerHTML = `
+    <div class="section-head">
+      <h3>${escapeHtml(def.title)}</h3>
+      <p class="section-copy">${escapeHtml(def.description)}</p>
+    </div>
+
+    <div class="summary-mini-grid">
+      ${summaries.map(renderSummaryMiniCard).join("")}
+    </div>
+
+    <div class="section-tabs">
+      ${def.sections.map((section) => `
+        <button
+          class="section-tab shared-tab ${section.key === activeSection.key ? "active" : ""}"
+          data-section-key="${escapeAttr(section.key)}"
+        >
+          ${escapeHtml(section.title)}
+        </button>
+      `).join("")}
+    </div>
+
+    ${renderSectionBlock(activeSection, data.inputs || {}, true)}
+
+    <div class="note-panel" style="margin-top:18px;">
+      <h4>Shared Page Notes</h4>
+      <p>
+        This shared page is now running on the same dynamic engine as the regional pages, which means workbook expansion gets much easier from here.
+      </p>
     </div>
   `;
 }
@@ -328,33 +410,6 @@ function renderField(field, value, canEdit) {
         value="${escapeAttr(value ?? "")}"
         ${disabled}
       />
-    </div>
-  `;
-}
-
-function renderSharedPage(pageName) {
-  els.pageTitle.textContent = pageName;
-  els.pageSubtitle.textContent = `${pageName} shared KPI section scaffold.`;
-
-  renderKpiCards([
-    { label: `${pageName} KPI 1`, value: "—", statusColor: "yellow", meta: "Awaiting workbook mapping" },
-    { label: `${pageName} KPI 2`, value: "—", statusColor: "yellow", meta: "Awaiting workbook mapping" },
-    { label: `${pageName} KPI 3`, value: "—", statusColor: "yellow", meta: "Awaiting workbook mapping" },
-    { label: `${pageName} KPI 4`, value: "—", statusColor: "yellow", meta: "Awaiting workbook mapping" }
-  ]);
-
-  els.submissionStatusText.textContent = "Shared Section";
-
-  els.pageContent.innerHTML = `
-    <div class="section-head">
-      <h3>${pageName}</h3>
-      <p class="section-copy">
-        This section is scaffolded and ready for workbook logic and inputs to be mapped.
-      </p>
-    </div>
-    <div class="note-panel">
-      <h4>Next Step</h4>
-      <p>We will convert each shared sheet into the same definition-driven structure.</p>
     </div>
   `;
 }
@@ -426,6 +481,16 @@ function renderKpiCards(kpis) {
   `).join("");
 }
 
+function renderSummaryMiniCard(item) {
+  return `
+    <div class="summary-mini-card">
+      <span class="summary-mini-label">${escapeHtml(item.label)}</span>
+      <strong class="summary-mini-value">${escapeHtml(String(item.value))}</strong>
+      <span class="summary-mini-meta">${escapeHtml(item.meta || "")}</span>
+    </div>
+  `;
+}
+
 function collectRegionFormValues() {
   const metricKeys = getAllMetricKeysForEntity(state.currentEntity);
   const inputs = {};
@@ -444,6 +509,22 @@ function collectRegionFormValues() {
       blockers: document.getElementById("blockers")?.value?.trim() || "",
       opportunities: document.getElementById("opportunities")?.value?.trim() || ""
     }
+  };
+}
+
+function collectSharedFormValues() {
+  const metricKeys = getAllMetricKeysForSharedPage(state.currentSharedPage);
+  const inputs = {};
+
+  metricKeys.forEach((key) => {
+    const el = document.querySelector(`[data-metric-key="${key}"]`);
+    inputs[key] = numberOrNull(el?.value);
+  });
+
+  return {
+    page: state.currentSharedPage,
+    weekEnding: state.currentWeekEnding,
+    inputs
   };
 }
 
