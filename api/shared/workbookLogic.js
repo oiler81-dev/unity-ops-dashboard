@@ -1,3 +1,14 @@
+const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
+
+function toNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatPercent(value) {
+  return value === null || value === undefined ? "—" : `${Number(value).toFixed(1)}%`;
+}
+
 function computeStatusColor(metricKey, value) {
   if (value === null || value === undefined || value === "") return "yellow";
 
@@ -55,25 +66,100 @@ function buildRegionKpis(inputs = {}) {
   ];
 }
 
-function buildExecutiveSample(weekEnding) {
+function normalizeEntityRow(entity, inputMap = {}, status = "Draft") {
+  const visitVolume = toNumber(inputMap.visitVolume);
+  const callVolume = toNumber(inputMap.callVolume);
+  const noShowRate = toNumber(inputMap.noShowRate);
+  const cancellationRate = toNumber(inputMap.cancellationRate);
+  const abandonedCallRate = toNumber(inputMap.abandonedCallRate);
+
+  return {
+    entity,
+    visitVolume: visitVolume !== null ? visitVolume.toLocaleString() : "—",
+    callVolume: callVolume !== null ? callVolume.toLocaleString() : "—",
+    noShowRate: formatPercent(noShowRate),
+    cancellationRate: formatPercent(cancellationRate),
+    abandonedCallRate: formatPercent(abandonedCallRate),
+    status
+  };
+}
+
+function buildExecutiveFromRows(weekEnding, entityRows) {
+  const totals = entityRows.reduce(
+    (acc, row) => {
+      const visitVolume = toNumber(row.raw?.visitVolume);
+      const callVolume = toNumber(row.raw?.callVolume);
+      const noShowRate = toNumber(row.raw?.noShowRate);
+      const abandonedCallRate = toNumber(row.raw?.abandonedCallRate);
+
+      if (visitVolume !== null) acc.visitVolume += visitVolume;
+      if (callVolume !== null) acc.callVolume += callVolume;
+      if (noShowRate !== null) {
+        acc.noShowRateSum += noShowRate;
+        acc.noShowRateCount += 1;
+      }
+      if (abandonedCallRate !== null) {
+        acc.abandonedCallRateSum += abandonedCallRate;
+        acc.abandonedCallRateCount += 1;
+      }
+      return acc;
+    },
+    {
+      visitVolume: 0,
+      callVolume: 0,
+      noShowRateSum: 0,
+      noShowRateCount: 0,
+      abandonedCallRateSum: 0,
+      abandonedCallRateCount: 0
+    }
+  );
+
+  const avgNoShowRate =
+    totals.noShowRateCount > 0 ? totals.noShowRateSum / totals.noShowRateCount : null;
+
+  const avgAbandonedCallRate =
+    totals.abandonedCallRateCount > 0
+      ? totals.abandonedCallRateSum / totals.abandonedCallRateCount
+      : null;
+
   return {
     weekEnding,
     kpis: [
-      { label: "Visit Volume", value: "1,482", meta: "All entities combined", status: "Stable", statusColor: "green" },
-      { label: "Call Volume", value: "3,906", meta: "All entities combined", status: "Stable", statusColor: "green" },
-      { label: "No Show Rate", value: "6.2%", meta: "Companywide", status: "Watch", statusColor: "yellow" },
-      { label: "Abandoned Call Rate", value: "4.7%", meta: "Companywide", status: "Good", statusColor: "green" }
+      {
+        label: "Visit Volume",
+        value: totals.visitVolume ? totals.visitVolume.toLocaleString() : "—",
+        meta: "All entities combined",
+        status: "Live",
+        statusColor: computeStatusColor("visitVolume", totals.visitVolume)
+      },
+      {
+        label: "Call Volume",
+        value: totals.callVolume ? totals.callVolume.toLocaleString() : "—",
+        meta: "All entities combined",
+        status: "Live",
+        statusColor: computeStatusColor("callVolume", totals.callVolume)
+      },
+      {
+        label: "No Show Rate",
+        value: avgNoShowRate !== null ? `${avgNoShowRate.toFixed(1)}%` : "—",
+        meta: "Average across entities",
+        status: "Live",
+        statusColor: computeStatusColor("noShowRate", avgNoShowRate)
+      },
+      {
+        label: "Abandoned Call Rate",
+        value: avgAbandonedCallRate !== null ? `${avgAbandonedCallRate.toFixed(1)}%` : "—",
+        meta: "Average across entities",
+        status: "Live",
+        statusColor: computeStatusColor("abandonedCallRate", avgAbandonedCallRate)
+      }
     ],
-    entities: [
-      { entity: "LAOSS", visitVolume: 412, callVolume: 1084, noShowRate: "5.1%", cancellationRate: "8.4%", abandonedCallRate: "3.8%", status: "Draft" },
-      { entity: "NES", visitVolume: 318, callVolume: 752, noShowRate: "6.0%", cancellationRate: "7.8%", abandonedCallRate: "4.2%", status: "Submitted" },
-      { entity: "SpineOne", visitVolume: 409, callVolume: 1010, noShowRate: "7.2%", cancellationRate: "9.2%", abandonedCallRate: "5.1%", status: "Draft" },
-      { entity: "MRO", visitVolume: 343, callVolume: 1060, noShowRate: "6.4%", cancellationRate: "8.9%", abandonedCallRate: "5.6%", status: "Approved" }
-    ]
+    entities: entityRows.map((row) => normalizeEntityRow(row.entity, row.raw, row.status))
   };
 }
 
 module.exports = {
+  ENTITIES,
   buildRegionKpis,
-  buildExecutiveSample
+  buildExecutiveFromRows
 };
