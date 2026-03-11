@@ -2,7 +2,8 @@ import {
   getRegionSections,
   getAllMetricKeysForEntity,
   getSharedPageDefinition,
-  getAllMetricKeysForSharedPage
+  getAllMetricKeysForSharedPage,
+  ENTITY_LABELS
 } from "./definitions.js";
 import {
   calculateRegionSummaries,
@@ -249,7 +250,7 @@ async function renderExecutive() {
       <div class="note-panel">
         <h4>Executive Notes</h4>
         <p>
-          KPI cards are now threshold-ready. As you seed the reference tables, card colors and target variance will update automatically.
+          The next build focus is full workbook-specific field coverage and MOR-ready summary outputs. The architecture is now ready for that.
         </p>
       </div>
     </div>
@@ -257,8 +258,10 @@ async function renderExecutive() {
 }
 
 async function renderRegion(entity) {
+  const friendlyName = ENTITY_LABELS[entity] || entity;
+
   els.pageTitle.textContent = `${entity} Regional Dashboard`;
-  els.pageSubtitle.textContent = `Weekly data entry, KPI visibility, narratives, and workflow tracking for ${entity}.`;
+  els.pageSubtitle.textContent = `Weekly data entry, KPI visibility, narratives, and workflow tracking for ${friendlyName}.`;
 
   const data = await apiGet(`/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
   state.pageData = data;
@@ -276,14 +279,29 @@ async function renderRegion(entity) {
 
   els.pageContent.innerHTML = `
     <div class="section-head">
-      <h3>${entity} Weekly Inputs</h3>
+      <h3>${friendlyName}</h3>
       <p class="section-copy">
-        This page is definition-driven and tabbed. New fields and read-only workbook-style outputs can be added centrally without rewriting the page.
+        This regional view now supports more workbook-style metric groups and read-only derived outputs.
       </p>
     </div>
 
     <div class="summary-mini-grid">
       ${summaries.map(renderSummaryMiniCard).join("")}
+    </div>
+
+    <div class="mor-strip">
+      <div class="mor-card">
+        <span class="mor-label">Region</span>
+        <strong class="mor-value">${escapeHtml(entity)}</strong>
+      </div>
+      <div class="mor-card">
+        <span class="mor-label">Week Ending</span>
+        <strong class="mor-value">${escapeHtml(formatDate(state.currentWeekEnding))}</strong>
+      </div>
+      <div class="mor-card">
+        <span class="mor-label">Status</span>
+        <strong class="mor-value">${escapeHtml(data.status || "Draft")}</strong>
+      </div>
     </div>
 
     <div class="section-tabs">
@@ -380,7 +398,7 @@ async function renderSharedPage(pageName) {
     <div class="note-panel" style="margin-top:18px;">
       <h4>Shared Page Notes</h4>
       <p>
-        Shared pages now support workbook-style read-only calculations inside each section.
+        Shared pages now support richer workbook-style groupings and read-only calculated outputs.
       </p>
     </div>
   `;
