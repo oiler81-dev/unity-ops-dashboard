@@ -20,24 +20,41 @@ module.exports = async function (context, req) {
     }
 
     const weekEnding = req.query.weekEnding || new Date().toISOString().slice(0, 10);
+    const previousWeekEnding = (() => {
+      const d = new Date(`${weekEnding}T12:00:00`);
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().slice(0, 10);
+    })();
 
     const inputsTable = getTableClient("WeeklyInputs");
     const statusTable = getTableClient("SubmissionStatus");
+    const narrativeTable = getTableClient("WeeklyNarratives");
 
     const entityRows = [];
+    const previousEntityRows = [];
     const entityReferenceMaps = {};
+    const narratives = {};
 
     for (const entity of ENTITIES) {
-      const partitionKey = `${entity}|${weekEnding}`;
-      const [rows, statusRow, referenceMap] = await Promise.all([
-        inputsTable.listByPartition(partitionKey),
-        statusTable.getEntity(partitionKey, "STATUS"),
-        getReferenceMapForEntity(entity)
+      const currentPartitionKey = `${entity}|${weekEnding}`;
+      const previousPartitionKey = `${entity}|${previousWeekEnding}`;
+
+      const [currentRows, previousRows, statusRow, referenceMap, narrativeRow] = await Promise.all([
+        inputsTable.listByPartition(currentPartitionKey),
+        inputsTable.listByPartition(previousPartitionKey),
+        statusTable.getEntity(currentPartitionKey, "STATUS"),
+        getReferenceMapForEntity(entity),
+        narrativeTable.getEntity(currentPartitionKey, "NARRATIVE")
       ]);
 
       const raw = {};
-      for (const row of rows) {
+      for (const row of currentRows) {
         if (row.metricKey) raw[row.metricKey] = row.value;
+      }
+
+      const previousRaw = {};
+      for (const row of previousRows) {
+        if (row.metricKey) previousRaw[row.metricKey] = row.value;
       }
 
       entityRows.push({
@@ -46,12 +63,23 @@ module.exports = async function (context, req) {
         status: statusRow?.status || "Draft"
       });
 
+      previousEntityRows.push({
+        entity,
+        raw: previousRaw,
+        status: "Historical"
+      });
+
       entityReferenceMaps[entity] = referenceMap;
+      narratives[entity] = {
+        commentary: narrativeRow?.commentary || "",
+        blockers: narrativeRow?.blockers || "",
+        opportunities: narrativeRow?.opportunities || ""
+      };
     }
 
     context.res = {
       status: 200,
-      body: buildExecutiveFromRows(weekEnding, entityRows, entityReferenceMaps)
+      body: buildExecutiveFromRows(weekEnding, entityRows, entityReferenceMaps, previousEntityRows, narratives)
     };
   } catch (err) {
     context.log.error(err);
