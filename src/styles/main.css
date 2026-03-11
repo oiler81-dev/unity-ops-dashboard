@@ -643,3 +643,37 @@ tbody tr:hover{ background:rgba(255,255,255,.045); }
     grid-template-columns:1fr;
   }
 }
+.mor-strip{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(160px,1fr));
+  gap:14px;
+  margin-bottom:18px;
+}
+
+.mor-card{
+  border-radius:16px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.08);
+  padding:16px;
+}
+
+.mor-label{
+  display:block;
+  font-size:.74rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--unity-text-muted);
+  margin-bottom:8px;
+}
+
+.mor-value{
+  display:block;
+  font-size:1.05rem;
+  font-weight:900;
+}
+
+@media (max-width: 900px){
+  .mor-strip{
+    grid-template-columns:1fr;
+  }
+}
