@@ -603,3 +603,43 @@ tbody tr:hover{ background:rgba(255,255,255,.045); }
 .section-block + .section-block{
   margin-top:0;
 }
+.computed-grid{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(160px,1fr));
+  gap:14px;
+  margin-top:18px;
+}
+
+.computed-card{
+  border-radius:16px;
+  background:rgba(255,255,255,.035);
+  border:1px dashed rgba(255,255,255,.14);
+  padding:16px;
+}
+
+.computed-label{
+  display:block;
+  font-size:.74rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--unity-text-muted);
+  margin-bottom:8px;
+}
+
+.computed-value{
+  display:block;
+  font-size:1.1rem;
+  font-weight:900;
+}
+
+@media (max-width: 1180px){
+  .computed-grid{
+    grid-template-columns:repeat(2, minmax(160px,1fr));
+  }
+}
+
+@media (max-width: 700px){
+  .computed-grid{
+    grid-template-columns:1fr;
+  }
+}
