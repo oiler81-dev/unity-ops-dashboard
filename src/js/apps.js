@@ -4,7 +4,13 @@ import {
   getSharedPageDefinition,
   getAllMetricKeysForSharedPage
 } from "./definitions.js";
-import { calculateRegionSummaries, calculateSharedSummaries } from "./calculations.js";
+import {
+  calculateRegionSummaries,
+  calculateSharedSummaries,
+  getRegionCalculatedValues,
+  getSharedCalculatedValues,
+  formatByType
+} from "./calculations.js";
 
 const state = {
   me: null,
@@ -266,12 +272,13 @@ async function renderRegion(entity) {
   state.activeRegionSectionKey = activeSection?.key || null;
 
   const summaries = calculateRegionSummaries(data.inputs || {});
+  const calculatedValues = getRegionCalculatedValues(data.inputs || {});
 
   els.pageContent.innerHTML = `
     <div class="section-head">
       <h3>${entity} Weekly Inputs</h3>
       <p class="section-copy">
-        This page is definition-driven and tabbed. New fields can be added centrally without rewriting the whole page.
+        This page is definition-driven and tabbed. New fields and read-only workbook-style outputs can be added centrally without rewriting the page.
       </p>
     </div>
 
@@ -290,7 +297,7 @@ async function renderRegion(entity) {
       `).join("")}
     </div>
 
-    ${renderSectionBlock(activeSection, data.inputs || {}, canEdit)}
+    ${renderSectionBlock(activeSection, data.inputs || {}, canEdit, calculatedValues)}
 
     <div class="split-grid" style="margin-top:18px;">
       <div class="note-panel">
@@ -335,6 +342,8 @@ async function renderSharedPage(pageName) {
   state.activeSharedSectionKey = activeSection?.key || null;
 
   const summaries = calculateSharedSummaries(pageName, data.inputs || {});
+  const calculatedValues = getSharedCalculatedValues(pageName, data.inputs || {});
+
   renderKpiCards((data.kpis || []).length ? data.kpis : summaries.map((s) => ({
     label: s.label,
     value: s.value,
@@ -366,18 +375,18 @@ async function renderSharedPage(pageName) {
       `).join("")}
     </div>
 
-    ${renderSectionBlock(activeSection, data.inputs || {}, true)}
+    ${renderSectionBlock(activeSection, data.inputs || {}, true, calculatedValues)}
 
     <div class="note-panel" style="margin-top:18px;">
       <h4>Shared Page Notes</h4>
       <p>
-        Shared pages are now ready to use threshold and target tables as soon as those rows are seeded.
+        Shared pages now support workbook-style read-only calculations inside each section.
       </p>
     </div>
   `;
 }
 
-function renderSectionBlock(section, inputs, canEdit) {
+function renderSectionBlock(section, inputs, canEdit, calculatedValues = {}) {
   return `
     <section class="section-block">
       <div class="section-head">
@@ -388,6 +397,15 @@ function renderSectionBlock(section, inputs, canEdit) {
       <div class="form-grid">
         ${section.fields.map((field) => renderField(field, inputs[field.key], canEdit)).join("")}
       </div>
+
+      ${(section.calculatedFields && section.calculatedFields.length)
+        ? `
+          <div class="computed-grid">
+            ${section.calculatedFields.map((field) => renderCalculatedField(field, calculatedValues[field.key])).join("")}
+          </div>
+        `
+        : ""
+      }
     </section>
   `;
 }
@@ -410,6 +428,15 @@ function renderField(field, value, canEdit) {
         value="${escapeAttr(value ?? "")}"
         ${disabled}
       />
+    </div>
+  `;
+}
+
+function renderCalculatedField(field, value) {
+  return `
+    <div class="computed-card">
+      <span class="computed-label">${escapeHtml(field.label)}</span>
+      <strong class="computed-value">${escapeHtml(formatByType(value, field.format || "decimal2"))}</strong>
     </div>
   `;
 }
