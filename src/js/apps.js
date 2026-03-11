@@ -243,7 +243,7 @@ async function renderExecutive() {
       <div class="note-panel">
         <h4>Executive Notes</h4>
         <p>
-          Shared pages are now moving into the same engine as regional pages, so PT, CXNS, Capacity, and Productivity Builder can be built without reinventing the interface each time.
+          KPI cards are now threshold-ready. As you seed the reference tables, card colors and target variance will update automatically.
         </p>
       </div>
     </div>
@@ -371,7 +371,7 @@ async function renderSharedPage(pageName) {
     <div class="note-panel" style="margin-top:18px;">
       <h4>Shared Page Notes</h4>
       <p>
-        This shared page is now running on the same dynamic engine as the regional pages, which means workbook expansion gets much easier from here.
+        Shared pages are now ready to use threshold and target tables as soon as those rows are seeded.
       </p>
     </div>
   `;
