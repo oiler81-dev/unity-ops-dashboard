@@ -213,47 +213,122 @@ async function renderExecutive() {
 
   els.pageContent.innerHTML = `
     <div class="section-head">
-      <h3>Companywide Overview</h3>
-      <p class="section-copy">Live summary across LAOSS, NES, SpineOne, and MRO based on saved weekly inputs.</p>
+      <h3>UnityMSK Executive Summary</h3>
+      <p class="section-copy">
+        Week-over-week operational view across LAOSS, NES, SpineOne, and MRO.
+      </p>
     </div>
+
+    <div class="exec-strip">
+      <div class="exec-card">
+        <span class="exec-label">Current Week</span>
+        <strong class="exec-value">${escapeHtml(formatDate(data.weekEnding))}</strong>
+      </div>
+      <div class="exec-card">
+        <span class="exec-label">Previous Week</span>
+        <strong class="exec-value">${escapeHtml(formatDate(data.previousWeekEnding))}</strong>
+      </div>
+      <div class="exec-card">
+        <span class="exec-label">Entities Reporting</span>
+        <strong class="exec-value">${escapeHtml(String((data.entities || []).length))}</strong>
+      </div>
+    </div>
+
+    <section class="section-block" style="margin-bottom:18px;">
+      <div class="section-head">
+        <h3>Week-over-Week Comparison</h3>
+        <p class="section-copy">High-level KPI movement compared with the prior reporting week.</p>
+      </div>
+      <div class="comparison-grid">
+        ${(data.comparison || []).map((item) => `
+          <div class="comparison-card">
+            <span class="comparison-label">${escapeHtml(item.label)}</span>
+            <strong class="comparison-current">${escapeHtml(formatByType(item.current, item.format))}</strong>
+            <span class="comparison-meta">
+              Prior: ${escapeHtml(formatByType(item.previous, item.format))}
+            </span>
+            <span class="comparison-change ${comparisonClass(item.change, item.key)}">
+              ${escapeHtml(formatChange(item.change, item.format))}
+            </span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
 
     <div class="split-grid">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Entity</th>
-              <th>Visit Volume</th>
-              <th>Call Volume</th>
-              <th>No Show Rate</th>
-              <th>Cancellation Rate</th>
-              <th>Abandoned Call Rate</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(data.entities || []).map((row) => `
+      <section class="section-block">
+        <div class="section-head">
+          <h3>Region Comparison</h3>
+          <p class="section-copy">Current-week region performance snapshot.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
               <tr>
-                <td>${escapeHtml(row.entity)}</td>
-                <td>${escapeHtml(String(row.visitVolume ?? "—"))}</td>
-                <td>${escapeHtml(String(row.callVolume ?? "—"))}</td>
-                <td>${escapeHtml(String(row.noShowRate ?? "—"))}</td>
-                <td>${escapeHtml(String(row.cancellationRate ?? "—"))}</td>
-                <td>${escapeHtml(String(row.abandonedCallRate ?? "—"))}</td>
-                <td>${escapeHtml(row.status ?? "Draft")}</td>
+                <th>Entity</th>
+                <th>Visit Volume</th>
+                <th>Call Volume</th>
+                <th>No Show Rate</th>
+                <th>Cancellation Rate</th>
+                <th>Abandoned Call Rate</th>
+                <th>Status</th>
               </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              ${(data.entities || []).map((row) => `
+                <tr>
+                  <td>${escapeHtml(row.entity)}</td>
+                  <td>${escapeHtml(String(row.visitVolume ?? "—"))}</td>
+                  <td>${escapeHtml(String(row.callVolume ?? "—"))}</td>
+                  <td>${escapeHtml(String(row.noShowRate ?? "—"))}</td>
+                  <td>${escapeHtml(String(row.cancellationRate ?? "—"))}</td>
+                  <td>${escapeHtml(String(row.abandonedCallRate ?? "—"))}</td>
+                  <td>${escapeHtml(row.status ?? "Draft")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-      <div class="note-panel">
-        <h4>Executive Notes</h4>
-        <p>
-          The next build focus is full workbook-specific field coverage and MOR-ready summary outputs. The architecture is now ready for that.
-        </p>
-      </div>
+      <section class="section-block">
+        <div class="section-head">
+          <h3>Top Risk Metrics</h3>
+          <p class="section-copy">Fast view of the riskiest metrics across regions.</p>
+        </div>
+        <div class="risk-list">
+          ${(data.riskMetrics || []).map((risk) => `
+            <div class="risk-item">
+              <div>
+                <span class="risk-entity">${escapeHtml(risk.entity)}</span>
+                <span class="risk-label">${escapeHtml(risk.label)}</span>
+              </div>
+              <div class="risk-right">
+                <strong>${escapeHtml(risk.formattedValue)}</strong>
+                <span class="risk-badge ${escapeHtml(risk.statusColor)}">${escapeHtml(risk.statusColor)}</span>
+              </div>
+            </div>
+          `).join("") || `<div class="note-panel"><p>No risk metrics yet.</p></div>`}
+        </div>
+      </section>
     </div>
+
+    <section class="section-block" style="margin-top:18px;">
+      <div class="section-head">
+        <h3>Regional Commentary Rollup</h3>
+        <p class="section-copy">Meeting-ready notes pulled from regional submissions.</p>
+      </div>
+      <div class="commentary-grid">
+        ${(data.commentaryRollup || []).map((item) => `
+          <div class="commentary-card">
+            <h4>${escapeHtml(item.entity)}</h4>
+            <p><strong>Commentary:</strong> ${escapeHtml(item.commentary || "—")}</p>
+            <p><strong>Blockers:</strong> ${escapeHtml(item.blockers || "—")}</p>
+            <p><strong>Opportunities:</strong> ${escapeHtml(item.opportunities || "—")}</p>
+          </div>
+        `).join("") || `<div class="note-panel"><p>No commentary submitted yet.</p></div>`}
+      </div>
+    </section>
   `;
 }
 
@@ -534,6 +609,26 @@ function renderSummaryMiniCard(item) {
       <span class="summary-mini-meta">${escapeHtml(item.meta || "")}</span>
     </div>
   `;
+}
+
+function comparisonClass(change, key) {
+  if (change === null || change === undefined) return "neutral";
+  if (["noShowRate", "abandonedCallRate"].includes(key)) {
+    if (change < 0) return "positive";
+    if (change > 0) return "negative";
+    return "neutral";
+  }
+  if (change > 0) return "positive";
+  if (change < 0) return "negative";
+  return "neutral";
+}
+
+function formatChange(change, format) {
+  if (change === null || change === undefined) return "No prior data";
+  if (format === "percent1") {
+    return `${change >= 0 ? "+" : ""}${Number(change).toFixed(1)} pts`;
+  }
+  return `${change >= 0 ? "+" : ""}${Number(change).toLocaleString()}`;
 }
 
 function collectRegionFormValues() {
