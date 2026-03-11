@@ -593,6 +593,12 @@ tbody tr:hover{ background:rgba(255,255,255,.045); }
     grid-template-columns:1fr;
   }
 }
+.section-tab.region-tab,
+.section-tab.shared-tab{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
 
 .section-block + .section-block{
   margin-top:0;
