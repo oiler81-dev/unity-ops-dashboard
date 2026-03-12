@@ -1,0 +1,10 @@
+{
+  "name": "unity-ops-dashboard-api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "@azure/data-tables": "^13.3.1",
+    "xlsx": "^0.18.5"
+  }
+}
