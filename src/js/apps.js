@@ -59,7 +59,9 @@ const els = {
   goExecutiveBtn: document.getElementById("goExecutiveBtn")
 };
 
-init().catch(handleFatalError);
+window.addEventListener("DOMContentLoaded", () => {
+  init().catch(handleFatalError);
+});
 
 async function init() {
   if (els.weekEndingSelect) {
@@ -70,9 +72,10 @@ async function init() {
     els.selectedWeekText.textContent = formatDate(state.currentWeekEnding);
   }
 
+  renderKpiCards([]);
   bindEvents();
 
-  const rawMe = await apiGet("/api/me");
+  const rawMe = await safeApiGet("/api/me");
   state.me = normalizeMe(rawMe);
 
   applyUserContext();
@@ -362,8 +365,11 @@ function applyUserContext() {
   }
 
   if (els.adminNavBtn) {
-    if (state.me.isAdmin) els.adminNavBtn.classList.remove("hidden");
-    else els.adminNavBtn.classList.add("hidden");
+    if (state.me.isAdmin) {
+      els.adminNavBtn.classList.remove("hidden");
+    } else {
+      els.adminNavBtn.classList.add("hidden");
+    }
   }
 }
 
@@ -427,12 +433,15 @@ async function renderExecutive() {
       "Weekly companywide KPI overview with trends, target comparisons, and submission visibility.";
   }
 
-  let data;
-  try {
-    data = await apiGet(`/api/dashboard?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
-  } catch (err) {
-    data = { ok: false, kpis: [], entities: [], comparison: [], riskMetrics: [], commentaryRollup: [] };
-  }
+  const data = await safeApiGet(`/api/dashboard?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`, {
+    weekEnding: state.currentWeekEnding,
+    previousWeekEnding: "",
+    kpis: [],
+    entities: [],
+    comparison: [],
+    riskMetrics: [],
+    commentaryRollup: []
+  });
 
   state.pageData = data;
 
@@ -450,7 +459,7 @@ async function renderExecutive() {
             <p class="section-copy">Week-over-week operational view across LAOSS, NES, SpineOne, and MRO.</p>
           </div>
           <div class="meeting-summary-actions no-print">
-            <button id="printMeetingSummaryBtn" class="btn btn-primary">Print / Save PDF</button>
+            <button id="printMeetingSummaryBtn" class="btn btn-primary" type="button">Print / Save PDF</button>
           </div>
         </div>
       </div>
@@ -558,7 +567,22 @@ async function renderRegion(entity) {
       `Weekly data entry, KPI visibility, narratives, and workflow tracking for ${friendlyName}.`;
   }
 
-  const data = await apiGet(`/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
+  const data = await safeApiGet(
+    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`,
+    {
+      entity,
+      weekEnding: state.currentWeekEnding,
+      status: "Draft",
+      kpis: [],
+      inputs: {},
+      narrative: {
+        commentary: "",
+        blockers: "",
+        opportunities: ""
+      }
+    }
+  );
+
   state.pageData = data;
 
   renderKpiCards(data.kpis || []);
@@ -594,7 +618,7 @@ async function renderRegion(entity) {
 
       <div class="section-tabs">
         ${sections.map((section) => `
-          <button class="section-tab region-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}">
+          <button class="section-tab region-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}" type="button">
             ${escapeHtml(section.title)}
           </button>
         `).join("")}
@@ -642,7 +666,17 @@ async function renderSharedPage(pageName) {
   if (els.pageTitle) els.pageTitle.textContent = def.title;
   if (els.pageSubtitle) els.pageSubtitle.textContent = def.description;
 
-  const data = await apiGet(`/api/shared?page=${encodeURIComponent(pageName)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
+  const data = await safeApiGet(
+    `/api/shared?page=${encodeURIComponent(pageName)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`,
+    {
+      page: pageName,
+      weekEnding: state.currentWeekEnding,
+      status: "Draft",
+      kpis: [],
+      inputs: {}
+    }
+  );
+
   state.pageData = data;
 
   const activeSection = def.sections.find((section) => section.key === state.activeSharedSectionKey) || def.sections[0];
@@ -677,7 +711,7 @@ async function renderSharedPage(pageName) {
 
       <div class="section-tabs">
         ${def.sections.map((section) => `
-          <button class="section-tab shared-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}">
+          <button class="section-tab shared-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}" type="button">
             ${escapeHtml(section.title)}
           </button>
         `).join("")}
@@ -789,34 +823,34 @@ async function renderAdmin() {
 
   if (state.activeAdminTab === "holidays") {
     yearWrap?.classList.remove("hidden");
-    const data = await apiGet(`/api/admin-reference?kind=holidays&year=${encodeURIComponent(state.activeAdminYear)}`);
+    const data = await safeApiGet(`/api/admin-reference?kind=holidays&year=${encodeURIComponent(state.activeAdminYear)}`, { rows: [] });
     if (adminContent) adminContent.innerHTML = renderHolidaysEditor(state.activeAdminYear, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "targets") {
     entityWrap?.classList.remove("hidden");
-    const data = await apiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=targets`);
+    const data = await safeApiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=targets`, { rows: [] });
     if (adminContent) adminContent.innerHTML = renderTargetsEditor(state.activeAdminEntity, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "thresholds") {
     entityWrap?.classList.remove("hidden");
-    const data = await apiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=thresholds`);
+    const data = await safeApiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=thresholds`, { rows: [] });
     if (adminContent) adminContent.innerHTML = renderThresholdsEditor(state.activeAdminEntity, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "budget") {
     entityWrap?.classList.remove("hidden");
-    const data = await apiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=budget`);
+    const data = await safeApiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=budget`, { rows: [] });
     if (adminContent) adminContent.innerHTML = renderBudgetEditor(state.activeAdminEntity, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "submissions") {
-    const data = await apiGet(`/api/submissionsfeed?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
+    const data = await safeApiGet(`/api/submissionsfeed?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`, { items: [] });
     const mapped = mapSubmissionFeedToTracker(data);
     if (adminContent) adminContent.innerHTML = renderSubmissionTracker(mapped);
     return;
@@ -826,7 +860,7 @@ async function renderAdmin() {
     auditEntityWrap?.classList.remove("hidden");
     const qs = new URLSearchParams({ weekEnding: state.currentWeekEnding });
     if (state.activeAdminAuditEntity) qs.set("entity", state.activeAdminAuditEntity);
-    const data = await apiGet(`/api/admin-audit?${qs.toString()}`);
+    const data = await safeApiGet(`/api/admin-audit?${qs.toString()}`, { rows: [] });
     if (adminContent) adminContent.innerHTML = renderAuditViewer(data);
     return;
   }
@@ -994,7 +1028,8 @@ function collectSharedFormValues() {
 
 async function apiGet(url) {
   const res = await fetch(url, {
-    headers: { Accept: "application/json" }
+    headers: { Accept: "application/json" },
+    cache: "no-store"
   });
 
   if (!res.ok) {
@@ -1002,6 +1037,15 @@ async function apiGet(url) {
   }
 
   return res.json();
+}
+
+async function safeApiGet(url, fallback = {}) {
+  try {
+    return await apiGet(url);
+  } catch (err) {
+    console.warn(`safeApiGet fallback for ${url}`, err);
+    return fallback;
+  }
 }
 
 async function apiPost(url, body) {
@@ -1080,4 +1124,4 @@ function handleFatalError(err) {
   if (els.roleText && els.roleText.textContent === "Loading...") {
     els.roleText.textContent = "Error";
   }
-}
+} perhaps i should provide all of the code/files and we can see if theres something wrong? 
