@@ -6,7 +6,7 @@ module.exports = async function (context, req) {
     },
     body: {
       ok: true,
-      message: "admin-submissions route is live"
+      message: "adminsubmissions route is live"
     }
   };
 };
