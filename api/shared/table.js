@@ -12,9 +12,7 @@ function getTableClient(tableName) {
   const connectionString = getConnectionString();
 
   if (!connectionString) {
-    throw new Error(
-      "Missing AZURE_STORAGE_CONNECTION_STRING or AzureWebJobsStorage"
-    );
+    throw new Error("Missing AZURE_STORAGE_CONNECTION_STRING or AzureWebJobsStorage.");
   }
 
   const client = TableClient.fromConnectionString(connectionString, tableName);
@@ -35,9 +33,14 @@ function getTableClient(tableName) {
       return client.upsertEntity(entity, "Merge");
     },
 
-    async *listEntities() {
+    async getEntity(partitionKey, rowKey) {
       await this.ensureTable();
-      for await (const entity of client.listEntities()) {
+      return client.getEntity(partitionKey, rowKey);
+    },
+
+    async *listEntities(options = {}) {
+      await this.ensureTable();
+      for await (const entity of client.listEntities(options)) {
         yield entity;
       }
     }
