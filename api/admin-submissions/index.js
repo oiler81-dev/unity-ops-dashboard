@@ -1,109 +1,69 @@
-const { getUserFromRequest, getUserEmail } = require("../shared/auth");
-const { getPermissionByEmail } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
-const { ENTITIES } = require("../shared/workbookLogic");
+
+function normalizeString(value) {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+}
+
+function toIsoOrBlank(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
 
 module.exports = async function (context, req) {
   try {
-    const user = getUserFromRequest(req);
-    if (!user) {
-      context.res = {
-        status: 401,
-        body: { error: "Not authenticated" }
-      };
-      return;
-    }
+    const table = getTableClient("DashboardSubmissions");
+    const items = [];
 
-    const email = getUserEmail(user);
-    const permission = await getPermissionByEmail(email);
-
-    if (!permission || !permission.isAdmin) {
-      context.res = {
-        status: 403,
-        body: { error: "Admin access required" }
-      };
-      return;
-    }
-
-    const weekEnding = req.query.weekEnding || new Date().toISOString().slice(0, 10);
-
-    const statusTable = getTableClient("SubmissionStatus");
-    const inputsTable = getTableClient("WeeklyInputs");
-    const narrativeTable = getTableClient("WeeklyNarratives");
-
-    const rows = [];
-
-    for (const entity of ENTITIES) {
-      const partitionKey = `${entity}|${weekEnding}`;
-
-      const [statusRow, inputRows, narrativeRow] = await Promise.all([
-        statusTable.getEntity(partitionKey, "STATUS"),
-        inputsTable.listByPartition(partitionKey),
-        narrativeTable.getEntity(partitionKey, "NARRATIVE")
-      ]);
-
-      const latestInputRow = [...inputRows]
-        .filter((r) => r.updatedAt)
-        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0] || null;
-
-      const latestNarrativeAt = narrativeRow?.updatedAt || "";
-      const latestInputAt = latestInputRow?.updatedAt || "";
-
-      const useNarrative = latestNarrativeAt && String(latestNarrativeAt) > String(latestInputAt);
-
-      rows.push({
-        entity,
-        weekEnding,
-        status: statusRow?.status || "Draft",
-        submittedBy: statusRow?.submittedBy || "",
-        submittedAt: statusRow?.submittedAt || "",
-        approvedBy: statusRow?.approvedBy || "",
-        approvedAt: statusRow?.approvedAt || "",
-        updatedBy: useNarrative
-          ? (narrativeRow?.updatedBy || "")
-          : (latestInputRow?.updatedBy || narrativeRow?.updatedBy || ""),
-        updatedAt: useNarrative
-          ? latestNarrativeAt
-          : (latestInputAt || latestNarrativeAt || ""),
-        inputCount: inputRows.length,
-        hasNarrative: Boolean(
-          narrativeRow &&
-          (
-            narrativeRow.commentary ||
-            narrativeRow.blockers ||
-            narrativeRow.opportunities ||
-            narrativeRow.executiveNotes
-          )
-        )
+    for await (const entity of table.listEntities()) {
+      items.push({
+        partitionKey: entity.partitionKey || "",
+        rowKey: entity.rowKey || "",
+        entityId: entity.entityId || entity.partitionKey || "",
+        weekEnding: normalizeString(entity.weekEnding),
+        market: normalizeString(entity.market),
+        location: normalizeString(entity.location),
+        submittedBy: normalizeString(entity.submittedBy),
+        submittedByEmail: normalizeString(entity.submittedByEmail),
+        submittedAt: toIsoOrBlank(entity.submittedAt || entity.createdAt || entity.timestamp),
+        updatedAt: toIsoOrBlank(entity.updatedAt || entity.timestamp),
+        status: normalizeString(entity.status),
+        payload: entity.payload || null
       });
     }
 
-    const submittedCount = rows.filter(
-      (r) => r.status === "Submitted" || r.status === "Approved"
-    ).length;
-
-    const missingEntities = rows
-      .filter((r) => r.status !== "Submitted" && r.status !== "Approved")
-      .map((r) => r.entity);
+    items.sort((a, b) => {
+      const aTime = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+      const bTime = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+      return bTime - aTime;
+    });
 
     context.res = {
       status: 200,
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: {
-        weekEnding,
-        rows,
-        summary: {
-          totalEntities: ENTITIES.length,
-          submittedCount,
-          missingCount: missingEntities.length,
-          missingEntities
-        }
+        ok: true,
+        count: items.length,
+        items
       }
     };
   } catch (err) {
-    context.log.error(err);
+    context.log.error("api/admin-submissions failed", err);
+
     context.res = {
       status: 500,
-      body: { error: err.message }
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: {
+        ok: false,
+        error: "admin-submissions_failed",
+        details: err.message
+      }
     };
   }
 };
