@@ -6,10 +6,6 @@ on:
       - main
   workflow_dispatch:
 
-concurrency:
-  group: azure-static-web-apps-main
-  cancel-in-progress: true
-
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
