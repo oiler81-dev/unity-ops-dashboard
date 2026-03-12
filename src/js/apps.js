@@ -62,63 +62,118 @@ const els = {
 init().catch(handleFatalError);
 
 async function init() {
-  els.weekEndingSelect.value = state.currentWeekEnding;
-  els.selectedWeekText.textContent = formatDate(state.currentWeekEnding);
+  if (els.weekEndingSelect) {
+    els.weekEndingSelect.value = state.currentWeekEnding;
+  }
+
+  if (els.selectedWeekText) {
+    els.selectedWeekText.textContent = formatDate(state.currentWeekEnding);
+  }
+
   bindEvents();
 
-  const me = await apiGet("/api/me");
-  state.me = me;
+  const rawMe = await apiGet("/api/me");
+  state.me = normalizeMe(rawMe);
 
   applyUserContext();
 
-  if (me.isAdmin) {
+  if (state.me.isAdmin) {
     await setRoute("executive");
   } else {
-    await setRoute("region", me.entity);
+    await setRoute("region", state.me.entity || "LAOSS");
   }
 }
 
+function normalizeMe(raw) {
+  const roles = Array.isArray(raw?.roles) ? raw.roles : [];
+  const userDetails = raw?.userDetails || "";
+  const inferredEntity = inferEntityFromEmail(userDetails);
+
+  return {
+    authenticated: Boolean(raw?.authenticated),
+    email: userDetails || "",
+    displayName: userDetails || "Unknown User",
+    entity: inferredEntity,
+    roles,
+    isAdmin: roles.includes("admin")
+  };
+}
+
+function inferEntityFromEmail(email) {
+  const lower = String(email || "").toLowerCase();
+
+  if (!lower) return "LAOSS";
+  if (lower.includes("nes")) return "NES";
+  if (lower.includes("spine")) return "SpineOne";
+  if (lower.includes("mro")) return "MRO";
+
+  return "LAOSS";
+}
+
 function bindEvents() {
-  els.weekEndingSelect.addEventListener("change", async (e) => {
-    state.currentWeekEnding = e.target.value;
-    els.selectedWeekText.textContent = formatDate(state.currentWeekEnding);
-    await loadCurrentRoute();
-  });
+  if (els.weekEndingSelect) {
+    els.weekEndingSelect.addEventListener("change", async (e) => {
+      state.currentWeekEnding = e.target.value || getDefaultWeekEnding();
+      if (els.selectedWeekText) {
+        els.selectedWeekText.textContent = formatDate(state.currentWeekEnding);
+      }
+      await loadCurrentRoute();
+    });
+  }
 
-  els.sidebarNav.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".nav-link");
-    if (!btn) return;
+  if (els.sidebarNav) {
+    els.sidebarNav.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".nav-link");
+      if (!btn) return;
 
-    const route = btn.dataset.route;
-    const entity = btn.dataset.entity || null;
-    const page = btn.dataset.page || null;
+      const route = btn.dataset.route;
+      const entity = btn.dataset.entity || null;
+      const page = btn.dataset.page || null;
 
-    if (route === "region") return await setRoute("region", entity);
-    if (route === "shared") return await setRoute("shared", null, page);
-    if (route === "admin") return await setRoute("admin");
+      if (route === "region") {
+        await setRoute("region", entity);
+        return;
+      }
 
-    await setRoute("executive");
-  });
+      if (route === "shared") {
+        await setRoute("shared", null, page);
+        return;
+      }
+
+      if (route === "admin") {
+        await setRoute("admin");
+        return;
+      }
+
+      await setRoute("executive");
+    });
+  }
 
   document.addEventListener("click", async (e) => {
     const regionTab = e.target.closest(".section-tab.region-tab");
     if (regionTab) {
       state.activeRegionSectionKey = regionTab.dataset.sectionKey;
-      if (state.currentRoute === "region" && state.currentEntity) await renderRegion(state.currentEntity);
+      if (state.currentRoute === "region" && state.currentEntity) {
+        await renderRegion(state.currentEntity);
+      }
       return;
     }
 
     const sharedTab = e.target.closest(".section-tab.shared-tab");
     if (sharedTab) {
       state.activeSharedSectionKey = sharedTab.dataset.sectionKey;
-      if (state.currentRoute === "shared" && state.currentSharedPage) await renderSharedPage(state.currentSharedPage);
+      if (state.currentRoute === "shared" && state.currentSharedPage) {
+        await renderSharedPage(state.currentSharedPage);
+      }
       return;
     }
 
     const adminTab = e.target.closest(".admin-editor-tab");
     if (adminTab) {
       state.activeAdminTab = adminTab.dataset.adminTab;
-      if (state.currentRoute === "admin") await renderAdmin();
+      if (state.currentRoute === "admin") {
+        await renderAdmin();
+      }
       return;
     }
 
@@ -146,7 +201,11 @@ function bindEvents() {
 
     if (e.target.closest("#saveTargetsBtn")) {
       const rows = collectAdminRows("target");
-      await apiPost("/api/admin-reference-save", { entity: state.activeAdminEntity, kind: "targets", rows });
+      await apiPost("/api/admin-reference-save", {
+        entity: state.activeAdminEntity,
+        kind: "targets",
+        rows
+      });
       alert("Targets saved.");
       await renderAdmin();
       return;
@@ -154,7 +213,11 @@ function bindEvents() {
 
     if (e.target.closest("#saveThresholdsBtn")) {
       const rows = collectAdminRows("threshold");
-      await apiPost("/api/admin-reference-save", { entity: state.activeAdminEntity, kind: "thresholds", rows });
+      await apiPost("/api/admin-reference-save", {
+        entity: state.activeAdminEntity,
+        kind: "thresholds",
+        rows
+      });
       alert("Thresholds saved.");
       await renderAdmin();
       return;
@@ -162,7 +225,11 @@ function bindEvents() {
 
     if (e.target.closest("#saveHolidaysBtn")) {
       const rows = collectAdminRows("holiday");
-      await apiPost("/api/admin-reference-save", { kind: "holidays", year: state.activeAdminYear, rows });
+      await apiPost("/api/admin-reference-save", {
+        kind: "holidays",
+        year: state.activeAdminYear,
+        rows
+      });
       alert("Holidays saved.");
       await renderAdmin();
       return;
@@ -170,7 +237,11 @@ function bindEvents() {
 
     if (e.target.closest("#saveBudgetBtn")) {
       const rows = collectAdminRows("budget");
-      await apiPost("/api/admin-reference-save", { entity: state.activeAdminEntity, kind: "budget", rows });
+      await apiPost("/api/admin-reference-save", {
+        entity: state.activeAdminEntity,
+        kind: "budget",
+        rows
+      });
       alert("Budget saved.");
       await renderAdmin();
       return;
@@ -210,61 +281,90 @@ function bindEvents() {
     }
   });
 
-  els.goAssignedRegionBtn.addEventListener("click", async () => {
-    if (!state.me) return;
-    if (state.me.isAdmin) return await setRoute("executive");
-    await setRoute("region", state.me.entity);
-  });
-
-  els.goExecutiveBtn.addEventListener("click", async () => {
-    await setRoute("executive");
-  });
-
-  els.saveBtn.addEventListener("click", async () => {
-    if (state.currentRoute === "region") {
-      const payload = collectRegionFormValues();
-      const res = await apiPost("/api/weekly-save", payload);
-      els.submissionStatusText.textContent = res.status || "Draft";
-      alert("Saved successfully.");
-      await loadCurrentRoute();
-      return;
-    }
-
-    if (state.currentRoute === "shared") {
-      const payload = collectSharedFormValues();
-      const res = await apiPost("/api/shared-save", payload);
-      els.submissionStatusText.textContent = res.status || "Draft";
-      alert("Shared page saved successfully.");
-      await loadCurrentRoute();
-      return;
-    }
-
-    alert("Save is only active on region and shared pages.");
-  });
-
-  els.submitBtn.addEventListener("click", async () => {
-    if (state.currentRoute !== "region") {
-      alert("Submit is only active on region pages.");
-      return;
-    }
-
-    const res = await apiPost("/api/submit-week", {
-      entity: state.currentEntity,
-      weekEnding: state.currentWeekEnding
+  if (els.goAssignedRegionBtn) {
+    els.goAssignedRegionBtn.addEventListener("click", async () => {
+      if (!state.me) return;
+      if (state.me.isAdmin) {
+        await setRoute("executive");
+        return;
+      }
+      await setRoute("region", state.me.entity || "LAOSS");
     });
+  }
 
-    els.submissionStatusText.textContent = res.status || "Submitted";
-    alert("Week submitted.");
-    await loadCurrentRoute();
-  });
+  if (els.goExecutiveBtn) {
+    els.goExecutiveBtn.addEventListener("click", async () => {
+      await setRoute("executive");
+    });
+  }
+
+  if (els.saveBtn) {
+    els.saveBtn.addEventListener("click", async () => {
+      if (state.currentRoute === "region") {
+        const payload = collectRegionFormValues();
+        const res = await apiPost("/api/weekly-save", payload);
+        if (els.submissionStatusText) {
+          els.submissionStatusText.textContent = res.status || "Draft";
+        }
+        alert("Saved successfully.");
+        await loadCurrentRoute();
+        return;
+      }
+
+      if (state.currentRoute === "shared") {
+        const payload = collectSharedFormValues();
+        const res = await apiPost("/api/shared-save", payload);
+        if (els.submissionStatusText) {
+          els.submissionStatusText.textContent = res.status || "Draft";
+        }
+        alert("Shared page saved successfully.");
+        await loadCurrentRoute();
+        return;
+      }
+
+      alert("Save is only active on region and shared pages.");
+    });
+  }
+
+  if (els.submitBtn) {
+    els.submitBtn.addEventListener("click", async () => {
+      if (state.currentRoute !== "region") {
+        alert("Submit is only active on region pages.");
+        return;
+      }
+
+      const res = await apiPost("/api/submit-week", {
+        entity: state.currentEntity,
+        weekEnding: state.currentWeekEnding
+      });
+
+      if (els.submissionStatusText) {
+        els.submissionStatusText.textContent = res.status || "Submitted";
+      }
+
+      alert("Week submitted.");
+      await loadCurrentRoute();
+    });
+  }
 }
 
 function applyUserContext() {
-  els.userDisplayName.textContent = state.me.displayName || state.me.email || "Unknown User";
-  els.assignedEntityText.textContent = state.me.entity || "None";
-  els.roleText.textContent = state.me.isAdmin ? "Admin" : "Editor";
-  if (state.me.isAdmin) els.adminNavBtn.classList.remove("hidden");
-  else els.adminNavBtn.classList.add("hidden");
+  if (els.userDisplayName) {
+    els.userDisplayName.textContent = state.me.displayName || state.me.email || "Unknown User";
+  }
+
+  if (els.assignedEntityText) {
+    els.assignedEntityText.textContent = state.me.entity || "None";
+  }
+
+  if (els.roleText) {
+    els.roleText.textContent = state.me.isAdmin ? "Admin" : "Editor";
+  }
+
+  if (els.adminNavBtn) {
+    if (state.me.isAdmin) els.adminNavBtn.classList.remove("hidden");
+    else els.adminNavBtn.classList.add("hidden");
+  }
 }
 
 async function setRoute(route, entity = null, sharedPage = null) {
@@ -275,20 +375,20 @@ async function setRoute(route, entity = null, sharedPage = null) {
   document.querySelectorAll(".nav-link").forEach((btn) => btn.classList.remove("active"));
 
   const selector = route === "region"
-    ? `.nav-link[data-route="region"][data-entity="${entity}"]`
+    ? `.nav-link[data-route="region"][data-entity="${cssEscape(entity)}"]`
     : route === "shared"
-      ? `.nav-link[data-route="shared"][data-page="${sharedPage}"]`
-      : `.nav-link[data-route="${route}"]`;
+      ? `.nav-link[data-route="shared"][data-page="${cssEscape(sharedPage)}"]`
+      : `.nav-link[data-route="${cssEscape(route)}"]`;
 
   const activeBtn = document.querySelector(selector);
   if (activeBtn) activeBtn.classList.add("active");
 
-  if (route === "region") {
+  if (route === "region" && entity) {
     const sections = getRegionSections(entity);
     state.activeRegionSectionKey = sections[0]?.key || null;
   }
 
-  if (route === "shared") {
+  if (route === "shared" && sharedPage) {
     const def = getSharedPageDefinition(sharedPage);
     state.activeSharedSectionKey = def?.sections?.[0]?.key || null;
   }
@@ -297,135 +397,174 @@ async function setRoute(route, entity = null, sharedPage = null) {
 }
 
 async function loadCurrentRoute() {
-  if (state.currentRoute === "executive") return renderExecutive();
-  if (state.currentRoute === "region") return renderRegion(state.currentEntity);
-  if (state.currentRoute === "shared") return renderSharedPage(state.currentSharedPage);
-  if (state.currentRoute === "admin") return renderAdmin();
+  if (state.currentRoute === "executive") {
+    await renderExecutive();
+    return;
+  }
+
+  if (state.currentRoute === "region") {
+    await renderRegion(state.currentEntity);
+    return;
+  }
+
+  if (state.currentRoute === "shared") {
+    await renderSharedPage(state.currentSharedPage);
+    return;
+  }
+
+  if (state.currentRoute === "admin") {
+    await renderAdmin();
+  }
 }
 
 async function renderExecutive() {
-  els.pageTitle.textContent = "Executive Summary";
-  els.pageSubtitle.textContent = "Weekly companywide KPI overview with trends, target comparisons, and submission visibility.";
+  if (els.pageTitle) {
+    els.pageTitle.textContent = "Executive Summary";
+  }
 
-  const data = await apiGet(`/api/dashboard?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
+  if (els.pageSubtitle) {
+    els.pageSubtitle.textContent =
+      "Weekly companywide KPI overview with trends, target comparisons, and submission visibility.";
+  }
+
+  let data;
+  try {
+    data = await apiGet(`/api/dashboard?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
+  } catch (err) {
+    data = { ok: false, kpis: [], entities: [], comparison: [], riskMetrics: [], commentaryRollup: [] };
+  }
+
   state.pageData = data;
 
   renderKpiCards(data.kpis || []);
-  els.submissionStatusText.textContent = "Summary View";
+  if (els.submissionStatusText) {
+    els.submissionStatusText.textContent = "Summary View";
+  }
 
-  els.pageContent.innerHTML = `
-    <div class="section-head meeting-summary-header">
-      <div class="meeting-summary-top">
-        <div>
-          <h3>UnityMSK Executive Summary</h3>
-          <p class="section-copy">Week-over-week operational view across LAOSS, NES, SpineOne, and MRO.</p>
-        </div>
-        <div class="meeting-summary-actions no-print">
-          <button id="printMeetingSummaryBtn" class="btn btn-primary">Print / Save PDF</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="exec-strip print-keep">
-      <div class="exec-card"><span class="exec-label">Current Week</span><strong class="exec-value">${escapeHtml(formatDate(data.weekEnding))}</strong></div>
-      <div class="exec-card"><span class="exec-label">Previous Week</span><strong class="exec-value">${escapeHtml(formatDate(data.previousWeekEnding))}</strong></div>
-      <div class="exec-card"><span class="exec-label">Entities Reporting</span><strong class="exec-value">${escapeHtml(String((data.entities || []).length))}</strong></div>
-    </div>
-
-    <section class="section-block print-keep" style="margin-bottom:18px;">
-      <div class="section-head">
-        <h3>Week-over-Week Comparison</h3>
-        <p class="section-copy">High-level KPI movement compared with the prior reporting week.</p>
-      </div>
-      <div class="comparison-grid">
-        ${(data.comparison || []).map((item) => `
-          <div class="comparison-card">
-            <span class="comparison-label">${escapeHtml(item.label)}</span>
-            <strong class="comparison-current">${escapeHtml(formatByType(item.current, item.format))}</strong>
-            <span class="comparison-meta">Prior: ${escapeHtml(formatByType(item.previous, item.format))}</span>
-            <span class="comparison-change ${comparisonClass(item.change, item.key)}">${escapeHtml(formatChange(item.change, item.format))}</span>
+  if (els.pageContent) {
+    els.pageContent.innerHTML = `
+      <div class="section-head meeting-summary-header">
+        <div class="meeting-summary-top">
+          <div>
+            <h3>UnityMSK Executive Summary</h3>
+            <p class="section-copy">Week-over-week operational view across LAOSS, NES, SpineOne, and MRO.</p>
           </div>
-        `).join("")}
+          <div class="meeting-summary-actions no-print">
+            <button id="printMeetingSummaryBtn" class="btn btn-primary">Print / Save PDF</button>
+          </div>
+        </div>
       </div>
-    </section>
 
-    <div class="split-grid print-stack">
-      <section class="section-block print-keep">
-        <div class="section-head">
-          <h3>Region Comparison</h3>
-          <p class="section-copy">Current-week region performance snapshot.</p>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Entity</th><th>Visit Volume</th><th>Call Volume</th><th>No Show Rate</th><th>Cancellation Rate</th><th>Abandoned Call Rate</th><th>Status</th></tr></thead>
-            <tbody>
-              ${(data.entities || []).map((row) => `
-                <tr>
-                  <td>${escapeHtml(row.entity)}</td>
-                  <td>${escapeHtml(String(row.visitVolume ?? "—"))}</td>
-                  <td>${escapeHtml(String(row.callVolume ?? "—"))}</td>
-                  <td>${escapeHtml(String(row.noShowRate ?? "—"))}</td>
-                  <td>${escapeHtml(String(row.cancellationRate ?? "—"))}</td>
-                  <td>${escapeHtml(String(row.abandonedCallRate ?? "—"))}</td>
-                  <td>${escapeHtml(row.status ?? "Draft")}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <div class="exec-strip print-keep">
+        <div class="exec-card"><span class="exec-label">Current Week</span><strong class="exec-value">${escapeHtml(formatDate(data.weekEnding || state.currentWeekEnding))}</strong></div>
+        <div class="exec-card"><span class="exec-label">Previous Week</span><strong class="exec-value">${escapeHtml(formatDate(data.previousWeekEnding || ""))}</strong></div>
+        <div class="exec-card"><span class="exec-label">Entities Reporting</span><strong class="exec-value">${escapeHtml(String((data.entities || []).length))}</strong></div>
+      </div>
 
-      <section class="section-block print-keep">
+      <section class="section-block print-keep" style="margin-bottom:18px;">
         <div class="section-head">
-          <h3>Top Risk Metrics</h3>
-          <p class="section-copy">Fast view of the riskiest metrics across regions.</p>
+          <h3>Week-over-Week Comparison</h3>
+          <p class="section-copy">High-level KPI movement compared with the prior reporting week.</p>
         </div>
-        <div class="risk-list">
-          ${(data.riskMetrics || []).map((risk) => `
-            <div class="risk-item">
-              <div>
-                <span class="risk-entity">${escapeHtml(risk.entity)}</span>
-                <span class="risk-label">${escapeHtml(risk.label)}</span>
-              </div>
-              <div class="risk-right">
-                <strong>${escapeHtml(risk.formattedValue)}</strong>
-                <span class="risk-badge ${escapeHtml(risk.statusColor)}">${escapeHtml(risk.statusColor)}</span>
-              </div>
+        <div class="comparison-grid">
+          ${(data.comparison || []).map((item) => `
+            <div class="comparison-card">
+              <span class="comparison-label">${escapeHtml(item.label)}</span>
+              <strong class="comparison-current">${escapeHtml(formatByType(item.current, item.format))}</strong>
+              <span class="comparison-meta">Prior: ${escapeHtml(formatByType(item.previous, item.format))}</span>
+              <span class="comparison-change ${comparisonClass(item.change, item.key)}">${escapeHtml(formatChange(item.change, item.format))}</span>
             </div>
-          `).join("") || `<div class="note-panel"><p>No risk metrics yet.</p></div>`}
+          `).join("") || `<div class="note-panel"><p>No comparison data yet.</p></div>`}
         </div>
       </section>
-    </div>
 
-    <section class="section-block print-keep" style="margin-top:18px;">
-      <div class="section-head">
-        <h3>Regional Commentary Rollup</h3>
-        <p class="section-copy">Meeting-ready notes pulled from regional submissions.</p>
-      </div>
-      <div class="commentary-grid">
-        ${(data.commentaryRollup || []).map((item) => `
-          <div class="commentary-card">
-            <h4>${escapeHtml(item.entity)}</h4>
-            <p><strong>Commentary:</strong> ${escapeHtml(item.commentary || "—")}</p>
-            <p><strong>Blockers:</strong> ${escapeHtml(item.blockers || "—")}</p>
-            <p><strong>Opportunities:</strong> ${escapeHtml(item.opportunities || "—")}</p>
+      <div class="split-grid print-stack">
+        <section class="section-block print-keep">
+          <div class="section-head">
+            <h3>Region Comparison</h3>
+            <p class="section-copy">Current-week region performance snapshot.</p>
           </div>
-        `).join("") || `<div class="note-panel"><p>No commentary submitted yet.</p></div>`}
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Entity</th><th>Visit Volume</th><th>Call Volume</th><th>No Show Rate</th><th>Cancellation Rate</th><th>Abandoned Call Rate</th><th>Status</th></tr></thead>
+              <tbody>
+                ${(data.entities || []).map((row) => `
+                  <tr>
+                    <td>${escapeHtml(row.entity)}</td>
+                    <td>${escapeHtml(String(row.visitVolume ?? "—"))}</td>
+                    <td>${escapeHtml(String(row.callVolume ?? "—"))}</td>
+                    <td>${escapeHtml(String(row.noShowRate ?? "—"))}</td>
+                    <td>${escapeHtml(String(row.cancellationRate ?? "—"))}</td>
+                    <td>${escapeHtml(String(row.abandonedCallRate ?? "—"))}</td>
+                    <td>${escapeHtml(row.status ?? "Draft")}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="7">No regional data yet.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section-block print-keep">
+          <div class="section-head">
+            <h3>Top Risk Metrics</h3>
+            <p class="section-copy">Fast view of the riskiest metrics across regions.</p>
+          </div>
+          <div class="risk-list">
+            ${(data.riskMetrics || []).map((risk) => `
+              <div class="risk-item">
+                <div>
+                  <span class="risk-entity">${escapeHtml(risk.entity)}</span>
+                  <span class="risk-label">${escapeHtml(risk.label)}</span>
+                </div>
+                <div class="risk-right">
+                  <strong>${escapeHtml(risk.formattedValue)}</strong>
+                  <span class="risk-badge ${escapeHtml(risk.statusColor)}">${escapeHtml(risk.statusColor)}</span>
+                </div>
+              </div>
+            `).join("") || `<div class="note-panel"><p>No risk metrics yet.</p></div>`}
+          </div>
+        </section>
       </div>
-    </section>
-  `;
+
+      <section class="section-block print-keep" style="margin-top:18px;">
+        <div class="section-head">
+          <h3>Regional Commentary Rollup</h3>
+          <p class="section-copy">Meeting-ready notes pulled from regional submissions.</p>
+        </div>
+        <div class="commentary-grid">
+          ${(data.commentaryRollup || []).map((item) => `
+            <div class="commentary-card">
+              <h4>${escapeHtml(item.entity)}</h4>
+              <p><strong>Commentary:</strong> ${escapeHtml(item.commentary || "—")}</p>
+              <p><strong>Blockers:</strong> ${escapeHtml(item.blockers || "—")}</p>
+              <p><strong>Opportunities:</strong> ${escapeHtml(item.opportunities || "—")}</p>
+            </div>
+          `).join("") || `<div class="note-panel"><p>No commentary submitted yet.</p></div>`}
+        </div>
+      </section>
+    `;
+  }
 }
 
 async function renderRegion(entity) {
   const friendlyName = ENTITY_LABELS[entity] || entity;
-  els.pageTitle.textContent = `${entity} Regional Dashboard`;
-  els.pageSubtitle.textContent = `Weekly data entry, KPI visibility, narratives, and workflow tracking for ${friendlyName}.`;
+
+  if (els.pageTitle) {
+    els.pageTitle.textContent = `${entity} Regional Dashboard`;
+  }
+
+  if (els.pageSubtitle) {
+    els.pageSubtitle.textContent =
+      `Weekly data entry, KPI visibility, narratives, and workflow tracking for ${friendlyName}.`;
+  }
 
   const data = await apiGet(`/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
   state.pageData = data;
 
   renderKpiCards(data.kpis || []);
-  els.submissionStatusText.textContent = data.status || "Draft";
+  if (els.submissionStatusText) {
+    els.submissionStatusText.textContent = data.status || "Draft";
+  }
 
   const isApproved = data.status === "Approved";
   const canEdit = Boolean((state.me?.isAdmin || state.me?.entity === entity) && !isApproved);
@@ -436,67 +575,72 @@ async function renderRegion(entity) {
   const summaries = calculateRegionSummaries(data.inputs || {});
   const calculatedValues = getRegionCalculatedValues(data.inputs || {});
 
-  els.pageContent.innerHTML = `
-    <div class="section-head">
-      <h3>${friendlyName}</h3>
-      <p class="section-copy">This regional view now supports more workbook-style metric groups and read-only derived outputs.</p>
-    </div>
-
-    <div class="summary-mini-grid">${summaries.map(renderSummaryMiniCard).join("")}</div>
-
-    <div class="mor-strip">
-      <div class="mor-card"><span class="mor-label">Region</span><strong class="mor-value">${escapeHtml(entity)}</strong></div>
-      <div class="mor-card"><span class="mor-label">Week Ending</span><strong class="mor-value">${escapeHtml(formatDate(state.currentWeekEnding))}</strong></div>
-      <div class="mor-card"><span class="mor-label">Status</span><strong class="mor-value">${escapeHtml(data.status || "Draft")}</strong></div>
-    </div>
-
-    ${isApproved ? `<div class="note-panel" style="margin-bottom:18px;"><h4>Week Locked</h4><p>This week has been approved and is now locked for editing.</p></div>` : ""}
-
-    <div class="section-tabs">
-      ${sections.map((section) => `
-        <button class="section-tab region-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}">
-          ${escapeHtml(section.title)}
-        </button>
-      `).join("")}
-    </div>
-
-    ${renderSectionBlock(activeSection, data.inputs || {}, canEdit, calculatedValues)}
-
-    <div class="split-grid" style="margin-top:18px;">
-      <div class="note-panel">
-        <h4>Regional Commentary</h4>
-        <div class="field">
-          <label for="commentary">Regional Commentary</label>
-          <textarea id="commentary" ${canEdit ? "" : "disabled"}>${escapeHtml(data.narrative?.commentary ?? "")}</textarea>
-        </div>
+  if (els.pageContent) {
+    els.pageContent.innerHTML = `
+      <div class="section-head">
+        <h3>${friendlyName}</h3>
+        <p class="section-copy">This regional view now supports more workbook-style metric groups and read-only derived outputs.</p>
       </div>
 
-      <div class="note-panel">
-        <h4>Blockers and Opportunities</h4>
-        <div class="field">
-          <label for="blockers">Blockers</label>
-          <textarea id="blockers" ${canEdit ? "" : "disabled"}>${escapeHtml(data.narrative?.blockers ?? "")}</textarea>
+      <div class="summary-mini-grid">${summaries.map(renderSummaryMiniCard).join("")}</div>
+
+      <div class="mor-strip">
+        <div class="mor-card"><span class="mor-label">Region</span><strong class="mor-value">${escapeHtml(entity)}</strong></div>
+        <div class="mor-card"><span class="mor-label">Week Ending</span><strong class="mor-value">${escapeHtml(formatDate(state.currentWeekEnding))}</strong></div>
+        <div class="mor-card"><span class="mor-label">Status</span><strong class="mor-value">${escapeHtml(data.status || "Draft")}</strong></div>
+      </div>
+
+      ${isApproved ? `<div class="note-panel" style="margin-bottom:18px;"><h4>Week Locked</h4><p>This week has been approved and is now locked for editing.</p></div>` : ""}
+
+      <div class="section-tabs">
+        ${sections.map((section) => `
+          <button class="section-tab region-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}">
+            ${escapeHtml(section.title)}
+          </button>
+        `).join("")}
+      </div>
+
+      ${renderSectionBlock(activeSection, data.inputs || {}, canEdit, calculatedValues)}
+
+      <div class="split-grid" style="margin-top:18px;">
+        <div class="note-panel">
+          <h4>Regional Commentary</h4>
+          <div class="field">
+            <label for="commentary">Regional Commentary</label>
+            <textarea id="commentary" ${canEdit ? "" : "disabled"}>${escapeHtml(data.narrative?.commentary ?? "")}</textarea>
+          </div>
         </div>
-        <div class="field">
-          <label for="opportunities">Opportunities</label>
-          <textarea id="opportunities" ${canEdit ? "" : "disabled"}>${escapeHtml(data.narrative?.opportunities ?? "")}</textarea>
+
+        <div class="note-panel">
+          <h4>Blockers and Opportunities</h4>
+          <div class="field">
+            <label for="blockers">Blockers</label>
+            <textarea id="blockers" ${canEdit ? "" : "disabled"}>${escapeHtml(data.narrative?.blockers ?? "")}</textarea>
+          </div>
+          <div class="field">
+            <label for="opportunities">Opportunities</label>
+            <textarea id="opportunities" ${canEdit ? "" : "disabled"}>${escapeHtml(data.narrative?.opportunities ?? "")}</textarea>
+          </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  }
 }
 
 async function renderSharedPage(pageName) {
   const def = getSharedPageDefinition(pageName);
+
   if (!def) {
-    els.pageTitle.textContent = pageName;
-    els.pageSubtitle.textContent = "Shared page definition not found.";
-    els.pageContent.innerHTML = `<div class="note-panel"><h4>Missing Definition</h4><p>No definition exists for this shared page yet.</p></div>`;
+    if (els.pageTitle) els.pageTitle.textContent = pageName || "Shared Page";
+    if (els.pageSubtitle) els.pageSubtitle.textContent = "Shared page definition not found.";
+    if (els.pageContent) {
+      els.pageContent.innerHTML = `<div class="note-panel"><h4>Missing Definition</h4><p>No definition exists for this shared page yet.</p></div>`;
+    }
     return;
   }
 
-  els.pageTitle.textContent = def.title;
-  els.pageSubtitle.textContent = def.description;
+  if (els.pageTitle) els.pageTitle.textContent = def.title;
+  if (els.pageSubtitle) els.pageSubtitle.textContent = def.description;
 
   const data = await apiGet(`/api/shared?page=${encodeURIComponent(pageName)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
   state.pageData = data;
@@ -509,34 +653,44 @@ async function renderSharedPage(pageName) {
 
   renderKpiCards((data.kpis || []).length
     ? data.kpis
-    : summaries.map((s) => ({ label: s.label, value: s.value, meta: s.meta, status: "Tracking", statusColor: "yellow" }))
+    : summaries.map((s) => ({
+        label: s.label,
+        value: s.value,
+        meta: s.meta,
+        status: "Tracking",
+        statusColor: "yellow"
+      }))
   );
 
-  els.submissionStatusText.textContent = data.status || "Draft";
+  if (els.submissionStatusText) {
+    els.submissionStatusText.textContent = data.status || "Draft";
+  }
 
-  els.pageContent.innerHTML = `
-    <div class="section-head">
-      <h3>${escapeHtml(def.title)}</h3>
-      <p class="section-copy">${escapeHtml(def.description)}</p>
-    </div>
+  if (els.pageContent) {
+    els.pageContent.innerHTML = `
+      <div class="section-head">
+        <h3>${escapeHtml(def.title)}</h3>
+        <p class="section-copy">${escapeHtml(def.description)}</p>
+      </div>
 
-    <div class="summary-mini-grid">${summaries.map(renderSummaryMiniCard).join("")}</div>
+      <div class="summary-mini-grid">${summaries.map(renderSummaryMiniCard).join("")}</div>
 
-    <div class="section-tabs">
-      ${def.sections.map((section) => `
-        <button class="section-tab shared-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}">
-          ${escapeHtml(section.title)}
-        </button>
-      `).join("")}
-    </div>
+      <div class="section-tabs">
+        ${def.sections.map((section) => `
+          <button class="section-tab shared-tab ${section.key === activeSection.key ? "active" : ""}" data-section-key="${escapeAttr(section.key)}">
+            ${escapeHtml(section.title)}
+          </button>
+        `).join("")}
+      </div>
 
-    ${renderSectionBlock(activeSection, data.inputs || {}, true, calculatedValues)}
+      ${renderSectionBlock(activeSection, data.inputs || {}, true, calculatedValues)}
 
-    <div class="note-panel" style="margin-top:18px;">
-      <h4>Shared Page Notes</h4>
-      <p>Shared pages now support richer workbook-style groupings and read-only calculated outputs.</p>
-    </div>
-  `;
+      <div class="note-panel" style="margin-top:18px;">
+        <h4>Shared Page Notes</h4>
+        <p>Shared pages now support richer workbook-style groupings and read-only calculated outputs.</p>
+      </div>
+    `;
+  }
 }
 
 function renderSectionBlock(section, inputs, canEdit, calculatedValues = {}) {
@@ -592,18 +746,26 @@ function renderCalculatedField(field, value) {
 }
 
 async function renderAdmin() {
-  els.pageTitle.textContent = "Admin";
-  els.pageSubtitle.textContent = "Manage references, monitor submissions, review audit history, and import workbook data.";
+  if (els.pageTitle) els.pageTitle.textContent = "Admin";
+  if (els.pageSubtitle) {
+    els.pageSubtitle.textContent =
+      "Manage references, monitor submissions, review audit history, and import workbook data.";
+  }
 
   renderKpiCards([
-    { label: "Admin Module", value: "Live", statusColor: "green", meta: "Reference editors enabled" },
-    { label: "Entity", value: state.activeAdminEntity, statusColor: "yellow", meta: "Current selection" },
-    { label: "Editor", value: state.activeAdminTab, statusColor: "yellow", meta: "Active admin tab" },
-    { label: "Week", value: state.currentWeekEnding, statusColor: "green", meta: "Tracking period" }
+    { label: "Admin Module", value: "Live", statusColor: "green", meta: "Reference editors enabled", status: "Ready" },
+    { label: "Entity", value: state.activeAdminEntity, statusColor: "yellow", meta: "Current selection", status: "Active" },
+    { label: "Editor", value: state.activeAdminTab, statusColor: "yellow", meta: "Active admin tab", status: "Tracking" },
+    { label: "Week", value: state.currentWeekEnding, statusColor: "green", meta: "Tracking period", status: "Current" }
   ]);
 
-  els.submissionStatusText.textContent = "Admin View";
-  els.pageContent.innerHTML = renderAdminEditorShell();
+  if (els.submissionStatusText) {
+    els.submissionStatusText.textContent = "Admin View";
+  }
+
+  if (els.pageContent) {
+    els.pageContent.innerHTML = renderAdminEditorShell();
+  }
 
   const adminContent = document.getElementById("adminEditorContent");
   const entityFilter = document.getElementById("adminEntityFilter");
@@ -618,7 +780,7 @@ async function renderAdmin() {
   if (auditEntityFilter) auditEntityFilter.value = state.activeAdminAuditEntity;
 
   document.querySelectorAll(".admin-editor-tab").forEach((el) => el.classList.remove("active"));
-  const activeTab = document.querySelector(`.admin-editor-tab[data-admin-tab="${state.activeAdminTab}"]`);
+  const activeTab = document.querySelector(`.admin-editor-tab[data-admin-tab="${cssEscape(state.activeAdminTab)}"]`);
   if (activeTab) activeTab.classList.add("active");
 
   entityWrap?.classList.add("hidden");
@@ -628,34 +790,35 @@ async function renderAdmin() {
   if (state.activeAdminTab === "holidays") {
     yearWrap?.classList.remove("hidden");
     const data = await apiGet(`/api/admin-reference?kind=holidays&year=${encodeURIComponent(state.activeAdminYear)}`);
-    adminContent.innerHTML = renderHolidaysEditor(state.activeAdminYear, data.rows || []);
+    if (adminContent) adminContent.innerHTML = renderHolidaysEditor(state.activeAdminYear, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "targets") {
     entityWrap?.classList.remove("hidden");
     const data = await apiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=targets`);
-    adminContent.innerHTML = renderTargetsEditor(state.activeAdminEntity, data.rows || []);
+    if (adminContent) adminContent.innerHTML = renderTargetsEditor(state.activeAdminEntity, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "thresholds") {
     entityWrap?.classList.remove("hidden");
     const data = await apiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=thresholds`);
-    adminContent.innerHTML = renderThresholdsEditor(state.activeAdminEntity, data.rows || []);
+    if (adminContent) adminContent.innerHTML = renderThresholdsEditor(state.activeAdminEntity, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "budget") {
     entityWrap?.classList.remove("hidden");
     const data = await apiGet(`/api/admin-reference?entity=${encodeURIComponent(state.activeAdminEntity)}&kind=budget`);
-    adminContent.innerHTML = renderBudgetEditor(state.activeAdminEntity, data.rows || []);
+    if (adminContent) adminContent.innerHTML = renderBudgetEditor(state.activeAdminEntity, data.rows || []);
     return;
   }
 
   if (state.activeAdminTab === "submissions") {
-    const data = await apiGet(`/api/admin-submissions?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
-    adminContent.innerHTML = renderSubmissionTracker(data);
+    const data = await apiGet(`/api/submissionsfeed?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`);
+    const mapped = mapSubmissionFeedToTracker(data);
+    if (adminContent) adminContent.innerHTML = renderSubmissionTracker(mapped);
     return;
   }
 
@@ -664,13 +827,67 @@ async function renderAdmin() {
     const qs = new URLSearchParams({ weekEnding: state.currentWeekEnding });
     if (state.activeAdminAuditEntity) qs.set("entity", state.activeAdminAuditEntity);
     const data = await apiGet(`/api/admin-audit?${qs.toString()}`);
-    adminContent.innerHTML = renderAuditViewer(data);
+    if (adminContent) adminContent.innerHTML = renderAuditViewer(data);
     return;
   }
 
   if (state.activeAdminTab === "import") {
-    adminContent.innerHTML = renderImportTool(state.lastImportResult);
+    if (adminContent) adminContent.innerHTML = renderImportTool(state.lastImportResult);
   }
+}
+
+function mapSubmissionFeedToTracker(data) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const knownEntities = ["LAOSS", "NES", "SpineOne", "MRO", "PT", "CXNS", "Capacity", "Productivity Builder"];
+
+  const byEntity = new Map();
+
+  for (const item of items) {
+    const entity = item.entityId || item.market || item.location || "Unknown";
+    byEntity.set(entity, {
+      entity,
+      weekEnding: item.weekEnding || state.currentWeekEnding,
+      status: item.status || "Draft",
+      updatedBy: item.submittedByEmail || item.submittedBy || "—",
+      updatedAt: item.updatedAt || item.submittedAt || "—",
+      submittedBy: item.submittedBy || "—",
+      submittedAt: item.submittedAt || "—",
+      approvedBy: "—",
+      approvedAt: "—",
+      inputCount: item.payload && typeof item.payload === "object" ? Object.keys(item.payload).length : 0,
+      hasNarrative: Boolean(item.payload?.narrative)
+    });
+  }
+
+  const rows = knownEntities.map((entity) => {
+    return byEntity.get(entity) || {
+      entity,
+      weekEnding: state.currentWeekEnding,
+      status: "Missing",
+      updatedBy: "—",
+      updatedAt: "—",
+      submittedBy: "—",
+      submittedAt: "—",
+      approvedBy: "—",
+      approvedAt: "—",
+      inputCount: 0,
+      hasNarrative: false
+    };
+  });
+
+  const submittedCount = rows.filter((r) => ["Submitted", "Approved", "Draft"].includes(r.status) && r.status !== "Missing").length;
+  const missingEntities = rows.filter((r) => r.status === "Missing").map((r) => r.entity);
+
+  return {
+    weekEnding: state.currentWeekEnding,
+    summary: {
+      totalEntities: rows.length,
+      submittedCount,
+      missingCount: missingEntities.length,
+      missingEntities
+    },
+    rows
+  };
 }
 
 async function fileToBase64(file) {
@@ -691,11 +908,13 @@ function renderKpiCards(kpis) {
   const safe = Array.isArray(kpis) && kpis.length
     ? kpis
     : [
-        { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "No data yet" },
-        { label: "Call Volume", value: "—", statusColor: "yellow", meta: "No data yet" },
-        { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "No data yet" },
-        { label: "Abandoned Call Rate", value: "—", statusColor: "yellow", meta: "No data yet" }
+        { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "No data yet", status: "Tracking" },
+        { label: "Call Volume", value: "—", statusColor: "yellow", meta: "No data yet", status: "Tracking" },
+        { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "No data yet", status: "Tracking" },
+        { label: "Abandoned Call Rate", value: "—", statusColor: "yellow", meta: "No data yet", status: "Tracking" }
       ];
+
+  if (!els.dashboardCards) return;
 
   els.dashboardCards.innerHTML = safe.map((kpi, i) => `
     <div class="dashboard-card ${i === 0 ? "highlight" : ""}">
@@ -741,7 +960,7 @@ function collectRegionFormValues() {
   const inputs = {};
 
   metricKeys.forEach((key) => {
-    const el = document.querySelector(`[data-metric-key="${key}"]`);
+    const el = document.querySelector(`[data-metric-key="${cssEscape(key)}"]`);
     inputs[key] = numberOrNull(el?.value);
   });
 
@@ -762,7 +981,7 @@ function collectSharedFormValues() {
   const inputs = {};
 
   metricKeys.forEach((key) => {
-    const el = document.querySelector(`[data-metric-key="${key}"]`);
+    const el = document.querySelector(`[data-metric-key="${cssEscape(key)}"]`);
     inputs[key] = numberOrNull(el?.value);
   });
 
@@ -774,15 +993,24 @@ function collectSharedFormValues() {
 }
 
 async function apiGet(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`GET ${url} failed with status ${res.status}`);
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" }
+  });
+
+  if (!res.ok) {
+    throw new Error(`GET ${url} failed with status ${res.status}`);
+  }
+
   return res.json();
 }
 
 async function apiPost(url, body) {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
     body: JSON.stringify(body)
   });
 
@@ -822,12 +1050,34 @@ function escapeAttr(value) {
   return escapeHtml(value ?? "");
 }
 
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === "function") {
+    return window.CSS.escape(String(value ?? ""));
+  }
+  return String(value ?? "").replace(/"/g, '\\"');
+}
+
 function handleFatalError(err) {
   console.error(err);
-  els.pageContent.innerHTML = `
-    <div class="note-panel">
-      <h4>Application Error</h4>
-      <p>${escapeHtml(err.message || "Unknown error")}</p>
-    </div>
-  `;
+
+  if (els.pageContent) {
+    els.pageContent.innerHTML = `
+      <div class="note-panel">
+        <h4>Application Error</h4>
+        <p>${escapeHtml(err.message || "Unknown error")}</p>
+      </div>
+    `;
+  }
+
+  if (els.userDisplayName && els.userDisplayName.textContent === "Loading...") {
+    els.userDisplayName.textContent = "Error";
+  }
+
+  if (els.assignedEntityText && els.assignedEntityText.textContent === "Loading...") {
+    els.assignedEntityText.textContent = "Error";
+  }
+
+  if (els.roleText && els.roleText.textContent === "Loading...") {
+    els.roleText.textContent = "Error";
+  }
 }
