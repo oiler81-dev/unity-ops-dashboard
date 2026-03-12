@@ -7,14 +7,21 @@ module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
     if (!user) {
-      context.res = { status: 401, body: { error: "Not authenticated" } };
+      context.res = {
+        status: 401,
+        body: { error: "Not authenticated" }
+      };
       return;
     }
 
     const email = getUserEmail(user);
     const permission = await getPermissionByEmail(email);
-    if (!permission?.isAdmin) {
-      context.res = { status: 403, body: { error: "Admin access required" } };
+
+    if (!permission || !permission.isAdmin) {
+      context.res = {
+        status: 403,
+        body: { error: "Admin access required" }
+      };
       return;
     }
 
@@ -35,27 +42,14 @@ module.exports = async function (context, req) {
         narrativeTable.getEntity(partitionKey, "NARRATIVE")
       ]);
 
-      const lastInputUpdate = [...inputRows]
-        .map((r) => r.updatedAt)
-        .filter(Boolean)
-        .sort()
-        .pop() || null;
+      const latestInputRow = [...inputRows]
+        .filter((r) => r.updatedAt)
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0] || null;
 
-      const lastInputUser = [...inputRows]
-        .filter((r) => r.updatedAt === lastInputUpdate)
-        .map((r) => r.updatedBy)
-        .filter(Boolean)
-        .pop() || null;
+      const latestNarrativeAt = narrativeRow?.updatedAt || "";
+      const latestInputAt = latestInputRow?.updatedAt || "";
 
-      const lastNarrativeUpdate = narrativeRow?.updatedAt || null;
-      const lastNarrativeUser = narrativeRow?.updatedBy || null;
-
-      const latestUpdatedAt = [lastInputUpdate, lastNarrativeUpdate].filter(Boolean).sort().pop() || null;
-
-      const latestUpdatedBy =
-        latestUpdatedAt === lastNarrativeUpdate
-          ? lastNarrativeUser
-          : lastInputUser;
+      const useNarrative = latestNarrativeAt && String(latestNarrativeAt) > String(latestInputAt);
 
       rows.push({
         entity,
@@ -65,17 +59,32 @@ module.exports = async function (context, req) {
         submittedAt: statusRow?.submittedAt || "",
         approvedBy: statusRow?.approvedBy || "",
         approvedAt: statusRow?.approvedAt || "",
-        updatedBy: latestUpdatedBy || "",
-        updatedAt: latestUpdatedAt || "",
+        updatedBy: useNarrative
+          ? (narrativeRow?.updatedBy || "")
+          : (latestInputRow?.updatedBy || narrativeRow?.updatedBy || ""),
+        updatedAt: useNarrative
+          ? latestNarrativeAt
+          : (latestInputAt || latestNarrativeAt || ""),
         inputCount: inputRows.length,
         hasNarrative: Boolean(
           narrativeRow &&
-          (narrativeRow.commentary || narrativeRow.blockers || narrativeRow.opportunities)
+          (
+            narrativeRow.commentary ||
+            narrativeRow.blockers ||
+            narrativeRow.opportunities ||
+            narrativeRow.executiveNotes
+          )
         )
       });
     }
 
-    const missing = rows.filter((r) => r.status !== "Submitted" && r.status !== "Approved");
+    const submittedCount = rows.filter(
+      (r) => r.status === "Submitted" || r.status === "Approved"
+    ).length;
+
+    const missingEntities = rows
+      .filter((r) => r.status !== "Submitted" && r.status !== "Approved")
+      .map((r) => r.entity);
 
     context.res = {
       status: 200,
@@ -84,14 +93,17 @@ module.exports = async function (context, req) {
         rows,
         summary: {
           totalEntities: ENTITIES.length,
-          submittedCount: rows.filter((r) => r.status === "Submitted" || r.status === "Approved").length,
-          missingCount: missing.length,
-          missingEntities: missing.map((r) => r.entity)
+          submittedCount,
+          missingCount: missingEntities.length,
+          missingEntities
         }
       }
     };
   } catch (err) {
     context.log.error(err);
-    context.res = { status: 500, body: { error: err.message } };
+    context.res = {
+      status: 500,
+      body: { error: err.message }
+    };
   }
 };
