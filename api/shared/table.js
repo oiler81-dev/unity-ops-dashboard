@@ -1,63 +1,48 @@
 const { TableClient } = require("@azure/data-tables");
 
 function getConnectionString() {
-  const value =
+  return (
     process.env.AZURE_STORAGE_CONNECTION_STRING ||
-    process.env.AzureWebJobsStorage;
-
-  if (!value) {
-    throw new Error("Missing AZURE_STORAGE_CONNECTION_STRING or AzureWebJobsStorage.");
-  }
-
-  return value;
+    process.env.AzureWebJobsStorage ||
+    ""
+  );
 }
 
 function getTableClient(tableName) {
-  const client = TableClient.fromConnectionString(getConnectionString(), tableName);
+  const connectionString = getConnectionString();
+
+  if (!connectionString) {
+    throw new Error("Missing AZURE_STORAGE_CONNECTION_STRING or AzureWebJobsStorage.");
+  }
+
+  const client = TableClient.fromConnectionString(connectionString, tableName);
 
   return {
     async ensureTable() {
-      await client.createTable().catch(() => {});
+      try {
+        await client.createTable();
+      } catch (err) {
+        if (err.statusCode !== 409) {
+          throw err;
+        }
+      }
+    },
+
+    async upsertEntity(entity) {
+      await this.ensureTable();
+      return client.upsertEntity(entity, "Merge");
     },
 
     async getEntity(partitionKey, rowKey) {
-      await client.createTable().catch(() => {});
-      try {
-        return await client.getEntity(partitionKey, rowKey);
-      } catch (err) {
-        if (err.statusCode === 404) return null;
-        throw err;
+      await this.ensureTable();
+      return client.getEntity(partitionKey, rowKey);
+    },
+
+    async *listEntities(options = {}) {
+      await this.ensureTable();
+      for await (const entity of client.listEntities(options)) {
+        yield entity;
       }
-    },
-
-    async upsertEntity(entity, mode = "Merge") {
-      await client.createTable().catch(() => {});
-      return client.upsertEntity(entity, mode);
-    },
-
-    async createEntity(entity) {
-      await client.createTable().catch(() => {});
-      return client.createEntity(entity);
-    },
-
-    async listByPartition(partitionKey) {
-      await client.createTable().catch(() => {});
-      const items = [];
-      for await (const entity of client.listEntities({
-        queryOptions: { filter: `PartitionKey eq '${partitionKey}'` }
-      })) {
-        items.push(entity);
-      }
-      return items;
-    },
-
-    async listAll() {
-      await client.createTable().catch(() => {});
-      const items = [];
-      for await (const entity of client.listEntities()) {
-        items.push(entity);
-      }
-      return items;
     }
   };
 }
