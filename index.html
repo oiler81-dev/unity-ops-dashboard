@@ -1,239 +1,162 @@
-export const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UnityMSK Operations Dashboard</title>
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <div class="container">
+        <a class="brand" href="/" aria-label="UnityMSK Home">
+          <img src="/assets/unitymsk-logo.png" alt="UnityMSK" />
+        </a>
 
-export const ENTITY_LABELS = {
-  LAOSS: "Los Angeles Orthopedic Surgery Specialists",
-  NES: "Northwest Extremity Specialists",
-  SpineOne: "SpineOne",
-  MRO: "Midland Riverside Orthopedics"
-};
+        <div class="header-actions">
+          <div class="header-week">
+            <label for="weekEndingSelect">Week Ending</label>
+            <input id="weekEndingSelect" type="date" />
+          </div>
 
-export const REGION_SECTIONS = [
-  {
-    key: "coreVolume",
-    title: "Core Volume Metrics",
-    description: "Weekly visit and patient volume inputs used in executive reporting.",
-    entities: ENTITIES,
-    fields: [
-      { key: "visitVolume", label: "Visit Volume", type: "number", step: "1", placeholder: "Enter total weekly visits" },
-      { key: "callVolume", label: "Call Volume", type: "number", step: "1", placeholder: "Enter total weekly calls" },
-      { key: "newPatients", label: "New Patients", type: "number", step: "1", placeholder: "Enter total new patients" },
-      { key: "scheduledVisits", label: "Scheduled Visits", type: "number", step: "1", placeholder: "Enter scheduled visits" }
-    ],
-    calculatedFields: [
-      { key: "callToVisitRatio", label: "Call-to-Visit Ratio", format: "decimal2" },
-      { key: "newPatientMix", label: "New Patient Mix (%)", format: "percent1" },
-      { key: "scheduleConversionRate", label: "Schedule Conversion Rate (%)", format: "percent1" }
-    ]
-  },
-  {
-    key: "accessMetrics",
-    title: "Access Metrics",
-    description: "Scheduling and access indicators used for weekly operations review.",
-    entities: ENTITIES,
-    fields: [
-      { key: "noShowRate", label: "No Show Rate (%)", type: "number", step: "0.01", placeholder: "Example: 5.4" },
-      { key: "cancellationRate", label: "Cancellation Rate (%)", type: "number", step: "0.01", placeholder: "Example: 7.1" },
-      { key: "abandonedCallRate", label: "Abandoned Call Rate (%)", type: "number", step: "0.01", placeholder: "Example: 3.2" },
-      { key: "rescheduledVisits", label: "Rescheduled Visits", type: "number", step: "1", placeholder: "Enter rescheduled visits" }
-    ],
-    calculatedFields: [
-      { key: "keptAppointmentRate", label: "Kept Appointment Rate (%)", format: "percent1" },
-      { key: "accessPressureScore", label: "Access Pressure Score", format: "decimal1" }
-    ]
-  },
-  {
-    key: "capacityAndPlanning",
-    title: "Capacity and Planning",
-    description: "Throughput planning, clinic day assumptions, and slot utilization support.",
-    entities: ENTITIES,
-    fields: [
-      { key: "providerClinicDays", label: "Provider Clinic Days", type: "number", step: "0.01", placeholder: "Example: 18.5" },
-      { key: "availableVisitSlots", label: "Available Visit Slots", type: "number", step: "1", placeholder: "Enter available slots" },
-      { key: "bookedVisitSlots", label: "Booked Visit Slots", type: "number", step: "1", placeholder: "Enter booked slots" },
-      { key: "capacityUtilization", label: "Capacity Utilization (%)", type: "number", step: "0.01", placeholder: "Example: 91.5" }
-    ],
-    calculatedFields: [
-      { key: "openSlots", label: "Open Slots", format: "whole" },
-      { key: "visitsPerClinicDay", label: "Visits per Clinic Day", format: "decimal2" },
-      { key: "unusedCapacity", label: "Unused Capacity (%)", format: "percent1" }
-    ]
-  },
-  {
-    key: "productivityAndSupport",
-    title: "Productivity and Support",
-    description: "Support staffing and therapy-aligned operational productivity inputs.",
-    entities: ENTITIES,
-    fields: [
-      { key: "ptUnits", label: "PT Units", type: "number", step: "1", placeholder: "Enter PT units" },
-      { key: "clinicSupportFte", label: "Clinic Support FTE", type: "number", step: "0.01", placeholder: "Example: 12.5" },
-      { key: "providerCount", label: "Provider Count", type: "number", step: "1", placeholder: "Enter provider count" },
-      { key: "staffingNotesCount", label: "Staffing Variance Count", type: "number", step: "1", placeholder: "Enter staffing variance count" }
-    ],
-    calculatedFields: [
-      { key: "ptUnitsPerVisit", label: "PT Units per Visit", format: "decimal2" },
-      { key: "visitsPerProviderAuto", label: "Visits per Provider (Auto)", format: "decimal2" },
-      { key: "visitsPerSupportFteAuto", label: "Visits per Support FTE (Auto)", format: "decimal2" }
-    ]
-  }
-];
+          <div class="header-user">
+            <div class="user-chip">
+              <span class="user-chip-label">Signed in as</span>
+              <span id="userDisplayName">Loading...</span>
+            </div>
 
-export const SHARED_PAGE_DEFINITIONS = {
-  PT: {
-    key: "PT",
-    title: "PT",
-    description: "Physical therapy productivity and throughput measures.",
-    sections: [
-      {
-        key: "ptVolume",
-        title: "PT Volume",
-        description: "Weekly PT output and new evaluation tracking.",
-        fields: [
-          { key: "ptVisits", label: "PT Visits", type: "number", step: "1", placeholder: "Enter PT visits" },
-          { key: "ptNewEvaluations", label: "PT New Evaluations", type: "number", step: "1", placeholder: "Enter new evals" },
-          { key: "ptUnits", label: "PT Units", type: "number", step: "1", placeholder: "Enter PT units" },
-          { key: "ptCancellations", label: "PT Cancellations", type: "number", step: "1", placeholder: "Enter PT cancellations" }
-        ],
-        calculatedFields: [
-          { key: "ptEvalMix", label: "PT Eval Mix (%)", format: "percent1" },
-          { key: "ptUnitsPerVisit", label: "PT Units per Visit", format: "decimal2" }
-        ]
-      },
-      {
-        key: "ptProductivity",
-        title: "PT Productivity",
-        description: "Productivity metrics supporting utilization review.",
-        fields: [
-          { key: "ptVisitsPerProvider", label: "PT Visits per Provider", type: "number", step: "0.01", placeholder: "Example: 16.5" },
-          { key: "ptUnitsPerVisit", label: "PT Units per Visit", type: "number", step: "0.01", placeholder: "Example: 4.1" },
-          { key: "ptProviderCount", label: "PT Provider Count", type: "number", step: "1", placeholder: "Enter provider count" }
-        ],
-        calculatedFields: [
-          { key: "ptProductivityScore", label: "PT Productivity Score", format: "decimal2" }
-        ]
-      }
-    ]
-  },
+            <a class="btn btn-secondary btn-sm" href="/.auth/login/aad">Sign In</a>
+            <a class="btn btn-secondary btn-sm" href="/.auth/logout">Sign Out</a>
+          </div>
+        </div>
+      </div>
+    </header>
 
-  CXNS: {
-    key: "CXNS",
-    title: "CXNS",
-    description: "Call center, cancellations, no-shows, and access-related performance.",
-    sections: [
-      {
-        key: "cxnsVolume",
-        title: "Call and Scheduling Volume",
-        description: "Weekly volume for access and scheduling.",
-        fields: [
-          { key: "callVolume", label: "Call Volume", type: "number", step: "1", placeholder: "Enter call volume" },
-          { key: "scheduledVisits", label: "Scheduled Visits", type: "number", step: "1", placeholder: "Enter scheduled visits" },
-          { key: "newPatients", label: "New Patients", type: "number", step: "1", placeholder: "Enter new patients" },
-          { key: "rescheduledVisits", label: "Rescheduled Visits", type: "number", step: "1", placeholder: "Enter rescheduled visits" }
-        ],
-        calculatedFields: [
-          { key: "callConversionRate", label: "Call Conversion Rate (%)", format: "percent1" },
-          { key: "newPatientRate", label: "New Patient Rate (%)", format: "percent1" }
-        ]
-      },
-      {
-        key: "cxnsAccess",
-        title: "Access Quality",
-        description: "Core access health metrics for leadership review.",
-        fields: [
-          { key: "noShowRate", label: "No Show Rate (%)", type: "number", step: "0.01", placeholder: "Example: 5.4" },
-          { key: "cancellationRate", label: "Cancellation Rate (%)", type: "number", step: "0.01", placeholder: "Example: 7.1" },
-          { key: "abandonedCallRate", label: "Abandoned Call Rate (%)", type: "number", step: "0.01", placeholder: "Example: 3.2" }
-        ],
-        calculatedFields: [
-          { key: "keptAppointmentRate", label: "Kept Appointment Rate (%)", format: "percent1" },
-          { key: "accessPressureScore", label: "Access Pressure Score", format: "decimal1" }
-        ]
-      }
-    ]
-  },
+    <section class="hero">
+      <div class="container">
+        <div class="hero-content">
+          <span class="eyebrow">UnityMSK</span>
+          <h1>Operations Dashboard</h1>
+          <p>
+            A single source of truth for weekly operational performance across
+            LAOSS, NES, SpineOne, MRO and UnityMSK executive reporting.
+          </p>
 
-  Capacity: {
-    key: "Capacity",
-    title: "Capacity",
-    description: "Capacity assumptions and throughput support metrics.",
-    sections: [
-      {
-        key: "capacityInputs",
-        title: "Capacity Inputs",
-        description: "Weekly inputs used for capacity modeling.",
-        fields: [
-          { key: "providerClinicDays", label: "Provider Clinic Days", type: "number", step: "0.01", placeholder: "Example: 18.5" },
-          { key: "availableVisitSlots", label: "Available Visit Slots", type: "number", step: "1", placeholder: "Enter available slots" },
-          { key: "bookedVisitSlots", label: "Booked Visit Slots", type: "number", step: "1", placeholder: "Enter booked slots" },
-          { key: "capacityUtilization", label: "Capacity Utilization (%)", type: "number", step: "0.01", placeholder: "Example: 91.5" }
-        ],
-        calculatedFields: [
-          { key: "openSlots", label: "Open Slots", format: "whole" },
-          { key: "visitsPerClinicDay", label: "Visits per Clinic Day", format: "decimal2" }
-        ]
-      },
-      {
-        key: "capacityUtilizationSection",
-        title: "Utilization",
-        description: "Fill-rate and remaining-capacity measures.",
-        fields: [
-          { key: "slotFillRate", label: "Slot Fill Rate (%)", type: "number", step: "0.01", placeholder: "Example: 88.2" }
-        ],
-        calculatedFields: [
-          { key: "unusedCapacity", label: "Unused Capacity (%)", format: "percent1" }
-        ]
-      }
-    ]
-  },
+          <div class="hero-actions">
+            <button id="goAssignedRegionBtn" class="btn btn-primary" type="button">
+              Go to My Region
+            </button>
+            <button id="goExecutiveBtn" class="btn btn-secondary" type="button">
+              Executive Summary
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  "Productivity Builder": {
-    key: "Productivity Builder",
-    title: "Productivity Builder",
-    description: "Operational assumptions and supporting productivity calculations.",
-    sections: [
-      {
-        key: "productivityInputs",
-        title: "Productivity Inputs",
-        description: "Inputs used to drive productivity assumptions and outputs.",
-        fields: [
-          { key: "providerCount", label: "Provider Count", type: "number", step: "1", placeholder: "Enter provider count" },
-          { key: "clinicSupportFte", label: "Clinic Support FTE", type: "number", step: "0.01", placeholder: "Example: 12.5" },
-          { key: "visitVolume", label: "Visit Volume", type: "number", step: "1", placeholder: "Enter visit volume" }
-        ],
-        calculatedFields: [
-          { key: "visitsPerProviderAuto", label: "Visits per Provider (Auto)", format: "decimal2" },
-          { key: "visitsPerSupportFteAuto", label: "Visits per Support FTE (Auto)", format: "decimal2" }
-        ]
-      },
-      {
-        key: "productivityOutputs",
-        title: "Productivity Outputs",
-        description: "Output-oriented operational productivity values.",
-        fields: [
-          { key: "visitsPerProvider", label: "Visits per Provider", type: "number", step: "0.01", placeholder: "Example: 84.5" },
-          { key: "visitsPerSupportFte", label: "Visits per Support FTE", type: "number", step: "0.01", placeholder: "Example: 42.1" }
-        ],
-        calculatedFields: [
-          { key: "productivityAlignmentScore", label: "Productivity Alignment Score", format: "decimal2" }
-        ]
-      }
-    ]
-  }
-};
+    <main class="app-main">
+      <div class="app-shell card">
+        <aside class="app-sidebar">
+          <div class="sidebar-title">
+            <span class="sidebar-eyebrow">Navigation</span>
+            <h2>Dashboard</h2>
+          </div>
 
-export function getRegionSections(entity) {
-  return REGION_SECTIONS.filter((section) => section.entities.includes(entity));
-}
+          <nav id="sidebarNav" class="sidebar-nav">
+            <button class="nav-link active" data-route="executive" type="button">
+              Executive Summary
+            </button>
+            <button class="nav-link" data-route="region" data-entity="LAOSS" type="button">
+              LAOSS
+            </button>
+            <button class="nav-link" data-route="region" data-entity="NES" type="button">
+              NES
+            </button>
+            <button class="nav-link" data-route="region" data-entity="SpineOne" type="button">
+              SpineOne
+            </button>
+            <button class="nav-link" data-route="region" data-entity="MRO" type="button">
+              MRO
+            </button>
+            <button class="nav-link" data-route="shared" data-page="PT" type="button">
+              PT
+            </button>
+            <button class="nav-link" data-route="shared" data-page="CXNS" type="button">
+              CXNS
+            </button>
+            <button class="nav-link" data-route="shared" data-page="Capacity" type="button">
+              Capacity
+            </button>
+            <button class="nav-link" data-route="shared" data-page="Productivity Builder" type="button">
+              Productivity Builder
+            </button>
+            <button id="adminNavBtn" class="nav-link hidden" data-route="admin" type="button">
+              Admin
+            </button>
+          </nav>
 
-export function getAllMetricKeysForEntity(entity) {
-  return getRegionSections(entity).flatMap((section) => section.fields.map((field) => field.key));
-}
+          <div class="sidebar-footer">
+            <div class="mini-meta">
+              <span class="mini-meta-label">Assigned Entity</span>
+              <span id="assignedEntityText">Loading...</span>
+            </div>
 
-export function getSharedPageDefinition(pageName) {
-  return SHARED_PAGE_DEFINITIONS[pageName] || null;
-}
+            <div class="mini-meta">
+              <span class="mini-meta-label">Role</span>
+              <span id="roleText">Loading...</span>
+            </div>
+          </div>
+        </aside>
 
-export function getAllMetricKeysForSharedPage(pageName) {
-  const def = getSharedPageDefinition(pageName);
-  if (!def) return [];
-  return def.sections.flatMap((section) => section.fields.map((field) => field.key));
-}
+        <section class="app-content">
+          <div class="portal-top">
+            <div class="portal-title-wrap">
+              <h2 id="pageTitle">Executive Summary</h2>
+              <div id="pageSubtitle" class="portal-subtitle">
+                Weekly companywide KPI overview with trends, target comparisons,
+                and submission visibility.
+              </div>
+            </div>
+
+            <div class="user-panel">
+              <div class="user-row">
+                <span class="user-label">Week Ending</span>
+                <span id="selectedWeekText" class="user-value muted">Loading...</span>
+              </div>
+
+              <div class="user-row">
+                <span class="user-label">Submission Status</span>
+                <span id="submissionStatusText" class="user-value">Draft</span>
+              </div>
+
+              <div class="user-actions">
+                <button id="saveBtn" class="btn btn-primary btn-sm" type="button">Save</button>
+                <button id="submitBtn" class="btn btn-secondary btn-sm" type="button">
+                  Submit Week
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="dashboardCards" class="dashboard-grid">
+            <div class="dashboard-card highlight">
+              <span class="card-label">Status</span>
+              <h3>Loading</h3>
+              <div class="kpi-value">...</div>
+              <div class="kpi-meta">Preparing dashboard metrics.</div>
+              <div class="kpi-status yellow">Tracking</div>
+            </div>
+          </div>
+
+          <div id="pageContent" class="section-block">
+            <div class="loading-state">Loading dashboard...</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/src/js/apps.js"></script>
+</body>
+</html>
