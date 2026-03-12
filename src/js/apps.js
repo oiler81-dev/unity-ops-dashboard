@@ -59,9 +59,18 @@ const els = {
   goExecutiveBtn: document.getElementById("goExecutiveBtn")
 };
 
-window.addEventListener("DOMContentLoaded", () => {
+bootstrap();
+
+function bootstrap() {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      init().catch(handleFatalError);
+    }, { once: true });
+    return;
+  }
+
   init().catch(handleFatalError);
-});
+}
 
 async function init() {
   if (els.weekEndingSelect) {
@@ -75,16 +84,21 @@ async function init() {
   renderKpiCards([]);
   bindEvents();
 
-  const rawMe = await safeApiGet("/api/me");
-  state.me = normalizeMe(rawMe);
+  const rawMe = await safeApiGet("/api/me", {
+    authenticated: false,
+    userDetails: "",
+    roles: ["anonymous"]
+  });
 
+  state.me = normalizeMe(rawMe);
   applyUserContext();
 
   if (state.me.isAdmin) {
     await setRoute("executive");
-  } else {
-    await setRoute("region", state.me.entity || "LAOSS");
+    return;
   }
+
+  await setRoute("region", state.me.entity || "LAOSS");
 }
 
 function normalizeMe(raw) {
@@ -117,9 +131,11 @@ function bindEvents() {
   if (els.weekEndingSelect) {
     els.weekEndingSelect.addEventListener("change", async (e) => {
       state.currentWeekEnding = e.target.value || getDefaultWeekEnding();
+
       if (els.selectedWeekText) {
         els.selectedWeekText.textContent = formatDate(state.currentWeekEnding);
       }
+
       await loadCurrentRoute();
     });
   }
@@ -190,7 +206,6 @@ function bindEvents() {
       }
 
       const fileBase64 = await fileToBase64(file);
-
       const result = await apiPost("/api/import-excel", {
         fileName: file.name,
         fileBase64
@@ -287,10 +302,12 @@ function bindEvents() {
   if (els.goAssignedRegionBtn) {
     els.goAssignedRegionBtn.addEventListener("click", async () => {
       if (!state.me) return;
+
       if (state.me.isAdmin) {
         await setRoute("executive");
         return;
       }
+
       await setRoute("region", state.me.entity || "LAOSS");
     });
   }
@@ -306,9 +323,11 @@ function bindEvents() {
       if (state.currentRoute === "region") {
         const payload = collectRegionFormValues();
         const res = await apiPost("/api/weekly-save", payload);
+
         if (els.submissionStatusText) {
           els.submissionStatusText.textContent = res.status || "Draft";
         }
+
         alert("Saved successfully.");
         await loadCurrentRoute();
         return;
@@ -317,9 +336,11 @@ function bindEvents() {
       if (state.currentRoute === "shared") {
         const payload = collectSharedFormValues();
         const res = await apiPost("/api/shared-save", payload);
+
         if (els.submissionStatusText) {
           els.submissionStatusText.textContent = res.status || "Draft";
         }
+
         alert("Shared page saved successfully.");
         await loadCurrentRoute();
         return;
@@ -387,7 +408,9 @@ async function setRoute(route, entity = null, sharedPage = null) {
       : `.nav-link[data-route="${cssEscape(route)}"]`;
 
   const activeBtn = document.querySelector(selector);
-  if (activeBtn) activeBtn.classList.add("active");
+  if (activeBtn) {
+    activeBtn.classList.add("active");
+  }
 
   if (route === "region" && entity) {
     const sections = getRegionSections(entity);
@@ -1124,4 +1147,6 @@ function handleFatalError(err) {
   if (els.roleText && els.roleText.textContent === "Loading...") {
     els.roleText.textContent = "Error";
   }
-} perhaps i should provide all of the code/files and we can see if theres something wrong? 
+}
+եցassistant to=container.exec analysis  彩神争霸是不是ict  天天中彩票有json code
+{"cmd":["bash","-lc","node -e \"fetch('https://salmon-grass-0ddf2a71e.1.azurestaticapps.net/api/me',{headers:{Accept:'application/json'}}).then(r=>r.text()).then(t=>console.log(t)).catch(e=>console.error(e))\""],"timeout":45000}
