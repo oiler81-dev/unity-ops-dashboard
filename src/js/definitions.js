@@ -7,6 +7,49 @@ export const ENTITY_LABELS = {
   MRO: "Midland Riverside Orthopedics"
 };
 
+export const KPI_METRICS = [
+  {
+    key: "visitVolume",
+    label: "Visit Volume",
+    format: "whole"
+  },
+  {
+    key: "callVolume",
+    label: "Call Volume",
+    format: "whole"
+  },
+  {
+    key: "newPatients",
+    label: "New Patients",
+    format: "whole"
+  },
+  {
+    key: "noShowRate",
+    label: "No Show Rate",
+    format: "percent1"
+  },
+  {
+    key: "cancellationRate",
+    label: "Cancellation Rate",
+    format: "percent1"
+  },
+  {
+    key: "abandonedCallRate",
+    label: "Abandoned Call Rate",
+    format: "percent1"
+  },
+  {
+    key: "capacityUtilization",
+    label: "Capacity Utilization",
+    format: "percent1"
+  },
+  {
+    key: "ptUnits",
+    label: "PT Units",
+    format: "whole"
+  }
+];
+
 export const REGION_SECTIONS = [
   {
     key: "coreVolume",
