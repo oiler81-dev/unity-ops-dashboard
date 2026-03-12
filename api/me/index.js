@@ -1,46 +1,46 @@
-const { getUserFromRequest, getUserEmail, getDisplayName } = require("../shared/auth");
-const { getPermissionByEmail } = require("../shared/permissions");
-
 module.exports = async function (context, req) {
   try {
-    const user = getUserFromRequest(req);
+    const principal = req.headers["x-ms-client-principal"];
 
-    if (!user) {
+    if (!principal) {
       context.res = {
-        status: 401,
-        body: { error: "Not authenticated" }
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        body: {
+          authenticated: false,
+          userDetails: null,
+          userId: null,
+          identityProvider: null,
+          roles: ["anonymous"]
+        }
       };
       return;
     }
 
-    const email = getUserEmail(user);
-    const permission = await getPermissionByEmail(email);
-
-    if (!permission) {
-      context.res = {
-        status: 403,
-        body: { error: "No dashboard permission found for this user" }
-      };
-      return;
-    }
+    const decoded = JSON.parse(Buffer.from(principal, "base64").toString("utf8"));
+    const roles = Array.isArray(decoded.userRoles) ? decoded.userRoles : [];
 
     context.res = {
       status: 200,
+      headers: { "Content-Type": "application/json" },
       body: {
-        displayName: permission.displayName || getDisplayName(user),
-        email: permission.email || email,
-        entity: permission.entity,
-        role: permission.role,
-        isAdmin: permission.isAdmin,
-        canEdit: permission.canEdit,
-        isActive: permission.isActive
+        authenticated: true,
+        userDetails: decoded.userDetails || null,
+        userId: decoded.userId || null,
+        identityProvider: decoded.identityProvider || null,
+        roles
       }
     };
   } catch (err) {
-    context.log.error(err);
+    context.log.error("api/me failed", err);
+
     context.res = {
       status: 500,
-      body: { error: err.message }
+      headers: { "Content-Type": "application/json" },
+      body: {
+        error: "api/me failed",
+        details: err.message
+      }
     };
   }
 };
