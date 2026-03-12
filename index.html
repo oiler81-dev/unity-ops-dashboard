@@ -1,128 +1,157 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>UnityMSK Operations Dashboard</title>
-
-<link rel="stylesheet" href="/src/styles/main.css">
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UnityMSK Operations Dashboard</title>
+  <link rel="stylesheet" href="/src/styles/main.css" />
 </head>
 <body>
+  <div class="page-shell">
+    <header class="site-header">
+      <div class="container">
+        <a class="brand" href="/" aria-label="UnityMSK Home">
+          <img src="/assets/unitymsk-logo.png" alt="UnityMSK" />
+        </a>
 
-<header class="topbar">
-  <div class="topbar-left">
-    <img src="/assets/unitymsk-logo.png" class="logo">
-  </div>
+        <div class="header-actions">
+          <div class="header-week">
+            <label for="weekEndingSelect">Week Ending</label>
+            <input id="weekEndingSelect" type="date" />
+          </div>
 
-  <div class="topbar-center">
-    <label>Week Ending</label>
-    <input id="weekEndingSelect" type="date">
-  </div>
+          <div class="header-user">
+            <div class="user-chip">
+              <span class="user-chip-label">Signed in as</span>
+              <span id="userDisplayName">Loading...</span>
+            </div>
 
-  <div class="topbar-right">
-    <div id="userDisplayName">Loading...</div>
-    <button onclick="location.href='/.auth/login/aad'">Sign In</button>
-    <button onclick="location.href='/.auth/logout'">Sign Out</button>
-  </div>
-</header>
-
-
-<section class="hero">
-  <h4>UNITYMSK</h4>
-  <h1>Operations Dashboard</h1>
-  <p>
-    A single source of truth for weekly operational performance across
-    LAOSS, NES, SpineOne, MRO and UnityMSK executive reporting.
-  </p>
-
-  <div class="hero-buttons">
-    <button id="goAssignedRegionBtn">Go to My Region</button>
-    <button id="goExecutiveBtn">Executive Summary</button>
-  </div>
-</section>
-
-
-<div class="app-layout">
-
-  <aside class="sidebar">
-
-    <h4>NAVIGATION</h4>
-
-    <button class="nav-link" data-route="executive">Executive Summary</button>
-    <button class="nav-link" data-route="region" data-entity="LAOSS">LAOSS</button>
-    <button class="nav-link" data-route="region" data-entity="NES">NES</button>
-    <button class="nav-link" data-route="region" data-entity="SpineOne">SpineOne</button>
-    <button class="nav-link" data-route="region" data-entity="MRO">MRO</button>
-    <button class="nav-link" data-route="region" data-entity="PT">PT</button>
-    <button class="nav-link" data-route="region" data-entity="CNFS">CNFS</button>
-
-    <button class="nav-link" data-route="capacity">Capacity</button>
-    <button class="nav-link" data-route="productivity">Productivity Builder</button>
-
-    <div class="sidebar-info">
-      <div>
-        <strong>Assigned Entity</strong>
-        <div id="assignedEntityText">Loading...</div>
-      </div>
-
-      <div>
-        <strong>Role</strong>
-        <div id="roleText">Loading...</div>
-      </div>
-    </div>
-
-  </aside>
-
-
-  <main class="content">
-
-    <div class="page-header">
-
-      <div>
-        <h2 id="pageTitle">Executive Summary</h2>
-        <div id="pageSubtitle">
-          Weekly companywide KPI overview with trends, target comparisons,
-          and submission visibility.
+            <a class="btn btn-secondary btn-sm" href="/.auth/login/aad">Sign In</a>
+            <a class="btn btn-secondary btn-sm" href="/.auth/logout">Sign Out</a>
+          </div>
         </div>
       </div>
+    </header>
 
-      <div class="submission-box">
+    <section class="hero">
+      <div class="container">
+        <div class="hero-content">
+          <span class="eyebrow">UnityMSK</span>
+          <h1>Operations Dashboard</h1>
+          <p>
+            A single source of truth for weekly operational performance across
+            LAOSS, NES, SpineOne, MRO and UnityMSK executive reporting.
+          </p>
 
-        <div>
-          <strong>Week Ending</strong>
-          <div id="selectedWeekText">Loading...</div>
+          <div class="hero-actions">
+            <button id="goAssignedRegionBtn" class="btn btn-primary" type="button">
+              Go to My Region
+            </button>
+            <button id="goExecutiveBtn" class="btn btn-secondary" type="button">
+              Executive Summary
+            </button>
+          </div>
         </div>
-
-        <div>
-          <strong>Submission Status</strong>
-          <div id="submissionStatusText">Draft</div>
-        </div>
-
-        <div class="submission-actions">
-          <button id="saveBtn">Save</button>
-          <button id="submitBtn">Submit Week</button>
-        </div>
-
       </div>
+    </section>
 
-    </div>
+    <main class="app-main">
+      <div class="app-shell card">
+        <aside class="app-sidebar">
+          <div class="sidebar-title">
+            <span class="sidebar-eyebrow">Navigation</span>
+            <h2>Dashboard</h2>
+          </div>
 
+          <nav class="sidebar-nav">
+            <button class="nav-link active" data-route="executive" type="button">
+              Executive Summary
+            </button>
+            <button class="nav-link" data-route="region" data-entity="LAOSS" type="button">
+              LAOSS
+            </button>
+            <button class="nav-link" data-route="region" data-entity="NES" type="button">
+              NES
+            </button>
+            <button class="nav-link" data-route="region" data-entity="SpineOne" type="button">
+              SpineOne
+            </button>
+            <button class="nav-link" data-route="region" data-entity="MRO" type="button">
+              MRO
+            </button>
+            <button class="nav-link" data-route="region" data-entity="PT" type="button">
+              PT
+            </button>
+            <button class="nav-link" data-route="region" data-entity="CNFS" type="button">
+              CNFS
+            </button>
+            <button class="nav-link" data-route="capacity" type="button">
+              Capacity
+            </button>
+            <button class="nav-link" data-route="productivity" type="button">
+              Productivity Builder
+            </button>
+          </nav>
 
-    <div id="dashboardCards">
-      Loading dashboard...
-    </div>
+          <div class="sidebar-footer">
+            <div class="mini-meta">
+              <span class="mini-meta-label">Assigned Entity</span>
+              <span id="assignedEntityText">Loading...</span>
+            </div>
 
-    <div id="pageContent"></div>
+            <div class="mini-meta">
+              <span class="mini-meta-label">Role</span>
+              <span id="roleText">Loading...</span>
+            </div>
+          </div>
+        </aside>
 
-  </main>
+        <section class="app-content">
+          <div class="portal-top">
+            <div class="portal-title-wrap">
+              <h2 id="pageTitle">Executive Summary</h2>
+              <div id="pageSubtitle" class="portal-subtitle">
+                Weekly companywide KPI overview with trends, target comparisons,
+                and submission visibility.
+              </div>
+            </div>
 
-</div>
+            <div class="user-panel">
+              <div class="user-row">
+                <span class="user-label">Week Ending</span>
+                <span id="selectedWeekText" class="user-value muted">Loading...</span>
+              </div>
 
+              <div class="user-row">
+                <span class="user-label">Submission Status</span>
+                <span id="submissionStatusText" class="user-value">Draft</span>
+              </div>
 
-<!-- IMPORTANT: load dashboard app as module -->
-<script type="module" src="/src/js/apps.js"></script>
+              <div class="user-actions">
+                <button id="saveBtn" class="btn btn-primary btn-sm" type="button">Save</button>
+                <button id="submitBtn" class="btn btn-secondary btn-sm" type="button">
+                  Submit Week
+                </button>
+              </div>
+            </div>
+          </div>
 
+          <div id="dashboardCards" class="dashboard-grid">
+            <div class="dashboard-card">
+              <span class="card-label">Status</span>
+              <div class="kpi-value">Loading...</div>
+              <div class="kpi-meta">Preparing dashboard metrics.</div>
+            </div>
+          </div>
+
+          <div id="pageContent" class="section-block">
+            <div class="loading-state">Loading dashboard...</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/src/js/apps.js"></script>
 </body>
 </html>
