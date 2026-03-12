@@ -11,6 +11,7 @@
     {
       "type": "http",
       "direction": "out",
-      "name": "context.res"
+      "name": "res"
     }
   ]
+}
