@@ -1,9 +1,0 @@
-{
-  "name": "unity-ops-dashboard",
-  "version": "1.0.0",
-  "private": true,
-  "description": "UnityMSK Operations Dashboard",
-  "scripts": {
-    "start": "echo \"Deploy through Azure Static Web Apps\""
-  }
-}
