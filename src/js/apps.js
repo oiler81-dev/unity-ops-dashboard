@@ -1,3 +1,22 @@
+import {
+  safeApiGet,
+  apiPost,
+  getDefaultWeekEnding,
+  formatDate,
+  escapeHtml,
+  escapeAttr,
+  handleFatalError,
+  comparisonClass,
+  formatChange,
+  renderSummaryMiniCard,
+  collectRegionFormValues,
+  collectSharedFormValues
+} from "./helpers.js";
+
+// ... the rest of your app.js code starts here
+import {
+  getRegionSections,
+  // ... etc
 ```javascript
 import {
   getRegionSections,
