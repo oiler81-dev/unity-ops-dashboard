@@ -5,12 +5,12 @@
   "main": "index.js",
   "scripts": {
     "start": "func start",
-    "test": "echo \"No tests yet\"",
-    "postinstall": "cp -r ./shared ./node_modules/shared"
+    "test": "echo \"No tests yet\""
   },
   "dependencies": {
     "@azure/data-tables": "^13.2.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "shared": "file:./shared"
   },
   "devDependencies": {},
   "engines": {
