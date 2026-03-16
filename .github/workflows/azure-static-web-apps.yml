@@ -29,5 +29,5 @@ jobs:
           action: upload
           app_location: "/"
           api_location: "api"
-          output_location: "/" # This is the only change
+          output_location: "/app" # This is the only change
           skip_app_build: true
