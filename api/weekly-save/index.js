@@ -1,35 +1,52 @@
-const { getUserInfo } = require('shared/auth');
-const { hasPermission } = require('shared/permissions');
-const { saveWeeklyData } = require('shared/table');
-const { logAuditEvent } = require('shared/audit');
+const { getTableClient } = require("../shared/table");
+
+const TABLE_NAME = "WeeklyRegionData";
 
 module.exports = async function (context, req) {
-  context.log('Weekly save function processed a request.');
-
-  const userInfo = getUserInfo(req);
-  const data = req.body;
-  const { entity, weekEnding } = data;
-
-  if (!entity || !weekEnding || !data.inputs) {
-    context.res = { status: 400, body: 'Invalid payload for weekly save.' };
-    return;
-  }
-
-  if (!hasPermission(userInfo, 'canEditRegion', entity)) {
-    context.res = { status: 403, body: 'Forbidden' };
-    return;
-  }
-
   try {
-    const result = await saveWeeklyData(data, userInfo);
-    await logAuditEvent('weekly-save', userInfo, { entity, weekEnding, status: result.status });
-    
+    const body = req.body || {};
+    const entity = String(body.entity || "").trim();
+    const weekEnding = String(body.weekEnding || "").trim();
+    const values = body.values && typeof body.values === "object" ? body.values : {};
+
+    if (!entity || !weekEnding) {
+      context.res = {
+        status: 400,
+        body: { error: "Missing entity or weekEnding." }
+      };
+      return;
+    }
+
+    const table = getTableClient(TABLE_NAME);
+
+    await table.upsertEntity({
+      partitionKey: entity,
+      rowKey: weekEnding,
+      entity,
+      weekEnding,
+      valuesJson: JSON.stringify(values),
+      source: "app",
+      updatedAt: new Date().toISOString()
+    });
+
     context.res = {
       status: 200,
-      body: result,
+      headers: { "Content-Type": "application/json" },
+      body: {
+        ok: true,
+        status: "Draft",
+        entity,
+        weekEnding
+      }
     };
   } catch (error) {
-    context.log.error('Failed to save weekly data:', error);
-    context.res = { status: 500, body: 'Error saving weekly data.' };
+    context.log.error("weekly-save failed", error);
+    context.res = {
+      status: 500,
+      body: {
+        error: "Failed to save weekly region data.",
+        details: error.message
+      }
+    };
   }
 };
