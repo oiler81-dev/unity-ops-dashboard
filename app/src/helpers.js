@@ -97,6 +97,32 @@ export function cssEscape(value) {
 }
 
 /**
+ * Render KPI cards into #dashboardCards
+ * @param {Array} kpis
+ */
+export function renderKpiCards(kpis) {
+  const container = document.getElementById("dashboardCards");
+  const list = Array.isArray(kpis) && kpis.length
+    ? kpis
+    : [
+        { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "", status: "—" },
+        { label: "Call Volume", value: "—", statusColor: "yellow", meta: "", status: "—" },
+        { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "", status: "—" }
+      ];
+
+  if (!container) return;
+
+  container.innerHTML = list.map((kpi) => `
+    <div class="kpi-card">
+      <div class="kpi-label">${escapeHtml(kpi.label)}</div>
+      <div class="kpi-value">${escapeHtml(String(kpi.value ?? "—"))}</div>
+      ${kpi.meta ? `<div class="kpi-meta">${escapeHtml(kpi.meta)}</div>` : ""}
+      ${kpi.status ? `<div class="kpi-status ${escapeAttr(kpi.statusColor || "")}">${escapeHtml(kpi.status)}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+/**
  * Fatal error handler that shows a simple error page
  * @param {Error} err
  */
@@ -145,32 +171,6 @@ export function renderSummaryMiniCard(summary) {
       ${summary.meta ? `<span class="summary-mini-meta">${escapeHtml(summary.meta)}</span>` : ""}
     </div>
   `;
-}
-
-/**
- * Render KPI cards into #dashboardCards
- * @param {Array} kpis
- */
-export function renderKpiCards(kpis) {
-  const container = document.getElementById("dashboardCards");
-  const list = Array.isArray(kpis) && kpis.length
-    ? kpis
-    : [
-        { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "" },
-        { label: "Call Volume", value: "—", statusColor: "yellow", meta: "" },
-        { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "" }
-      ];
-
-  if (!container) return;
-
-  container.innerHTML = list.map((kpi) => `
-    <div class="kpi-card">
-      <div class="kpi-label">${escapeHtml(kpi.label)}</div>
-      <div class="kpi-value">${escapeHtml(String(kpi.value ?? "—"))}</div>
-      ${kpi.meta ? `<div class="kpi-meta">${escapeHtml(kpi.meta)}</div>` : ""}
-      ${kpi.status ? `<div class="kpi-status ${escapeAttr(kpi.statusColor || "")}">${escapeHtml(kpi.status)}</div>` : ""}
-    </div>
-  `).join("");
 }
 
 /**
