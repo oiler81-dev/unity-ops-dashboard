@@ -10,7 +10,8 @@ import {
   formatChange,
   renderSummaryMiniCard,
   collectRegionFormValues,
-  collectSharedFormValues
+  collectSharedFormValues,
+  renderKpiCards
 } from "./helpers.js";
 
 import {
@@ -463,4 +464,173 @@ async function loadCurrentRoute() {
   }
 }
 
-// ... remainder of your app.js unchanged (renderExecutive, renderRegion, renderSharedPage, renderSectionBlock, renderField, renderCalculatedField, renderAdmin, etc.)
+/* -------------------------
+   Rendering implementations
+   Minimal placeholders — replace with your real markup
+   ------------------------- */
+
+async function renderExecutive() {
+  if (els.pageTitle) els.pageTitle.textContent = "Executive Dashboard";
+  if (els.pageSubtitle) els.pageSubtitle.textContent = "";
+
+  // fetch top-level aggregated data
+  const data = await safeApiGet(`/api/executive-summary?weekEnding=${state.currentWeekEnding}`, null);
+  state.pageData = data;
+
+  // prepare KPI cards if available
+  const kpis = (data && data.kpis) ? data.kpis : [
+    { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "" },
+    { label: "Call Volume", value: "—", statusColor: "yellow", meta: "" },
+    { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "" }
+  ];
+  renderKpiCards(kpis);
+
+  if (els.pageContent) {
+    els.pageContent.innerHTML = `
+      <div class="executive-summary">
+        ${renderSummaryMiniCard({ label: "Summary", value: "Data loaded" })}
+        <div id="executiveTables">Loading...</div>
+      </div>
+    `;
+  }
+}
+
+async function renderRegion(entity) {
+  if (!entity) return;
+  state.currentEntity = entity;
+
+  if (els.pageTitle) els.pageTitle.textContent = `${ENTITY_LABELS?.[entity] || entity} - Region`;
+  if (els.pageSubtitle) els.pageSubtitle.textContent = `Week ending ${formatDate(state.currentWeekEnding)}`;
+
+  // fetch region data
+  const payload = await safeApiGet(`/api/region-data?entity=${encodeURIComponent(entity)}&weekEnding=${state.currentWeekEnding}`, null);
+  state.pageData = payload;
+
+  // calculate summaries if calculators available
+  const summaries = (typeof calculateRegionSummaries === "function")
+    ? calculateRegionSummaries(payload)
+    : [];
+
+  renderKpiCards(summaries.map(s => ({ label: s.label || "KPI", value: s.value || "—", meta: s.meta || "" })));
+
+  // Render simple form with metric fields
+  if (els.pageContent) {
+    const sections = getRegionSections(entity) || [];
+    els.pageContent.innerHTML = sections.map(section => renderSectionBlock(section, payload)).join("");
+  }
+}
+
+async function renderSharedPage(pageKey) {
+  if (!pageKey) return;
+  state.currentSharedPage = pageKey;
+
+  if (els.pageTitle) els.pageTitle.textContent = `Shared - ${pageKey}`;
+  if (els.pageSubtitle) els.pageSubtitle.textContent = `Week ending ${formatDate(state.currentWeekEnding)}`;
+
+  const payload = await safeApiGet(`/api/shared-page?key=${encodeURIComponent(pageKey)}&weekEnding=${state.currentWeekEnding}`, null);
+  state.pageData = payload;
+
+  const summaries = (typeof calculateSharedSummaries === "function")
+    ? calculateSharedSummaries(payload)
+    : [];
+
+  renderKpiCards(summaries.map(s => ({ label: s.label || "KPI", value: s.value || "—", meta: s.meta || "" })));
+
+  if (els.pageContent) {
+    const def = getSharedPageDefinition(pageKey) || { sections: [] };
+    els.pageContent.innerHTML = def.sections.map(section => renderSectionBlock(section, payload)).join("");
+  }
+}
+
+function renderSectionBlock(section, payload) {
+  const sectionKey = section?.key || "section";
+  const title = section?.label || sectionKey;
+  const fields = Array.isArray(section?.fields) ? section.fields : [];
+
+  const fieldHtml = fields.map(f => renderField(f, payload)).join("");
+
+  return `
+    <section class="section-block" data-section-key="${escapeAttr(sectionKey)}">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="section-fields">${fieldHtml}</div>
+    </section>
+  `;
+}
+
+function renderField(field, payload) {
+  const key = field?.key || "unknown";
+  const label = field?.label || key;
+  const value = (payload && payload.values && payload.values[key] != null) ? payload.values[key] : "";
+  const readOnly = field?.readOnly ? "readonly" : "";
+
+  // simple rendering for inputs and calculated fields
+  if (field?.type === "calculated") {
+    return renderCalculatedField(field, payload);
+  }
+
+  return `
+    <div class="field" data-key="${escapeAttr(key)}">
+      <label>${escapeHtml(label)}</label>
+      <input id="field-${escapeAttr(key)}" data-key="${escapeAttr(key)}" value="${escapeHtml(value)}" ${readOnly} />
+    </div>
+  `;
+}
+
+function renderCalculatedField(field, payload) {
+  const key = field?.key || "calc";
+  const label = field?.label || key;
+  const calcVal = (typeof getRegionCalculatedValues === "function")
+    ? (getRegionCalculatedValues(payload) || {})[key]
+    : null;
+
+  const formatted = (typeof formatByType === "function") ? formatByType(calcVal, field.format) : String(calcVal ?? "—");
+
+  return `
+    <div class="field calculated" data-key="${escapeAttr(key)}">
+      <label>${escapeHtml(label)}</label>
+      <div class="calculated-value">${escapeHtml(formatted)}</div>
+    </div>
+  `;
+}
+
+async function renderAdmin() {
+  if (els.pageTitle) els.pageTitle.textContent = "Admin";
+  if (els.pageSubtitle) els.pageSubtitle.textContent = "";
+
+  // Using admin renderers from admin.js — if they exist they will produce UI
+  if (typeof renderAdminEditorShell === "function") {
+    els.pageContent.innerHTML = renderAdminEditorShell();
+    // call other admin renderers as needed to populate pieces
+    if (typeof renderTargetsEditor === "function") renderTargetsEditor();
+    if (typeof renderThresholdsEditor === "function") renderThresholdsEditor();
+    if (typeof renderHolidaysEditor === "function") renderHolidaysEditor();
+    if (typeof renderBudgetEditor === "function") renderBudgetEditor();
+    if (typeof renderSubmissionTracker === "function") renderSubmissionTracker();
+    if (typeof renderAuditViewer === "function") renderAuditViewer();
+    if (typeof renderImportTool === "function") renderImportTool();
+  } else {
+    els.pageContent.innerHTML = "<div>Admin tools not available.</div>";
+  }
+}
+
+/* -------------------------
+   Helpers used locally
+   ------------------------- */
+
+function cssEscape(value) {
+  return String(value ?? "").replace(/["'\\]/g, "\\$&");
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* If you have other utility functions referenced by your original file,
+   add them here or import them from their modules. */
+
+/* End of app.js */
