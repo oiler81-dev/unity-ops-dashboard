@@ -7,115 +7,200 @@ export const ENTITY_LABELS = {
   MRO: "Midland Riverside Orthopedics"
 };
 
+export const REGION_TO_WORKBOOK_LABEL = {
+  LAOSS: "Chicago",
+  NES: "Portland",
+  SpineOne: "SpineOne",
+  MRO: "LAOSS"
+};
+
 export const KPI_METRICS = [
-  {
-    key: "visitVolume",
-    label: "Visit Volume",
-    format: "whole"
-  },
-  {
-    key: "callVolume",
-    label: "Call Volume",
-    format: "whole"
-  },
-  {
-    key: "newPatients",
-    label: "New Patients",
-    format: "whole"
-  },
-  {
-    key: "noShowRate",
-    label: "No Show Rate",
-    format: "percent1"
-  },
-  {
-    key: "cancellationRate",
-    label: "Cancellation Rate",
-    format: "percent1"
-  },
-  {
-    key: "abandonedCallRate",
-    label: "Abandoned Call Rate",
-    format: "percent1"
-  },
-  {
-    key: "capacityUtilization",
-    label: "Capacity Utilization",
-    format: "percent1"
-  },
-  {
-    key: "ptUnits",
-    label: "PT Units",
-    format: "whole"
-  }
+  { key: "totalVisits", label: "Total Visits", format: "whole" },
+  { key: "visitsPerDay", label: "Visits / Day", format: "decimal2" },
+  { key: "npPerDay", label: "NP / Day", format: "decimal2" },
+  { key: "abandonmentRate", label: "Abandonment Rate", format: "percent1" },
+  { key: "npToEstablishedConversion", label: "NP → Established", format: "percent1" },
+  { key: "npToSurgeryConversion", label: "NP → Surgery", format: "percent1" }
 ];
 
 export const REGION_SECTIONS = [
   {
-    key: "coreVolume",
-    title: "Core Volume Metrics",
-    description: "Weekly visit and patient volume inputs used in executive reporting.",
+    key: "periodContext",
+    title: "Period Context",
+    description: "Workbook-aligned weekly period inputs.",
     entities: ENTITIES,
     fields: [
-      { key: "visitVolume", label: "Visit Volume", type: "number", step: "1", placeholder: "Enter total weekly visits" },
-      { key: "callVolume", label: "Call Volume", type: "number", step: "1", placeholder: "Enter total weekly calls" },
-      { key: "newPatients", label: "New Patients", type: "number", step: "1", placeholder: "Enter total new patients" },
-      { key: "scheduledVisits", label: "Scheduled Visits", type: "number", step: "1", placeholder: "Enter scheduled visits" }
+      {
+        key: "daysInPeriod",
+        label: "Days in Period",
+        type: "number",
+        step: "1",
+        placeholder: "Example: 5"
+      },
+      {
+        key: "monthTag",
+        label: "Month Tag",
+        type: "text",
+        placeholder: "Example: Mar"
+      },
+      {
+        key: "workingDaysInMonth",
+        label: "Working Days (Month)",
+        type: "number",
+        step: "1",
+        placeholder: "Example: 22"
+      },
+      {
+        key: "ptVisitsSeen",
+        label: "PT Visits Seen (linked/imported)",
+        type: "number",
+        step: "1",
+        placeholder: "PT weekly visits seen for this region"
+      }
+    ],
+    calculatedFields: []
+  },
+  {
+    key: "volumeInputs",
+    title: "Weekly Volume Inputs",
+    description: "Workbook weekly entry fields used by region formulas.",
+    entities: ENTITIES,
+    fields: [
+      {
+        key: "npActual",
+        label: "NP Actual",
+        type: "number",
+        step: "1",
+        placeholder: "Enter new patients"
+      },
+      {
+        key: "establishedActual",
+        label: "Established Actual",
+        type: "number",
+        step: "1",
+        placeholder: "Enter established visits"
+      },
+      {
+        key: "surgeryActual",
+        label: "Surgery Actual",
+        type: "number",
+        step: "1",
+        placeholder: "Enter surgery count"
+      },
+      {
+        key: "cashActual",
+        label: "Cash",
+        type: "number",
+        step: "1",
+        placeholder: "Enter weekly cash"
+      }
     ],
     calculatedFields: [
-      { key: "callToVisitRatio", label: "Call-to-Visit Ratio", format: "decimal2" },
-      { key: "newPatientMix", label: "New Patient Mix (%)", format: "percent1" },
-      { key: "scheduleConversionRate", label: "Schedule Conversion Rate (%)", format: "percent1" }
+      {
+        key: "totalVisits",
+        label: "Total Visits",
+        format: "whole"
+      },
+      {
+        key: "visitsPerDay",
+        label: "Visits / Day",
+        format: "decimal2"
+      },
+      {
+        key: "npPerDay",
+        label: "NP / Day",
+        format: "decimal2"
+      }
     ]
   },
   {
-    key: "accessMetrics",
-    title: "Access Metrics",
-    description: "Scheduling and access indicators used for weekly operations review.",
+    key: "accessAndConversions",
+    title: "Calls, Access, and Conversion",
+    description: "Workbook-aligned call, abandonment, and conversion formulas.",
     entities: ENTITIES,
     fields: [
-      { key: "noShowRate", label: "No Show Rate (%)", type: "number", step: "0.01", placeholder: "Example: 5.4" },
-      { key: "cancellationRate", label: "Cancellation Rate (%)", type: "number", step: "0.01", placeholder: "Example: 7.1" },
-      { key: "abandonedCallRate", label: "Abandoned Call Rate (%)", type: "number", step: "0.01", placeholder: "Example: 3.2" },
-      { key: "rescheduledVisits", label: "Rescheduled Visits", type: "number", step: "1", placeholder: "Enter rescheduled visits" }
+      {
+        key: "totalCalls",
+        label: "Total Calls",
+        type: "number",
+        step: "1",
+        placeholder: "Enter total calls"
+      },
+      {
+        key: "abandonedCalls",
+        label: "Abandoned Calls",
+        type: "number",
+        step: "1",
+        placeholder: "Enter abandoned calls"
+      }
     ],
     calculatedFields: [
-      { key: "keptAppointmentRate", label: "Kept Appointment Rate (%)", format: "percent1" },
-      { key: "accessPressureScore", label: "Access Pressure Score", format: "decimal1" }
+      {
+        key: "abandonmentRate",
+        label: "Abandonment Rate",
+        format: "percent1"
+      },
+      {
+        key: "answeredCallRate",
+        label: "Answered Call Rate",
+        format: "percent1"
+      },
+      {
+        key: "npToEstablishedConversion",
+        label: "NP → Established Conversion",
+        format: "percent1"
+      },
+      {
+        key: "npToSurgeryConversion",
+        label: "NP → Surgery Conversion",
+        format: "percent1"
+      }
     ]
   },
   {
-    key: "capacityAndPlanning",
-    title: "Capacity and Planning",
-    description: "Throughput planning, clinic day assumptions, and slot utilization support.",
+    key: "varianceAndTargets",
+    title: "Budget / Variance Support",
+    description: "Workbook-aligned variance drivers.",
     entities: ENTITIES,
     fields: [
-      { key: "providerClinicDays", label: "Provider Clinic Days", type: "number", step: "0.01", placeholder: "Example: 18.5" },
-      { key: "availableVisitSlots", label: "Available Visit Slots", type: "number", step: "1", placeholder: "Enter available slots" },
-      { key: "bookedVisitSlots", label: "Booked Visit Slots", type: "number", step: "1", placeholder: "Enter booked slots" },
-      { key: "capacityUtilization", label: "Capacity Utilization (%)", type: "number", step: "0.01", placeholder: "Example: 91.5" }
+      {
+        key: "monthlyBudgetNp",
+        label: "Monthly Budget NP",
+        type: "number",
+        step: "1",
+        placeholder: "Reference/imported"
+      },
+      {
+        key: "monthlyBudgetEstablished",
+        label: "Monthly Budget Established",
+        type: "number",
+        step: "1",
+        placeholder: "Reference/imported"
+      },
+      {
+        key: "monthlyBudgetSurgery",
+        label: "Monthly Budget Surgery",
+        type: "number",
+        step: "1",
+        placeholder: "Reference/imported"
+      }
     ],
     calculatedFields: [
-      { key: "openSlots", label: "Open Slots", format: "whole" },
-      { key: "visitsPerClinicDay", label: "Visits per Clinic Day", format: "decimal2" },
-      { key: "unusedCapacity", label: "Unused Capacity (%)", format: "percent1" }
-    ]
-  },
-  {
-    key: "productivityAndSupport",
-    title: "Productivity and Support",
-    description: "Support staffing and therapy-aligned operational productivity inputs.",
-    entities: ENTITIES,
-    fields: [
-      { key: "ptUnits", label: "PT Units", type: "number", step: "1", placeholder: "Enter PT units" },
-      { key: "clinicSupportFte", label: "Clinic Support FTE", type: "number", step: "0.01", placeholder: "Example: 12.5" },
-      { key: "providerCount", label: "Provider Count", type: "number", step: "1", placeholder: "Enter provider count" },
-      { key: "staffingNotesCount", label: "Staffing Variance Count", type: "number", step: "1", placeholder: "Enter staffing variance count" }
-    ],
-    calculatedFields: [
-      { key: "ptUnitsPerVisit", label: "PT Units per Visit", format: "decimal2" },
-      { key: "visitsPerProviderAuto", label: "Visits per Provider (Auto)", format: "decimal2" },
-      { key: "visitsPerSupportFteAuto", label: "Visits per Support FTE (Auto)", format: "decimal2" }
+      {
+        key: "npVariance",
+        label: "NP Variance",
+        format: "whole"
+      },
+      {
+        key: "establishedVariance",
+        label: "Established Variance",
+        format: "whole"
+      },
+      {
+        key: "surgeryVariance",
+        label: "Surgery Variance",
+        format: "whole"
+      }
     ]
   }
 ];
@@ -124,34 +209,88 @@ export const SHARED_PAGE_DEFINITIONS = {
   PT: {
     key: "PT",
     title: "PT",
-    description: "Physical therapy productivity and throughput measures.",
+    description: "Workbook-aligned PT scheduling, visits seen, units, and access measures.",
     sections: [
       {
-        key: "ptVolume",
-        title: "PT Volume",
-        description: "Weekly PT output and new evaluation tracking.",
+        key: "ptInputs",
+        title: "PT Weekly Entry",
+        description: "Direct PT workbook input fields.",
         fields: [
-          { key: "ptVisits", label: "PT Visits", type: "number", step: "1", placeholder: "Enter PT visits" },
-          { key: "ptNewEvaluations", label: "PT New Evaluations", type: "number", step: "1", placeholder: "Enter new evals" },
-          { key: "ptUnits", label: "PT Units", type: "number", step: "1", placeholder: "Enter PT units" },
-          { key: "ptCancellations", label: "PT Cancellations", type: "number", step: "1", placeholder: "Enter PT cancellations" }
+          {
+            key: "monthTag",
+            label: "Month Tag",
+            type: "text",
+            placeholder: "Example: Mar"
+          },
+          {
+            key: "workingDaysInWeek",
+            label: "Working Days in Week",
+            type: "number",
+            step: "1",
+            placeholder: "Example: 5"
+          },
+          {
+            key: "ptScheduledVisits",
+            label: "PT Scheduled Visits",
+            type: "number",
+            step: "1",
+            placeholder: "Enter scheduled visits"
+          },
+          {
+            key: "ptCancellations",
+            label: "Cancellations",
+            type: "number",
+            step: "1",
+            placeholder: "Enter cancellations"
+          },
+          {
+            key: "ptNoShows",
+            label: "No Shows",
+            type: "number",
+            step: "1",
+            placeholder: "Enter no shows"
+          },
+          {
+            key: "ptReschedules",
+            label: "Reschedules",
+            type: "number",
+            step: "1",
+            placeholder: "Enter reschedules"
+          },
+          {
+            key: "totalUnitsBilled",
+            label: "Total Units Billed",
+            type: "number",
+            step: "1",
+            placeholder: "Enter units billed"
+          }
         ],
         calculatedFields: [
-          { key: "ptEvalMix", label: "PT Eval Mix (%)", format: "percent1" },
-          { key: "ptUnitsPerVisit", label: "PT Units per Visit", format: "decimal2" }
-        ]
-      },
-      {
-        key: "ptProductivity",
-        title: "PT Productivity",
-        description: "Productivity metrics supporting utilization review.",
-        fields: [
-          { key: "ptVisitsPerProvider", label: "PT Visits per Provider", type: "number", step: "0.01", placeholder: "Example: 16.5" },
-          { key: "ptUnitsPerVisit", label: "PT Units per Visit", type: "number", step: "0.01", placeholder: "Example: 4.1" },
-          { key: "ptProviderCount", label: "PT Provider Count", type: "number", step: "1", placeholder: "Enter provider count" }
-        ],
-        calculatedFields: [
-          { key: "ptProductivityScore", label: "PT Productivity Score", format: "decimal2" }
+          {
+            key: "ptVisitsSeen",
+            label: "PT Visits Seen",
+            format: "whole"
+          },
+          {
+            key: "unitsPerVisit",
+            label: "Units / Visit",
+            format: "decimal2"
+          },
+          {
+            key: "ptVisitsPerDay",
+            label: "Visits / Day",
+            format: "decimal2"
+          },
+          {
+            key: "ptCxnsRate",
+            label: "PT CX/NS %",
+            format: "percent1"
+          },
+          {
+            key: "ptRescheduleRate",
+            label: "PT Reschedule %",
+            format: "percent1"
+          }
         ]
       }
     ]
@@ -160,35 +299,59 @@ export const SHARED_PAGE_DEFINITIONS = {
   CXNS: {
     key: "CXNS",
     title: "CXNS",
-    description: "Call center, cancellations, no-shows, and access-related performance.",
+    description: "Workbook-aligned cancellations, no-shows, and reschedules.",
     sections: [
       {
-        key: "cxnsVolume",
-        title: "Call and Scheduling Volume",
-        description: "Weekly volume for access and scheduling.",
+        key: "cxnsInputs",
+        title: "CXNS Weekly Entry",
+        description: "Direct CXNS workbook input fields.",
         fields: [
-          { key: "callVolume", label: "Call Volume", type: "number", step: "1", placeholder: "Enter call volume" },
-          { key: "scheduledVisits", label: "Scheduled Visits", type: "number", step: "1", placeholder: "Enter scheduled visits" },
-          { key: "newPatients", label: "New Patients", type: "number", step: "1", placeholder: "Enter new patients" },
-          { key: "rescheduledVisits", label: "Rescheduled Visits", type: "number", step: "1", placeholder: "Enter rescheduled visits" }
+          {
+            key: "monthTag",
+            label: "Month Tag",
+            type: "text",
+            placeholder: "Example: Mar"
+          },
+          {
+            key: "scheduledAppts",
+            label: "Scheduled Appts",
+            type: "number",
+            step: "1",
+            placeholder: "Enter scheduled appointments"
+          },
+          {
+            key: "cancellations",
+            label: "Cancellations",
+            type: "number",
+            step: "1",
+            placeholder: "Enter cancellations"
+          },
+          {
+            key: "noShows",
+            label: "No Shows",
+            type: "number",
+            step: "1",
+            placeholder: "Enter no shows"
+          },
+          {
+            key: "reschedules",
+            label: "Reschedules",
+            type: "number",
+            step: "1",
+            placeholder: "Enter reschedules"
+          }
         ],
         calculatedFields: [
-          { key: "callConversionRate", label: "Call Conversion Rate (%)", format: "percent1" },
-          { key: "newPatientRate", label: "New Patient Rate (%)", format: "percent1" }
-        ]
-      },
-      {
-        key: "cxnsAccess",
-        title: "Access Quality",
-        description: "Core access health metrics for leadership review.",
-        fields: [
-          { key: "noShowRate", label: "No Show Rate (%)", type: "number", step: "0.01", placeholder: "Example: 5.4" },
-          { key: "cancellationRate", label: "Cancellation Rate (%)", type: "number", step: "0.01", placeholder: "Example: 7.1" },
-          { key: "abandonedCallRate", label: "Abandoned Call Rate (%)", type: "number", step: "0.01", placeholder: "Example: 3.2" }
-        ],
-        calculatedFields: [
-          { key: "keptAppointmentRate", label: "Kept Appointment Rate (%)", format: "percent1" },
-          { key: "accessPressureScore", label: "Access Pressure Score", format: "decimal1" }
+          {
+            key: "cxnsRate",
+            label: "CX/NS Rate",
+            format: "percent1"
+          },
+          {
+            key: "rescheduleRate",
+            label: "Reschedule Rate",
+            format: "percent1"
+          }
         ]
       }
     ]
@@ -197,32 +360,94 @@ export const SHARED_PAGE_DEFINITIONS = {
   Capacity: {
     key: "Capacity",
     title: "Capacity",
-    description: "Capacity assumptions and throughput support metrics.",
+    description: "Workbook-aligned capacity builder with seven provider rows.",
     sections: [
       {
-        key: "capacityInputs",
-        title: "Capacity Inputs",
-        description: "Weekly inputs used for capacity modeling.",
+        key: "capacityPeriod",
+        title: "Capacity Period Inputs",
+        description: "Monthly context inputs.",
         fields: [
-          { key: "providerClinicDays", label: "Provider Clinic Days", type: "number", step: "0.01", placeholder: "Example: 18.5" },
-          { key: "availableVisitSlots", label: "Available Visit Slots", type: "number", step: "1", placeholder: "Enter available slots" },
-          { key: "bookedVisitSlots", label: "Booked Visit Slots", type: "number", step: "1", placeholder: "Enter booked slots" },
-          { key: "capacityUtilization", label: "Capacity Utilization (%)", type: "number", step: "0.01", placeholder: "Example: 91.5" }
+          {
+            key: "monthTag",
+            label: "Month",
+            type: "text",
+            placeholder: "Example: Jan"
+          },
+          {
+            key: "workingDaysInMonth",
+            label: "Working Days",
+            type: "number",
+            step: "1",
+            placeholder: "Example: 22"
+          },
+          {
+            key: "mdClinicDays",
+            label: "MD Clinic Days",
+            type: "number",
+            step: "0.01",
+            placeholder: "Enter MD clinic days"
+          },
+          {
+            key: "mdSurgeryDays",
+            label: "MD Surgery Days",
+            type: "number",
+            step: "0.01",
+            placeholder: "Enter MD surgery days"
+          },
+          {
+            key: "paClinicDays",
+            label: "PA Clinic Days",
+            type: "number",
+            step: "0.01",
+            placeholder: "Enter PA clinic days"
+          }
         ],
-        calculatedFields: [
-          { key: "openSlots", label: "Open Slots", format: "whole" },
-          { key: "visitsPerClinicDay", label: "Visits per Clinic Day", format: "decimal2" }
-        ]
+        calculatedFields: []
       },
       {
-        key: "capacityUtilizationSection",
-        title: "Utilization",
-        description: "Fill-rate and remaining-capacity measures.",
+        key: "capacityProviderRows",
+        title: "Provider Capacity Inputs",
+        description: "Seven workbook-style provider rows.",
         fields: [
-          { key: "slotFillRate", label: "Slot Fill Rate (%)", type: "number", step: "0.01", placeholder: "Example: 88.2" }
+          { key: "providerType1", label: "Provider Type 1", type: "text", placeholder: "MD Clinic / MD Surgery / PA Clinic / Other" },
+          { key: "providerCount1", label: "Provider Count 1", type: "number", step: "1", placeholder: "0" },
+          { key: "ptoDays1", label: "PTO Days 1", type: "number", step: "0.01", placeholder: "0" },
+          { key: "visitsPerDay1", label: "Visits / Day 1", type: "number", step: "0.01", placeholder: "0" },
+
+          { key: "providerType2", label: "Provider Type 2", type: "text", placeholder: "Provider type" },
+          { key: "providerCount2", label: "Provider Count 2", type: "number", step: "1", placeholder: "0" },
+          { key: "ptoDays2", label: "PTO Days 2", type: "number", step: "0.01", placeholder: "0" },
+          { key: "visitsPerDay2", label: "Visits / Day 2", type: "number", step: "0.01", placeholder: "0" },
+
+          { key: "providerType3", label: "Provider Type 3", type: "text", placeholder: "Provider type" },
+          { key: "providerCount3", label: "Provider Count 3", type: "number", step: "1", placeholder: "0" },
+          { key: "ptoDays3", label: "PTO Days 3", type: "number", step: "0.01", placeholder: "0" },
+          { key: "visitsPerDay3", label: "Visits / Day 3", type: "number", step: "0.01", placeholder: "0" },
+
+          { key: "providerType4", label: "Provider Type 4", type: "text", placeholder: "Provider type" },
+          { key: "providerCount4", label: "Provider Count 4", type: "number", step: "1", placeholder: "0" },
+          { key: "ptoDays4", label: "PTO Days 4", type: "number", step: "0.01", placeholder: "0" },
+          { key: "visitsPerDay4", label: "Visits / Day 4", type: "number", step: "0.01", placeholder: "0" },
+
+          { key: "providerType5", label: "Provider Type 5", type: "text", placeholder: "Provider type" },
+          { key: "providerCount5", label: "Provider Count 5", type: "number", step: "1", placeholder: "0" },
+          { key: "ptoDays5", label: "PTO Days 5", type: "number", step: "0.01", placeholder: "0" },
+          { key: "visitsPerDay5", label: "Visits / Day 5", type: "number", step: "0.01", placeholder: "0" },
+
+          { key: "providerType6", label: "Provider Type 6", type: "text", placeholder: "Provider type" },
+          { key: "providerCount6", label: "Provider Count 6", type: "number", step: "1", placeholder: "0" },
+          { key: "ptoDays6", label: "PTO Days 6", type: "number", step: "0.01", placeholder: "0" },
+          { key: "visitsPerDay6", label: "Visits / Day 6", type: "number", step: "0.01", placeholder: "0" },
+
+          { key: "providerType7", label: "Provider Type 7", type: "text", placeholder: "Provider type" },
+          { key: "providerCount7", label: "Provider Count 7", type: "number", step: "1", placeholder: "0" },
+          { key: "ptoDays7", label: "PTO Days 7", type: "number", step: "0.01", placeholder: "0" },
+          { key: "visitsPerDay7", label: "Visits / Day 7", type: "number", step: "0.01", placeholder: "0" }
         ],
         calculatedFields: [
-          { key: "unusedCapacity", label: "Unused Capacity (%)", format: "percent1" }
+          { key: "totalProviders", label: "Total Providers", format: "whole" },
+          { key: "capacityVisits", label: "Capacity Visits", format: "whole" },
+          { key: "capacityVisitsPerDay", label: "Capacity Visits / Day", format: "decimal2" }
         ]
       }
     ]
@@ -231,32 +456,37 @@ export const SHARED_PAGE_DEFINITIONS = {
   "Productivity Builder": {
     key: "Productivity Builder",
     title: "Productivity Builder",
-    description: "Operational assumptions and supporting productivity calculations.",
+    description: "Workbook-aligned staffing builder with throughput and buffer logic.",
     sections: [
       {
         key: "productivityInputs",
         title: "Productivity Inputs",
-        description: "Inputs used to drive productivity assumptions and outputs.",
+        description: "Direct workbook staffing inputs.",
         fields: [
-          { key: "providerCount", label: "Provider Count", type: "number", step: "1", placeholder: "Enter provider count" },
-          { key: "clinicSupportFte", label: "Clinic Support FTE", type: "number", step: "0.01", placeholder: "Example: 12.5" },
-          { key: "visitVolume", label: "Visit Volume", type: "number", step: "1", placeholder: "Enter visit volume" }
+          { key: "monthTag", label: "Month", type: "text", placeholder: "Example: Jan" },
+          { key: "workingDaysInPeriod", label: "Working Days", type: "number", step: "1", placeholder: "Example: 22" },
+          { key: "newPatients", label: "New Patients (NP)", type: "number", step: "1", placeholder: "Enter NP forecast" },
+          { key: "npToEstablishedMultiplier", label: "NP → Est Multiplier", type: "number", step: "0.01", placeholder: "Example: 3.5" },
+          { key: "npToSurgeryConversion", label: "NP → Surgery Conversion", type: "number", step: "0.01", placeholder: "Example: 0.20" },
+          { key: "callsVolume", label: "Calls Volume", type: "number", step: "1", placeholder: "Enter calls volume" },
+          { key: "maVisitsPerDayPerFte", label: "MA Visits / Day / FTE", type: "number", step: "0.01", placeholder: "Example: 20" },
+          { key: "psaVisitsPerDayPerFte", label: "PSA Visits / Day / FTE", type: "number", step: "0.01", placeholder: "Example: 25" },
+          { key: "callsPerDayPerFte", label: "Calls / Day / FTE", type: "number", step: "0.01", placeholder: "Example: 60" },
+          { key: "surgeriesPerDayPerSchedulerFte", label: "Surgeries / Day / Scheduler FTE", type: "number", step: "0.01", placeholder: "Example: 8" },
+          { key: "staffingBufferPct", label: "Staffing Buffer %", type: "number", step: "0.01", placeholder: "Example: 0.10" }
         ],
         calculatedFields: [
-          { key: "visitsPerProviderAuto", label: "Visits per Provider (Auto)", format: "decimal2" },
-          { key: "visitsPerSupportFteAuto", label: "Visits per Support FTE (Auto)", format: "decimal2" }
-        ]
-      },
-      {
-        key: "productivityOutputs",
-        title: "Productivity Outputs",
-        description: "Output-oriented operational productivity values.",
-        fields: [
-          { key: "visitsPerProvider", label: "Visits per Provider", type: "number", step: "0.01", placeholder: "Example: 84.5" },
-          { key: "visitsPerSupportFte", label: "Visits per Support FTE", type: "number", step: "0.01", placeholder: "Example: 42.1" }
-        ],
-        calculatedFields: [
-          { key: "productivityAlignmentScore", label: "Productivity Alignment Score", format: "decimal2" }
+          { key: "forecastEstablishedVisits", label: "Forecast Established Visits", format: "whole" },
+          { key: "forecastSurgeries", label: "Forecast Surgeries", format: "whole" },
+          { key: "totalVisits", label: "Total Visits (NP + Est)", format: "whole" },
+          { key: "npPerDay", label: "NP / Day", format: "decimal2" },
+          { key: "estPerDay", label: "Est / Day", format: "decimal2" },
+          { key: "surgPerDay", label: "Surg / Day", format: "decimal2" },
+          { key: "maFte", label: "MA FTE", format: "decimal2" },
+          { key: "psaFte", label: "PSA FTE", format: "decimal2" },
+          { key: "callFte", label: "Call FTE", format: "decimal2" },
+          { key: "surgerySchedulerFte", label: "Surgery Scheduler FTE", format: "decimal2" },
+          { key: "totalOpsFte", label: "Total Ops FTE", format: "decimal2" }
         ]
       }
     ]
@@ -268,7 +498,11 @@ export function getRegionSections(entity) {
 }
 
 export function getAllMetricKeysForEntity(entity) {
-  return getRegionSections(entity).flatMap((section) => section.fields.map((field) => field.key));
+  const sections = getRegionSections(entity);
+  return sections.flatMap((section) => [
+    ...section.fields.map((field) => field.key),
+    ...((section.calculatedFields || []).map((field) => field.key))
+  ]);
 }
 
 export function getSharedPageDefinition(pageName) {
@@ -278,5 +512,8 @@ export function getSharedPageDefinition(pageName) {
 export function getAllMetricKeysForSharedPage(pageName) {
   const def = getSharedPageDefinition(pageName);
   if (!def) return [];
-  return def.sections.flatMap((section) => section.fields.map((field) => field.key));
+  return def.sections.flatMap((section) => [
+    ...section.fields.map((field) => field.key),
+    ...((section.calculatedFields || []).map((field) => field.key))
+  ]);
 }
