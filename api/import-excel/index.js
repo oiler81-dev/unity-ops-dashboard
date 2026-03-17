@@ -5,90 +5,106 @@ const REGION_TABLE = "WeeklyRegionData";
 const SHARED_TABLE = "SharedPageData";
 const REFERENCE_TABLE = "ReferenceData";
 
+const WORKBOOK_YEAR = 2026;
+
 const REGION_SHEET_TO_ENTITY = {
-  LA: "MRO",
+  LA: "LAOSS",
   Portland: "NES",
   Denver: "SpineOne",
-  Chicago: "LAOSS"
+  Chicago: "MRO"
+};
+
+const MONTH_MAP = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12
 };
 
 function normalizeMonthLabel(value) {
   const raw = String(value || "").trim();
-  const map = {
-    Jan: "Jan",
-    January: "Jan",
-    Feb: "Feb",
-    February: "Feb",
-    Mar: "Mar",
-    March: "Mar",
-    Apr: "Apr",
-    April: "Apr",
-    May: "May",
-    Jun: "Jun",
-    June: "Jun",
-    Jul: "Jul",
-    July: "Jul",
-    Aug: "Aug",
-    August: "Aug",
-    Sep: "Sep",
-    Sept: "Sep",
-    September: "Sep",
-    Oct: "Oct",
-    October: "Oct",
-    Nov: "Nov",
-    November: "Nov",
-    Dec: "Dec",
-    December: "Dec"
-  };
-  return map[raw] || raw;
+  if (!raw) return "";
+
+  const lower = raw.toLowerCase();
+  const monthNum = MONTH_MAP[lower];
+  if (!monthNum) return raw;
+
+  return new Date(Date.UTC(WORKBOOK_YEAR, monthNum - 1, 1)).toLocaleString("en-US", {
+    month: "short",
+    timeZone: "UTC"
+  });
 }
 
-function monthToNumber(monthLabel) {
-  const map = {
-    Jan: "01",
-    Feb: "02",
-    Mar: "03",
-    Apr: "04",
-    May: "05",
-    Jun: "06",
-    Jul: "07",
-    Aug: "08",
-    Sep: "09",
-    Oct: "10",
-    Nov: "11",
-    Dec: "12"
-  };
-  return map[normalizeMonthLabel(monthLabel)] || "01";
+function monthNumberFromLabel(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  return MONTH_MAP[raw] || null;
 }
 
-function makeWeekEnding(monthLabel, weekIndex) {
-  const monthNum = monthToNumber(monthLabel);
-  const day = String(Math.min(28, weekIndex * 7)).padStart(2, "0");
-  return `2026-${monthNum}-${day}`;
+function weekEndingFromMonthAndWeek(monthLabel, weekNumber) {
+  const monthNum = monthNumberFromLabel(monthLabel);
+  const wk = Number(weekNumber);
+
+  if (!monthNum || !Number.isFinite(wk) || wk < 1) return "";
+
+  const firstOfMonth = new Date(Date.UTC(WORKBOOK_YEAR, monthNum - 1, 1));
+  const firstDayDow = firstOfMonth.getUTCDay(); // 0 = Sunday
+  const offsetToFirstSunday = (7 - firstDayDow) % 7;
+
+  const firstSunday = new Date(firstOfMonth);
+  firstSunday.setUTCDate(firstOfMonth.getUTCDate() + offsetToFirstSunday);
+
+  const weekEnding = new Date(firstSunday);
+  weekEnding.setUTCDate(firstSunday.getUTCDate() + (wk - 1) * 7);
+
+  return weekEnding.toISOString().split("T")[0];
 }
 
-function value(ws, cellAddress) {
-  return ws[cellAddress] ? ws[cellAddress].v : null;
+function toNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const parsed = Number(String(value).replace(/,/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-function toNumber(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function isMeaningfulRow(arr) {
-  return Array.isArray(arr) && arr.some((v) => v !== null && v !== undefined && String(v).trim() !== "");
+function safeText(value) {
+  return value == null ? "" : String(value).trim();
 }
 
 function sheetRows(ws) {
-  return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  return XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    defval: null,
+    raw: false
+  });
 }
 
-function safeText(v) {
-  return v == null ? "" : String(v).trim();
+function rowHasAnyData(row) {
+  return Array.isArray(row) && row.some((v) => v !== null && v !== undefined && String(v).trim() !== "");
 }
 
-async function upsertRegionRecord(table, entity, weekEnding, values, source = "import") {
+async function upsertRegionRecord(table, entity, weekEnding, values, source = "workbook-import") {
   await table.upsertEntity({
     partitionKey: entity,
     rowKey: weekEnding,
@@ -101,7 +117,7 @@ async function upsertRegionRecord(table, entity, weekEnding, values, source = "i
   });
 }
 
-async function upsertSharedRecord(table, page, weekEnding, values, source = "import") {
+async function upsertSharedRecord(table, page, weekEnding, values, source = "workbook-import") {
   await table.upsertEntity({
     partitionKey: page,
     rowKey: weekEnding,
@@ -114,7 +130,7 @@ async function upsertSharedRecord(table, page, weekEnding, values, source = "imp
   });
 }
 
-async function upsertReferenceRecord(table, kind, rowKey, values, source = "import") {
+async function upsertReferenceRecord(table, kind, rowKey, values, source = "workbook-import") {
   await table.upsertEntity({
     partitionKey: kind,
     rowKey,
@@ -126,140 +142,189 @@ async function upsertReferenceRecord(table, kind, rowKey, values, source = "impo
   });
 }
 
+function sumNullable(...values) {
+  return values.reduce((acc, v) => acc + (toNumber(v) || 0), 0);
+}
+
 async function importRegionSheet(regionTable, ws, sheetName) {
   const entity = REGION_SHEET_TO_ENTITY[sheetName];
-  if (!entity) return { imported: 0, entity: null };
+  if (!entity) return { sheet: sheetName, entity: null, imported: 0 };
 
   const rows = sheetRows(ws);
   let imported = 0;
 
   for (let r = 6; r < rows.length; r += 1) {
     const row = rows[r];
-    if (!isMeaningfulRow(row)) continue;
+    if (!rowHasAnyData(row)) continue;
 
-    const weekLabel = safeText(row[0]);
+    const weekNumber = toNumber(row[0]);
     const daysInPeriod = toNumber(row[1]);
-    const totalVisits = toNumber(row[2]);
-    const visitsPerDay = toNumber(row[3]);
-    const npPerDay = toNumber(row[4]);
     const npActual = toNumber(row[5]);
     const establishedActual = toNumber(row[6]);
     const surgeryActual = toNumber(row[7]);
-    const totalCalls = toNumber(row[8]);
-    const abandonedCalls = toNumber(row[9]);
-    const abandonedRate = toNumber(row[10]);
-    const answeredToNpConversion = toNumber(row[11]);
-    const cashActual = toNumber(row[16]);
-    const monthTag = normalizeMonthLabel(row[17] || row[18]);
+    const totalCalls = sheetName === "Denver" ? toNumber(row[9]) : toNumber(row[8]);
+    const abandonedCalls = sheetName === "Denver" ? toNumber(row[10]) : toNumber(row[9]);
+    const cashActual = sheetName === "Denver" ? toNumber(row[17]) : toNumber(row[16]);
+    const monthTag = sheetName === "Denver" ? safeText(row[18]) : safeText(row[17]);
 
-    if (!weekLabel || !monthTag || daysInPeriod == null) continue;
+    if (!weekNumber || !monthTag) continue;
 
-    const weekEnding = makeWeekEnding(monthTag, imported + 1);
+    const weekEnding = weekEndingFromMonthAndWeek(monthTag, weekNumber);
+    if (!weekEnding) continue;
+
+    const totalVisits = sheetName === "Denver"
+      ? sumNullable(row[5], row[6], row[7], row[8])
+      : sumNullable(row[5], row[6], row[7]);
+
+    const visitsPerDay =
+      daysInPeriod && daysInPeriod > 0 ? totalVisits / daysInPeriod : 0;
+
+    const abandonmentRate =
+      totalCalls && totalCalls > 0 ? (abandonedCalls / totalCalls) * 100 : 0;
+
+    const answeredCalls = Math.max((totalCalls || 0) - (abandonedCalls || 0), 0);
+
+    const answeredCallToNpConversion =
+      answeredCalls > 0 ? ((npActual || 0) / answeredCalls) * 100 : 0;
 
     const values = {
-      weekLabel,
-      monthTag,
-      daysInPeriod,
+      weekNumber,
+      monthTag: normalizeMonthLabel(monthTag),
+      daysInPeriod: daysInPeriod || 0,
       totalVisits,
       visitsPerDay,
-      npPerDay,
-      npActual,
-      establishedActual,
-      surgeryActual,
-      totalCalls,
-      abandonedCalls,
-      abandonmentRate: abandonedRate != null ? abandonedRate * 100 : null,
-      answeredCallToNpConversion: answeredToNpConversion != null ? answeredToNpConversion * 100 : null,
-      cashActual
+      npActual: npActual || 0,
+      establishedActual: establishedActual || 0,
+      surgeryActual: surgeryActual || 0,
+      totalCalls: totalCalls || 0,
+      abandonedCalls: abandonedCalls || 0,
+      abandonmentRate,
+      answeredCallToNpConversion,
+      cashActual: cashActual || 0
     };
 
-    await upsertRegionRecord(regionTable, entity, weekEnding, values, "workbook-import");
+    await upsertRegionRecord(regionTable, entity, weekEnding, values);
     imported += 1;
   }
 
-  return { imported, entity };
+  return { sheet: sheetName, entity, imported };
 }
 
 async function importPtSheet(sharedTable, ws) {
   const rows = sheetRows(ws);
   let imported = 0;
 
+  const blocks = [
+    { weekCol: 0, monthCol: 1, scheduledCol: 2, cancelCol: 3, noShowCol: 4, rescheduleCol: 5, unitsCol: 6 },
+    { weekCol: 10, monthCol: 11, scheduledCol: 12, cancelCol: 13, noShowCol: 14, rescheduleCol: 15, unitsCol: 16 },
+    { weekCol: 20, monthCol: 21, scheduledCol: 22, cancelCol: 23, noShowCol: 24, rescheduleCol: 25, unitsCol: 26 }
+  ];
+
+  const weeklyTotals = new Map();
+
   for (let r = 12; r < rows.length; r += 1) {
     const row = rows[r];
-    if (!isMeaningfulRow(row)) continue;
+    if (!rowHasAnyData(row)) continue;
 
-    for (const block of [
-      { monthCol: 1, scheduledCol: 2, cancelCol: 3, noShowCol: 4, rescheduleCol: 5, unitsCol: 6 },
-      { monthCol: 11, scheduledCol: 12, cancelCol: 13, noShowCol: 14, rescheduleCol: 15, unitsCol: 16 },
-      { monthCol: 21, scheduledCol: 22, cancelCol: 23, noShowCol: 24, rescheduleCol: 25, unitsCol: 26 }
-    ]) {
-      const monthTag = normalizeMonthLabel(row[block.monthCol]);
-      const ptScheduledVisits = toNumber(row[block.scheduledCol]);
-      const ptCancellations = toNumber(row[block.cancelCol]);
-      const ptNoShows = toNumber(row[block.noShowCol]);
-      const ptReschedules = toNumber(row[block.rescheduleCol]);
-      const totalUnitsBilled = toNumber(row[block.unitsCol]);
+    for (const block of blocks) {
+      const weekNumber = toNumber(row[block.weekCol]);
+      const monthTag = safeText(row[block.monthCol]);
+      const scheduled = toNumber(row[block.scheduledCol]);
+      const cancellations = toNumber(row[block.cancelCol]);
+      const noShows = toNumber(row[block.noShowCol]);
+      const reschedules = toNumber(row[block.rescheduleCol]);
+      const units = toNumber(row[block.unitsCol]);
 
-      if (!monthTag || ptScheduledVisits == null) continue;
+      if (!weekNumber || !monthTag) continue;
 
-      const weekEnding = makeWeekEnding(monthTag, imported + 1);
+      const weekEnding = weekEndingFromMonthAndWeek(monthTag, weekNumber);
+      if (!weekEnding) continue;
 
-      const values = {
-        monthTag,
-        ptScheduledVisits,
-        ptCancellations,
-        ptNoShows,
-        ptReschedules,
-        totalUnitsBilled,
-        workingDaysInWeek: 5
+      const current = weeklyTotals.get(weekEnding) || {
+        weekNumber,
+        monthTag: normalizeMonthLabel(monthTag),
+        ptScheduledVisits: 0,
+        ptCancellations: 0,
+        ptNoShows: 0,
+        ptReschedules: 0,
+        totalUnitsBilled: 0
       };
 
-      await upsertSharedRecord(sharedTable, "PT", weekEnding, values, "workbook-import");
-      imported += 1;
+      current.ptScheduledVisits += scheduled || 0;
+      current.ptCancellations += cancellations || 0;
+      current.ptNoShows += noShows || 0;
+      current.ptReschedules += reschedules || 0;
+      current.totalUnitsBilled += units || 0;
+
+      weeklyTotals.set(weekEnding, current);
     }
   }
 
-  return { imported };
+  for (const [weekEnding, values] of weeklyTotals.entries()) {
+    await upsertSharedRecord(sharedTable, "PT", weekEnding, {
+      ...values,
+      workingDaysInWeek: 5
+    });
+    imported += 1;
+  }
+
+  return { sheet: "PT", page: "PT", imported };
 }
 
 async function importCxnsSheet(sharedTable, ws) {
   const rows = sheetRows(ws);
   let imported = 0;
 
+  const blocks = [
+    { weekCol: 0, monthCol: 1, scheduledCol: 2, cancelCol: 3, noShowCol: 4, rescheduleCol: 5 },
+    { weekCol: 8, monthCol: 9, scheduledCol: 10, cancelCol: 11, noShowCol: 12, rescheduleCol: 13 },
+    { weekCol: 16, monthCol: 17, scheduledCol: 18, cancelCol: 19, noShowCol: 20, rescheduleCol: 21 },
+    { weekCol: 24, monthCol: 25, scheduledCol: 26, cancelCol: 27, noShowCol: 28, rescheduleCol: 29 }
+  ];
+
+  const weeklyTotals = new Map();
+
   for (let r = 12; r < rows.length; r += 1) {
     const row = rows[r];
-    if (!isMeaningfulRow(row)) continue;
+    if (!rowHasAnyData(row)) continue;
 
-    for (const block of [
-      { monthCol: 1, scheduledCol: 2, cancelCol: 3, noShowCol: 4, rescheduleCol: 5 },
-      { monthCol: 9, scheduledCol: 10, cancelCol: 11, noShowCol: 12, rescheduleCol: 13 },
-      { monthCol: 17, scheduledCol: 18, cancelCol: 19, noShowCol: 20, rescheduleCol: 21 },
-      { monthCol: 25, scheduledCol: 26, cancelCol: 27, noShowCol: 28, rescheduleCol: 29 }
-    ]) {
-      const monthTag = normalizeMonthLabel(row[block.monthCol]);
-      const scheduledAppts = toNumber(row[block.scheduledCol]);
+    for (const block of blocks) {
+      const weekNumber = toNumber(row[block.weekCol]);
+      const monthTag = safeText(row[block.monthCol]);
+      const scheduled = toNumber(row[block.scheduledCol]);
       const cancellations = toNumber(row[block.cancelCol]);
       const noShows = toNumber(row[block.noShowCol]);
       const reschedules = toNumber(row[block.rescheduleCol]);
 
-      if (!monthTag || scheduledAppts == null) continue;
+      if (!weekNumber || !monthTag) continue;
 
-      const weekEnding = makeWeekEnding(monthTag, imported + 1);
+      const weekEnding = weekEndingFromMonthAndWeek(monthTag, weekNumber);
+      if (!weekEnding) continue;
 
-      const values = {
-        monthTag,
-        scheduledAppts,
-        cancellations,
-        noShows,
-        reschedules
+      const current = weeklyTotals.get(weekEnding) || {
+        weekNumber,
+        monthTag: normalizeMonthLabel(monthTag),
+        scheduledAppts: 0,
+        cancellations: 0,
+        noShows: 0,
+        reschedules: 0
       };
 
-      await upsertSharedRecord(sharedTable, "CXNS", weekEnding, values, "workbook-import");
-      imported += 1;
+      current.scheduledAppts += scheduled || 0;
+      current.cancellations += cancellations || 0;
+      current.noShows += noShows || 0;
+      current.reschedules += reschedules || 0;
+
+      weeklyTotals.set(weekEnding, current);
     }
   }
 
-  return { imported };
+  for (const [weekEnding, values] of weeklyTotals.entries()) {
+    await upsertSharedRecord(sharedTable, "CXNS", weekEnding, values);
+    imported += 1;
+  }
+
+  return { sheet: "CXNS", page: "CXNS", imported };
 }
 
 async function importHolidaysSheet(referenceTable, ws) {
@@ -268,28 +333,24 @@ async function importHolidaysSheet(referenceTable, ws) {
 
   for (let r = 1; r < rows.length; r += 1) {
     const row = rows[r];
+    if (!rowHasAnyData(row)) continue;
+
     const holidayDate = row[0];
     const monthTag = normalizeMonthLabel(row[3]);
     const workingDays = toNumber(row[4]);
 
     if (!monthTag || workingDays == null) continue;
 
-    await upsertReferenceRecord(
-      referenceTable,
-      "holidays",
+    await upsertReferenceRecord(referenceTable, "holidays", monthTag, {
+      holidayDate,
       monthTag,
-      {
-        holidayDate,
-        monthTag,
-        workingDays
-      },
-      "workbook-import"
-    );
+      workingDays
+    });
 
     imported += 1;
   }
 
-  return { imported };
+  return { sheet: "Holidays", kind: "holidays", imported };
 }
 
 module.exports = async function (context, req) {
@@ -306,7 +367,13 @@ module.exports = async function (context, req) {
     }
 
     const buffer = Buffer.from(fileBase64, "base64");
-    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const workbook = XLSX.read(buffer, {
+      type: "buffer",
+      cellFormula: false,
+      cellNF: false,
+      cellHTML: false,
+      raw: false
+    });
 
     const regionTable = getTableClient(REGION_TABLE);
     const sharedTable = getTableClient(SHARED_TABLE);
@@ -321,32 +388,19 @@ module.exports = async function (context, req) {
     for (const sheetName of ["LA", "Portland", "Denver", "Chicago"]) {
       const ws = workbook.Sheets[sheetName];
       if (!ws) continue;
-      const result = await importRegionSheet(regionTable, ws, sheetName);
-      results.regions.push({ sheet: sheetName, ...result });
+      results.regions.push(await importRegionSheet(regionTable, ws, sheetName));
     }
 
     if (workbook.Sheets.PT) {
-      results.shared.push({
-        sheet: "PT",
-        page: "PT",
-        ...(await importPtSheet(sharedTable, workbook.Sheets.PT))
-      });
+      results.shared.push(await importPtSheet(sharedTable, workbook.Sheets.PT));
     }
 
     if (workbook.Sheets.CXNS) {
-      results.shared.push({
-        sheet: "CXNS",
-        page: "CXNS",
-        ...(await importCxnsSheet(sharedTable, workbook.Sheets.CXNS))
-      });
+      results.shared.push(await importCxnsSheet(sharedTable, workbook.Sheets.CXNS));
     }
 
     if (workbook.Sheets.Holidays) {
-      results.reference.push({
-        sheet: "Holidays",
-        kind: "holidays",
-        ...(await importHolidaysSheet(referenceTable, workbook.Sheets.Holidays))
-      });
+      results.reference.push(await importHolidaysSheet(referenceTable, workbook.Sheets.Holidays));
     }
 
     context.res = {
