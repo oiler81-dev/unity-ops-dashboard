@@ -6,8 +6,6 @@ import {
   escapeHtml,
   escapeAttr,
   handleFatalError,
-  comparisonClass,
-  formatChange,
   renderSummaryMiniCard,
   collectRegionFormValues,
   collectSharedFormValues,
@@ -16,9 +14,7 @@ import {
 
 import {
   getRegionSections,
-  getAllMetricKeysForEntity,
   getSharedPageDefinition,
-  getAllMetricKeysForSharedPage,
   ENTITY_LABELS
 } from "./definitions.js";
 
@@ -26,7 +22,6 @@ import {
   calculateRegionSummaries,
   calculateSharedSummaries,
   getRegionCalculatedValues,
-  getSharedCalculatedValues,
   formatByType
 } from "./calculations.js";
 
@@ -81,9 +76,13 @@ bootstrap();
 
 function bootstrap() {
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      init().catch(handleFatalError);
-    }, { once: true });
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => {
+        init().catch(handleFatalError);
+      },
+      { once: true }
+    );
     return;
   }
 
@@ -186,137 +185,6 @@ function bindEvents() {
     });
   }
 
-  document.addEventListener("click", async (e) => {
-    const regionTab = e.target.closest(".section-tab.region-tab");
-    if (regionTab) {
-      state.activeRegionSectionKey = regionTab.dataset.sectionKey;
-      if (state.currentRoute === "region" && state.currentEntity) {
-        await renderRegion(state.currentEntity);
-      }
-      return;
-    }
-
-    const sharedTab = e.target.closest(".section-tab.shared-tab");
-    if (sharedTab) {
-      state.activeSharedSectionKey = sharedTab.dataset.sectionKey;
-      if (state.currentRoute === "shared" && state.currentSharedPage) {
-        await renderSharedPage(state.currentSharedPage);
-      }
-      return;
-    }
-
-    const adminTab = e.target.closest(".admin-editor-tab");
-    if (adminTab) {
-      state.activeAdminTab = adminTab.dataset.adminTab;
-      if (state.currentRoute === "admin") {
-        await renderAdmin();
-      }
-      return;
-    }
-
-    if (e.target.closest("#runWorkbookImportBtn")) {
-      const fileInput = document.getElementById("workbookUploadInput");
-      const file = fileInput?.files?.[0];
-
-      if (!file) {
-        alert("Select a workbook first.");
-        return;
-      }
-
-      const fileBase64 = await fileToBase64(file);
-      const result = await apiPost("/api/import-excel", {
-        fileName: file.name,
-        fileBase64
-      });
-
-      state.lastImportResult = result;
-      alert("Workbook import completed.");
-      await renderAdmin();
-      return;
-    }
-
-    if (e.target.closest("#saveTargetsBtn")) {
-      const rows = collectAdminRows("target");
-      await apiPost("/api/admin-reference-save", {
-        entity: state.activeAdminEntity,
-        kind: "targets",
-        rows
-      });
-      alert("Targets saved.");
-      await renderAdmin();
-      return;
-    }
-
-    if (e.target.closest("#saveThresholdsBtn")) {
-      const rows = collectAdminRows("threshold");
-      await apiPost("/api/admin-reference-save", {
-        entity: state.activeAdminEntity,
-        kind: "thresholds",
-        rows
-      });
-      alert("Thresholds saved.");
-      await renderAdmin();
-      return;
-    }
-
-    if (e.target.closest("#saveHolidaysBtn")) {
-      const rows = collectAdminRows("holiday");
-      await apiPost("/api/admin-reference-save", {
-        kind: "holidays",
-        year: state.activeAdminYear,
-        rows
-      });
-      alert("Holidays saved.");
-      await renderAdmin();
-      return;
-    }
-
-    if (e.target.closest("#saveBudgetBtn")) {
-      const rows = collectAdminRows("budget");
-      await apiPost("/api/admin-reference-save", {
-        entity: state.activeAdminEntity,
-        kind: "budget",
-        rows
-      });
-      alert("Budget saved.");
-      await renderAdmin();
-      return;
-    }
-
-    if (e.target.closest("#printMeetingSummaryBtn")) {
-      window.print();
-      return;
-    }
-
-    const approveBtn = e.target.closest(".approve-week-btn");
-    if (approveBtn) {
-      const entity = approveBtn.dataset.entity;
-      const weekEnding = approveBtn.dataset.weekEnding;
-      await apiPost("/api/approve-week", { entity, weekEnding });
-      alert(`${entity} approved for ${weekEnding}.`);
-      await renderAdmin();
-    }
-  });
-
-  document.addEventListener("change", async (e) => {
-    if (e.target.id === "adminEntityFilter") {
-      state.activeAdminEntity = e.target.value;
-      if (state.currentRoute === "admin") await renderAdmin();
-      return;
-    }
-
-    if (e.target.id === "adminYearFilter") {
-      state.activeAdminYear = e.target.value;
-      if (state.currentRoute === "admin") await renderAdmin();
-      return;
-    }
-
-    if (e.target.id === "adminAuditEntityFilter") {
-      state.activeAdminAuditEntity = e.target.value;
-      if (state.currentRoute === "admin") await renderAdmin();
-    }
-  });
-
   if (els.goAssignedRegionBtn) {
     els.goAssignedRegionBtn.addEventListener("click", async () => {
       if (!state.me) return;
@@ -392,7 +260,8 @@ function bindEvents() {
 
 function applyUserContext() {
   if (els.userDisplayName) {
-    els.userDisplayName.textContent = state.me.displayName || state.me.email || "Unknown User";
+    els.userDisplayName.textContent =
+      state.me.displayName || state.me.email || "Unknown User";
   }
 
   if (els.assignedEntityText) {
@@ -404,11 +273,7 @@ function applyUserContext() {
   }
 
   if (els.adminNavBtn) {
-    if (state.me.isAdmin) {
-      els.adminNavBtn.classList.remove("hidden");
-    } else {
-      els.adminNavBtn.classList.add("hidden");
-    }
+    els.adminNavBtn.classList.toggle("hidden", !state.me.isAdmin);
   }
 }
 
@@ -417,18 +282,19 @@ async function setRoute(route, entity = null, sharedPage = null) {
   state.currentEntity = entity;
   state.currentSharedPage = sharedPage;
 
-  document.querySelectorAll(".nav-link").forEach((btn) => btn.classList.remove("active"));
+  document
+    .querySelectorAll(".nav-link")
+    .forEach((btn) => btn.classList.remove("active"));
 
-  const selector = route === "region"
-    ? `.nav-link[data-route="region"][data-entity="${cssEscape(entity)}"]`
-    : route === "shared"
-      ? `.nav-link[data-route="shared"][data-page="${cssEscape(sharedPage)}"]`
-      : `.nav-link[data-route="${cssEscape(route)}"]`;
+  const selector =
+    route === "region"
+      ? `.nav-link[data-route="region"][data-entity="${cssEscape(entity)}"]`
+      : route === "shared"
+        ? `.nav-link[data-route="shared"][data-page="${cssEscape(sharedPage)}"]`
+        : `.nav-link[data-route="${cssEscape(route)}"]`;
 
   const activeBtn = document.querySelector(selector);
-  if (activeBtn) {
-    activeBtn.classList.add("active");
-  }
+  if (activeBtn) activeBtn.classList.add("active");
 
   if (route === "region" && entity) {
     const sections = getRegionSections(entity);
@@ -464,32 +330,32 @@ async function loadCurrentRoute() {
   }
 }
 
-/* -------------------------
-   Rendering implementations
-   Minimal placeholders — replace with your real markup
-   ------------------------- */
-
 async function renderExecutive() {
   if (els.pageTitle) els.pageTitle.textContent = "Executive Dashboard";
   if (els.pageSubtitle) els.pageSubtitle.textContent = "";
 
-  // fetch top-level aggregated data
-  const data = await safeApiGet(`/api/executive-summary?weekEnding=${state.currentWeekEnding}`, null);
+  const data = await safeApiGet(
+    `/api/dashboard?weekEnding=${encodeURIComponent(state.currentWeekEnding)}`,
+    { kpis: [] }
+  );
+
   state.pageData = data;
 
-  // prepare KPI cards if available
-  const kpis = (data && data.kpis) ? data.kpis : [
-    { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "" },
-    { label: "Call Volume", value: "—", statusColor: "yellow", meta: "" },
-    { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "" }
-  ];
+  const kpis = Array.isArray(data?.kpis) && data.kpis.length
+    ? data.kpis
+    : [
+        { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "" },
+        { label: "Call Volume", value: "—", statusColor: "yellow", meta: "" },
+        { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "" }
+      ];
+
   renderKpiCards(kpis);
 
   if (els.pageContent) {
     els.pageContent.innerHTML = `
       <div class="executive-summary">
         ${renderSummaryMiniCard({ label: "Summary", value: "Data loaded" })}
-        <div id="executiveTables">Loading...</div>
+        <div id="executiveTables">Executive data loaded.</div>
       </div>
     `;
   }
@@ -497,62 +363,101 @@ async function renderExecutive() {
 
 async function renderRegion(entity) {
   if (!entity) return;
+
   state.currentEntity = entity;
 
-  if (els.pageTitle) els.pageTitle.textContent = `${ENTITY_LABELS?.[entity] || entity} - Region`;
-  if (els.pageSubtitle) els.pageSubtitle.textContent = `Week ending ${formatDate(state.currentWeekEnding)}`;
+  if (els.pageTitle) {
+    els.pageTitle.textContent = `${ENTITY_LABELS?.[entity] || entity} - Region`;
+  }
 
-  // fetch region data
-  const payload = await safeApiGet(`/api/region-data?entity=${encodeURIComponent(entity)}&weekEnding=${state.currentWeekEnding}`, null);
+  if (els.pageSubtitle) {
+    els.pageSubtitle.textContent = `Week ending ${formatDate(state.currentWeekEnding)}`;
+  }
+
+  const payload = await safeApiGet(
+    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`,
+    { values: {} }
+  );
+
   state.pageData = payload;
 
-  // calculate summaries if calculators available
-  const summaries = (typeof calculateRegionSummaries === "function")
-    ? calculateRegionSummaries(payload)
-    : [];
+  const summaryInput = payload?.values || {};
+  const summaries =
+    typeof calculateRegionSummaries === "function"
+      ? calculateRegionSummaries(summaryInput)
+      : [];
 
-  renderKpiCards(summaries.map(s => ({ label: s.label || "KPI", value: s.value || "—", meta: s.meta || "" })));
+  renderKpiCards(
+    summaries.map((s) => ({
+      label: s.label || "KPI",
+      value: s.value || "—",
+      meta: s.meta || ""
+    }))
+  );
 
-  // Render simple form with metric fields
   if (els.pageContent) {
     const sections = getRegionSections(entity) || [];
-    els.pageContent.innerHTML = sections.map(section => renderSectionBlock(section, payload)).join("");
+    els.pageContent.innerHTML = sections
+      .map((section) => renderSectionBlock(section, payload))
+      .join("");
   }
 }
 
 async function renderSharedPage(pageKey) {
   if (!pageKey) return;
+
   state.currentSharedPage = pageKey;
 
   if (els.pageTitle) els.pageTitle.textContent = `Shared - ${pageKey}`;
-  if (els.pageSubtitle) els.pageSubtitle.textContent = `Week ending ${formatDate(state.currentWeekEnding)}`;
+  if (els.pageSubtitle) {
+    els.pageSubtitle.textContent = `Week ending ${formatDate(state.currentWeekEnding)}`;
+  }
 
-  const payload = await safeApiGet(`/api/shared-page?key=${encodeURIComponent(pageKey)}&weekEnding=${state.currentWeekEnding}`, null);
+  const payload = await safeApiGet(
+    `/api/shared-data?page=${encodeURIComponent(pageKey)}&weekEnding=${encodeURIComponent(state.currentWeekEnding)}`,
+    { values: {} }
+  );
+
   state.pageData = payload;
 
-  const summaries = (typeof calculateSharedSummaries === "function")
-    ? calculateSharedSummaries(payload)
-    : [];
+  const summaries =
+    typeof calculateSharedSummaries === "function"
+      ? calculateSharedSummaries(pageKey, payload?.values || {})
+      : [];
 
-  renderKpiCards(summaries.map(s => ({ label: s.label || "KPI", value: s.value || "—", meta: s.meta || "" })));
+  renderKpiCards(
+    summaries.map((s) => ({
+      label: s.label || "KPI",
+      value: s.value || "—",
+      meta: s.meta || ""
+    }))
+  );
 
   if (els.pageContent) {
     const def = getSharedPageDefinition(pageKey) || { sections: [] };
-    els.pageContent.innerHTML = def.sections.map(section => renderSectionBlock(section, payload)).join("");
+    els.pageContent.innerHTML = def.sections
+      .map((section) => renderSectionBlock(section, payload))
+      .join("");
   }
 }
 
 function renderSectionBlock(section, payload) {
   const sectionKey = section?.key || "section";
-  const title = section?.label || sectionKey;
+  const title = section?.title || section?.label || sectionKey;
   const fields = Array.isArray(section?.fields) ? section.fields : [];
+  const calculatedFields = Array.isArray(section?.calculatedFields)
+    ? section.calculatedFields
+    : [];
 
-  const fieldHtml = fields.map(f => renderField(f, payload)).join("");
+  const fieldHtml = fields.map((f) => renderField(f, payload)).join("");
+  const calcHtml = calculatedFields
+    .map((f) => renderCalculatedField(f, payload))
+    .join("");
 
   return `
     <section class="section-block" data-section-key="${escapeAttr(sectionKey)}">
       <h3>${escapeHtml(title)}</h3>
-      <div class="section-fields">${fieldHtml}</div>
+      <div class="section-fields">${fieldHtml}${calcHtml}</div>
     </section>
   `;
 }
@@ -560,13 +465,11 @@ function renderSectionBlock(section, payload) {
 function renderField(field, payload) {
   const key = field?.key || "unknown";
   const label = field?.label || key;
-  const value = (payload && payload.values && payload.values[key] != null) ? payload.values[key] : "";
+  const value =
+    payload && payload.values && payload.values[key] != null
+      ? payload.values[key]
+      : "";
   const readOnly = field?.readOnly ? "readonly" : "";
-
-  // simple rendering for inputs and calculated fields
-  if (field?.type === "calculated") {
-    return renderCalculatedField(field, payload);
-  }
 
   return `
     <div class="field" data-key="${escapeAttr(key)}">
@@ -579,11 +482,15 @@ function renderField(field, payload) {
 function renderCalculatedField(field, payload) {
   const key = field?.key || "calc";
   const label = field?.label || key;
-  const calcVal = (typeof getRegionCalculatedValues === "function")
-    ? (getRegionCalculatedValues(payload) || {})[key]
-    : null;
+  const calcVal =
+    typeof getRegionCalculatedValues === "function"
+      ? (getRegionCalculatedValues(payload?.values || {}) || {})[key]
+      : null;
 
-  const formatted = (typeof formatByType === "function") ? formatByType(calcVal, field.format) : String(calcVal ?? "—");
+  const formatted =
+    typeof formatByType === "function"
+      ? formatByType(calcVal, field.format)
+      : String(calcVal ?? "—");
 
   return `
     <div class="field calculated" data-key="${escapeAttr(key)}">
@@ -597,10 +504,9 @@ async function renderAdmin() {
   if (els.pageTitle) els.pageTitle.textContent = "Admin";
   if (els.pageSubtitle) els.pageSubtitle.textContent = "";
 
-  // Using admin renderers from admin.js — if they exist they will produce UI
   if (typeof renderAdminEditorShell === "function") {
     els.pageContent.innerHTML = renderAdminEditorShell();
-    // call other admin renderers as needed to populate pieces
+
     if (typeof renderTargetsEditor === "function") renderTargetsEditor();
     if (typeof renderThresholdsEditor === "function") renderThresholdsEditor();
     if (typeof renderHolidaysEditor === "function") renderHolidaysEditor();
@@ -613,24 +519,6 @@ async function renderAdmin() {
   }
 }
 
-/* -------------------------
-   Helpers used locally
-   ------------------------- */
-
 function cssEscape(value) {
   return String(value ?? "").replace(/["'\\]/g, "\\$&");
 }
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-/* If you have other utility functions referenced by your original file,
-   add them here or import them from their modules. */
-
-/* End of app.js */
