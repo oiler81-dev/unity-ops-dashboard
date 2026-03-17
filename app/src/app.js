@@ -22,6 +22,7 @@ import {
   calculateRegionSummaries,
   calculateSharedSummaries,
   getRegionCalculatedValues,
+  getSharedCalculatedValues,
   formatByType
 } from "./calculations.js";
 
@@ -185,6 +186,137 @@ function bindEvents() {
     });
   }
 
+  document.addEventListener("click", async (e) => {
+    const regionTab = e.target.closest(".section-tab.region-tab");
+    if (regionTab) {
+      state.activeRegionSectionKey = regionTab.dataset.sectionKey;
+      if (state.currentRoute === "region" && state.currentEntity) {
+        await renderRegion(state.currentEntity);
+      }
+      return;
+    }
+
+    const sharedTab = e.target.closest(".section-tab.shared-tab");
+    if (sharedTab) {
+      state.activeSharedSectionKey = sharedTab.dataset.sectionKey;
+      if (state.currentRoute === "shared" && state.currentSharedPage) {
+        await renderSharedPage(state.currentSharedPage);
+      }
+      return;
+    }
+
+    const adminTab = e.target.closest(".admin-editor-tab");
+    if (adminTab) {
+      state.activeAdminTab = adminTab.dataset.adminTab;
+      if (state.currentRoute === "admin") {
+        await renderAdmin();
+      }
+      return;
+    }
+
+    if (e.target.closest("#runWorkbookImportBtn")) {
+      const fileInput = document.getElementById("workbookUploadInput");
+      const file = fileInput?.files?.[0];
+
+      if (!file) {
+        alert("Select a workbook first.");
+        return;
+      }
+
+      const fileBase64 = await fileToBase64(file);
+      const result = await apiPost("/api/import-excel", {
+        fileName: file.name,
+        fileBase64
+      });
+
+      state.lastImportResult = result;
+      alert("Workbook import completed.");
+      await renderAdmin();
+      return;
+    }
+
+    if (e.target.closest("#saveTargetsBtn")) {
+      const rows = collectAdminRows("target");
+      await apiPost("/api/admin-reference-save", {
+        entity: state.activeAdminEntity,
+        kind: "targets",
+        rows
+      });
+      alert("Targets saved.");
+      await renderAdmin();
+      return;
+    }
+
+    if (e.target.closest("#saveThresholdsBtn")) {
+      const rows = collectAdminRows("threshold");
+      await apiPost("/api/admin-reference-save", {
+        entity: state.activeAdminEntity,
+        kind: "thresholds",
+        rows
+      });
+      alert("Thresholds saved.");
+      await renderAdmin();
+      return;
+    }
+
+    if (e.target.closest("#saveHolidaysBtn")) {
+      const rows = collectAdminRows("holiday");
+      await apiPost("/api/admin-reference-save", {
+        kind: "holidays",
+        year: state.activeAdminYear,
+        rows
+      });
+      alert("Holidays saved.");
+      await renderAdmin();
+      return;
+    }
+
+    if (e.target.closest("#saveBudgetBtn")) {
+      const rows = collectAdminRows("budget");
+      await apiPost("/api/admin-reference-save", {
+        entity: state.activeAdminEntity,
+        kind: "budget",
+        rows
+      });
+      alert("Budget saved.");
+      await renderAdmin();
+      return;
+    }
+
+    if (e.target.closest("#printMeetingSummaryBtn")) {
+      window.print();
+      return;
+    }
+
+    const approveBtn = e.target.closest(".approve-week-btn");
+    if (approveBtn) {
+      const entity = approveBtn.dataset.entity;
+      const weekEnding = approveBtn.dataset.weekEnding;
+      await apiPost("/api/approve-week", { entity, weekEnding });
+      alert(`${entity} approved for ${weekEnding}.`);
+      await renderAdmin();
+    }
+  });
+
+  document.addEventListener("change", async (e) => {
+    if (e.target.id === "adminEntityFilter") {
+      state.activeAdminEntity = e.target.value;
+      if (state.currentRoute === "admin") await renderAdmin();
+      return;
+    }
+
+    if (e.target.id === "adminYearFilter") {
+      state.activeAdminYear = e.target.value;
+      if (state.currentRoute === "admin") await renderAdmin();
+      return;
+    }
+
+    if (e.target.id === "adminAuditEntityFilter") {
+      state.activeAdminAuditEntity = e.target.value;
+      if (state.currentRoute === "admin") await renderAdmin();
+    }
+  });
+
   if (els.goAssignedRegionBtn) {
     els.goAssignedRegionBtn.addEventListener("click", async () => {
       if (!state.me) return;
@@ -273,7 +405,11 @@ function applyUserContext() {
   }
 
   if (els.adminNavBtn) {
-    els.adminNavBtn.classList.toggle("hidden", !state.me.isAdmin);
+    if (state.me.isAdmin) {
+      els.adminNavBtn.classList.remove("hidden");
+    } else {
+      els.adminNavBtn.classList.add("hidden");
+    }
   }
 }
 
@@ -282,9 +418,7 @@ async function setRoute(route, entity = null, sharedPage = null) {
   state.currentEntity = entity;
   state.currentSharedPage = sharedPage;
 
-  document
-    .querySelectorAll(".nav-link")
-    .forEach((btn) => btn.classList.remove("active"));
+  document.querySelectorAll(".nav-link").forEach((btn) => btn.classList.remove("active"));
 
   const selector =
     route === "region"
@@ -294,7 +428,9 @@ async function setRoute(route, entity = null, sharedPage = null) {
         : `.nav-link[data-route="${cssEscape(route)}"]`;
 
   const activeBtn = document.querySelector(selector);
-  if (activeBtn) activeBtn.classList.add("active");
+  if (activeBtn) {
+    activeBtn.classList.add("active");
+  }
 
   if (route === "region" && entity) {
     const sections = getRegionSections(entity);
@@ -398,7 +534,7 @@ async function renderRegion(entity) {
   if (els.pageContent) {
     const sections = getRegionSections(entity) || [];
     els.pageContent.innerHTML = sections
-      .map((section) => renderSectionBlock(section, payload))
+      .map((section) => renderSectionBlock(section, payload, "region"))
       .join("");
   }
 }
@@ -420,9 +556,10 @@ async function renderSharedPage(pageKey) {
 
   state.pageData = payload;
 
+  const summaryInput = payload?.values || {};
   const summaries =
     typeof calculateSharedSummaries === "function"
-      ? calculateSharedSummaries(pageKey, payload?.values || {})
+      ? calculateSharedSummaries(pageKey, summaryInput)
       : [];
 
   renderKpiCards(
@@ -436,12 +573,12 @@ async function renderSharedPage(pageKey) {
   if (els.pageContent) {
     const def = getSharedPageDefinition(pageKey) || { sections: [] };
     els.pageContent.innerHTML = def.sections
-      .map((section) => renderSectionBlock(section, payload))
+      .map((section) => renderSectionBlock(section, payload, "shared", pageKey))
       .join("");
   }
 }
 
-function renderSectionBlock(section, payload) {
+function renderSectionBlock(section, payload, mode = "region", sharedPageKey = null) {
   const sectionKey = section?.key || "section";
   const title = section?.title || section?.label || sectionKey;
   const fields = Array.isArray(section?.fields) ? section.fields : [];
@@ -451,7 +588,7 @@ function renderSectionBlock(section, payload) {
 
   const fieldHtml = fields.map((f) => renderField(f, payload)).join("");
   const calcHtml = calculatedFields
-    .map((f) => renderCalculatedField(f, payload))
+    .map((f) => renderCalculatedField(f, payload, mode, sharedPageKey))
     .join("");
 
   return `
@@ -479,14 +616,26 @@ function renderField(field, payload) {
   `;
 }
 
-function renderCalculatedField(field, payload) {
+function renderCalculatedField(field, payload, mode = "region", sharedPageKey = null) {
   const key = field?.key || "calc";
   const label = field?.label || key;
-  const calcVal =
-    typeof getRegionCalculatedValues === "function"
-      ? (getRegionCalculatedValues(payload?.values || {}) || {})[key]
-      : null;
+  const values = payload?.values || {};
 
+  let calcMap = {};
+
+  if (mode === "shared") {
+    calcMap =
+      typeof getSharedCalculatedValues === "function"
+        ? getSharedCalculatedValues(sharedPageKey, values) || {}
+        : {};
+  } else {
+    calcMap =
+      typeof getRegionCalculatedValues === "function"
+        ? getRegionCalculatedValues(values) || {}
+        : {};
+  }
+
+  const calcVal = calcMap[key];
   const formatted =
     typeof formatByType === "function"
       ? formatByType(calcVal, field.format)
@@ -521,4 +670,13 @@ async function renderAdmin() {
 
 function cssEscape(value) {
   return String(value ?? "").replace(/["'\\]/g, "\\$&");
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
