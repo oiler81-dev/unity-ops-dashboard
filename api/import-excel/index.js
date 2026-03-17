@@ -1,403 +1,371 @@
 const XLSX = require("xlsx");
-const { getUserFromRequest, getUserEmail, getDisplayName } = require("../shared/auth");
-const { getPermissionByEmail } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
-const YEAR = 2026;
+const REGION_TABLE = "WeeklyRegionData";
+const SHARED_TABLE = "SharedPageData";
+const REFERENCE_TABLE = "ReferenceData";
 
-const REGION_SHEETS = [
-  {
-    sheet: "LA",
-    entity: "LAOSS",
-    monthCol: 18,
-    cols: { week: 1, days: 2, visitVolume: 3, newPatients: 6, establishedActual: 7, surgeryActual: 8, callVolume: 9, abandonedCalls: 10, abandonedCallRate: 11, cash: 17 }
-  },
-  {
-    sheet: "Portland",
-    entity: "NES",
-    monthCol: 18,
-    cols: { week: 1, days: 2, visitVolume: 3, newPatients: 6, establishedActual: 7, surgeryActual: 8, callVolume: 9, abandonedCalls: 10, abandonedCallRate: 11, cash: 17 }
-  },
-  {
-    sheet: "Denver",
-    entity: "SpineOne",
-    monthCol: 19,
-    cols: { week: 1, days: 2, visitVolume: 3, newPatients: 6, establishedActual: 7, surgeryActual: 8, imagingActual: 9, callVolume: 10, abandonedCalls: 11, abandonedCallRate: 12, cash: 18 }
-  },
-  {
-    sheet: "Chicago",
-    entity: "MRO",
-    monthCol: 18,
-    cols: { week: 1, days: 2, visitVolume: 3, newPatients: 6, establishedActual: 7, surgeryActual: 8, callVolume: 9, abandonedCalls: 10, abandonedCallRate: 11, cash: 17 }
-  }
-];
+const REGION_SHEET_TO_ENTITY = {
+  LA: "MRO",
+  Portland: "NES",
+  Denver: "SpineOne",
+  Chicago: "LAOSS"
+};
 
-const CXNS_BLOCKS = [
-  { entity: "MRO", startCol: 1 },
-  { entity: "SpineOne", startCol: 9 },
-  { entity: "NES", startCol: 17 },
-  { entity: "LAOSS", startCol: 25 }
-];
+function normalizeMonthLabel(value) {
+  const raw = String(value || "").trim();
+  const map = {
+    Jan: "Jan",
+    January: "Jan",
+    Feb: "Feb",
+    February: "Feb",
+    Mar: "Mar",
+    March: "Mar",
+    Apr: "Apr",
+    April: "Apr",
+    May: "May",
+    Jun: "Jun",
+    June: "Jun",
+    Jul: "Jul",
+    July: "Jul",
+    Aug: "Aug",
+    August: "Aug",
+    Sep: "Sep",
+    Sept: "Sep",
+    September: "Sep",
+    Oct: "Oct",
+    October: "Oct",
+    Nov: "Nov",
+    November: "Nov",
+    Dec: "Dec",
+    December: "Dec"
+  };
+  return map[raw] || raw;
+}
 
-const PT_BLOCKS = [
-  { entity: "MRO", startCol: 1 },
-  { entity: "SpineOne", startCol: 11 },
-  { entity: "NES", startCol: 21 }
-];
+function monthToNumber(monthLabel) {
+  const map = {
+    Jan: "01",
+    Feb: "02",
+    Mar: "03",
+    Apr: "04",
+    May: "05",
+    Jun: "06",
+    Jul: "07",
+    Aug: "08",
+    Sep: "09",
+    Oct: "10",
+    Nov: "11",
+    Dec: "12"
+  };
+  return map[normalizeMonthLabel(monthLabel)] || "01";
+}
 
-function toNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
+function makeWeekEnding(monthLabel, weekIndex) {
+  const monthNum = monthToNumber(monthLabel);
+  const day = String(Math.min(28, weekIndex * 7)).padStart(2, "0");
+  return `2026-${monthNum}-${day}`;
+}
+
+function value(ws, cellAddress) {
+  return ws[cellAddress] ? ws[cellAddress].v : null;
+}
+
+function toNumber(v) {
+  const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
-function toPercent(value) {
-  const n = toNumber(value);
-  if (n === null) return null;
-  if (n >= 0 && n <= 1) return Number((n * 100).toFixed(4));
-  return n;
+function isMeaningfulRow(arr) {
+  return Array.isArray(arr) && arr.some((v) => v !== null && v !== undefined && String(v).trim() !== "");
 }
 
-function getCell(row, col1Based) {
-  return row[col1Based - 1];
+function sheetRows(ws) {
+  return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 }
 
-function getWeekEndingFromIsoWeek(year, weekNumber) {
-  const jan4 = new Date(Date.UTC(year, 0, 4));
-  const jan4Day = jan4.getUTCDay() || 7;
-  const mondayWeek1 = new Date(jan4);
-  mondayWeek1.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
-
-  const monday = new Date(mondayWeek1);
-  monday.setUTCDate(mondayWeek1.getUTCDate() + ((weekNumber - 1) * 7));
-
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
-
-  return sunday.toISOString().slice(0, 10);
+function safeText(v) {
+  return v == null ? "" : String(v).trim();
 }
 
-function getSheetRows(workbook, sheetName) {
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return [];
-  return XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    raw: true,
-    defval: null
+async function upsertRegionRecord(table, entity, weekEnding, values, source = "import") {
+  await table.upsertEntity({
+    partitionKey: entity,
+    rowKey: weekEnding,
+    entity,
+    weekEnding,
+    valuesJson: JSON.stringify(values),
+    source,
+    importedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   });
+}
+
+async function upsertSharedRecord(table, page, weekEnding, values, source = "import") {
+  await table.upsertEntity({
+    partitionKey: page,
+    rowKey: weekEnding,
+    page,
+    weekEnding,
+    valuesJson: JSON.stringify(values),
+    source,
+    importedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+}
+
+async function upsertReferenceRecord(table, kind, rowKey, values, source = "import") {
+  await table.upsertEntity({
+    partitionKey: kind,
+    rowKey,
+    kind,
+    valuesJson: JSON.stringify(values),
+    source,
+    importedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+}
+
+async function importRegionSheet(regionTable, ws, sheetName) {
+  const entity = REGION_SHEET_TO_ENTITY[sheetName];
+  if (!entity) return { imported: 0, entity: null };
+
+  const rows = sheetRows(ws);
+  let imported = 0;
+
+  for (let r = 6; r < rows.length; r += 1) {
+    const row = rows[r];
+    if (!isMeaningfulRow(row)) continue;
+
+    const weekLabel = safeText(row[0]);
+    const daysInPeriod = toNumber(row[1]);
+    const totalVisits = toNumber(row[2]);
+    const visitsPerDay = toNumber(row[3]);
+    const npPerDay = toNumber(row[4]);
+    const npActual = toNumber(row[5]);
+    const establishedActual = toNumber(row[6]);
+    const surgeryActual = toNumber(row[7]);
+    const totalCalls = toNumber(row[8]);
+    const abandonedCalls = toNumber(row[9]);
+    const abandonedRate = toNumber(row[10]);
+    const answeredToNpConversion = toNumber(row[11]);
+    const cashActual = toNumber(row[16]);
+    const monthTag = normalizeMonthLabel(row[17] || row[18]);
+
+    if (!weekLabel || !monthTag || daysInPeriod == null) continue;
+
+    const weekEnding = makeWeekEnding(monthTag, imported + 1);
+
+    const values = {
+      weekLabel,
+      monthTag,
+      daysInPeriod,
+      totalVisits,
+      visitsPerDay,
+      npPerDay,
+      npActual,
+      establishedActual,
+      surgeryActual,
+      totalCalls,
+      abandonedCalls,
+      abandonmentRate: abandonedRate != null ? abandonedRate * 100 : null,
+      answeredCallToNpConversion: answeredToNpConversion != null ? answeredToNpConversion * 100 : null,
+      cashActual
+    };
+
+    await upsertRegionRecord(regionTable, entity, weekEnding, values, "workbook-import");
+    imported += 1;
+  }
+
+  return { imported, entity };
+}
+
+async function importPtSheet(sharedTable, ws) {
+  const rows = sheetRows(ws);
+  let imported = 0;
+
+  for (let r = 12; r < rows.length; r += 1) {
+    const row = rows[r];
+    if (!isMeaningfulRow(row)) continue;
+
+    for (const block of [
+      { monthCol: 1, scheduledCol: 2, cancelCol: 3, noShowCol: 4, rescheduleCol: 5, unitsCol: 6 },
+      { monthCol: 11, scheduledCol: 12, cancelCol: 13, noShowCol: 14, rescheduleCol: 15, unitsCol: 16 },
+      { monthCol: 21, scheduledCol: 22, cancelCol: 23, noShowCol: 24, rescheduleCol: 25, unitsCol: 26 }
+    ]) {
+      const monthTag = normalizeMonthLabel(row[block.monthCol]);
+      const ptScheduledVisits = toNumber(row[block.scheduledCol]);
+      const ptCancellations = toNumber(row[block.cancelCol]);
+      const ptNoShows = toNumber(row[block.noShowCol]);
+      const ptReschedules = toNumber(row[block.rescheduleCol]);
+      const totalUnitsBilled = toNumber(row[block.unitsCol]);
+
+      if (!monthTag || ptScheduledVisits == null) continue;
+
+      const weekEnding = makeWeekEnding(monthTag, imported + 1);
+
+      const values = {
+        monthTag,
+        ptScheduledVisits,
+        ptCancellations,
+        ptNoShows,
+        ptReschedules,
+        totalUnitsBilled,
+        workingDaysInWeek: 5
+      };
+
+      await upsertSharedRecord(sharedTable, "PT", weekEnding, values, "workbook-import");
+      imported += 1;
+    }
+  }
+
+  return { imported };
+}
+
+async function importCxnsSheet(sharedTable, ws) {
+  const rows = sheetRows(ws);
+  let imported = 0;
+
+  for (let r = 12; r < rows.length; r += 1) {
+    const row = rows[r];
+    if (!isMeaningfulRow(row)) continue;
+
+    for (const block of [
+      { monthCol: 1, scheduledCol: 2, cancelCol: 3, noShowCol: 4, rescheduleCol: 5 },
+      { monthCol: 9, scheduledCol: 10, cancelCol: 11, noShowCol: 12, rescheduleCol: 13 },
+      { monthCol: 17, scheduledCol: 18, cancelCol: 19, noShowCol: 20, rescheduleCol: 21 },
+      { monthCol: 25, scheduledCol: 26, cancelCol: 27, noShowCol: 28, rescheduleCol: 29 }
+    ]) {
+      const monthTag = normalizeMonthLabel(row[block.monthCol]);
+      const scheduledAppts = toNumber(row[block.scheduledCol]);
+      const cancellations = toNumber(row[block.cancelCol]);
+      const noShows = toNumber(row[block.noShowCol]);
+      const reschedules = toNumber(row[block.rescheduleCol]);
+
+      if (!monthTag || scheduledAppts == null) continue;
+
+      const weekEnding = makeWeekEnding(monthTag, imported + 1);
+
+      const values = {
+        monthTag,
+        scheduledAppts,
+        cancellations,
+        noShows,
+        reschedules
+      };
+
+      await upsertSharedRecord(sharedTable, "CXNS", weekEnding, values, "workbook-import");
+      imported += 1;
+    }
+  }
+
+  return { imported };
+}
+
+async function importHolidaysSheet(referenceTable, ws) {
+  const rows = sheetRows(ws);
+  let imported = 0;
+
+  for (let r = 1; r < rows.length; r += 1) {
+    const row = rows[r];
+    const holidayDate = row[0];
+    const monthTag = normalizeMonthLabel(row[3]);
+    const workingDays = toNumber(row[4]);
+
+    if (!monthTag || workingDays == null) continue;
+
+    await upsertReferenceRecord(
+      referenceTable,
+      "holidays",
+      monthTag,
+      {
+        holidayDate,
+        monthTag,
+        workingDays
+      },
+      "workbook-import"
+    );
+
+    imported += 1;
+  }
+
+  return { imported };
 }
 
 module.exports = async function (context, req) {
   try {
-    const user = getUserFromRequest(req);
-    if (!user) {
-      context.res = { status: 401, body: { error: "Not authenticated" } };
-      return;
-    }
-
-    const email = getUserEmail(user);
-    const permission = await getPermissionByEmail(email);
-    if (!permission?.isAdmin) {
-      context.res = { status: 403, body: { error: "Admin access required" } };
-      return;
-    }
-
     const body = req.body || {};
     const fileBase64 = body.fileBase64;
-    const fileName = body.fileName || "workbook.xlsx";
 
     if (!fileBase64) {
-      context.res = { status: 400, body: { error: "fileBase64 is required" } };
+      context.res = {
+        status: 400,
+        body: { error: "Missing fileBase64." }
+      };
       return;
     }
 
-    const workbookBuffer = Buffer.from(fileBase64, "base64");
-    const workbook = XLSX.read(workbookBuffer, {
-      type: "buffer",
-      cellDates: true,
-      raw: true
-    });
+    const buffer = Buffer.from(fileBase64, "base64");
+    const workbook = XLSX.read(buffer, { type: "buffer" });
 
-    const weeklyInputsTable = getTableClient("WeeklyInputs");
-    const submissionStatusTable = getTableClient("SubmissionStatus");
+    const regionTable = getTableClient(REGION_TABLE);
+    const sharedTable = getTableClient(SHARED_TABLE);
+    const referenceTable = getTableClient(REFERENCE_TABLE);
 
-    const updatedBy = permission.displayName || getDisplayName(user);
-    const updatedAt = new Date().toISOString();
+    const results = {
+      regions: [],
+      shared: [],
+      reference: []
+    };
 
-    let weeklyInputCount = 0;
-    let submissionCount = 0;
-    const touchedWeeks = new Set();
-
-    async function upsertMetric(partitionKey, rowKey, entity, weekEnding, metricKey, value, sourceSheet, sourceType) {
-      if (value === null || value === undefined || value === "") return;
-
-      await weeklyInputsTable.upsertEntity({
-        partitionKey,
-        rowKey,
-        entity,
-        weekEnding,
-        section: sourceType,
-        metricKey,
-        label: metricKey,
-        value,
-        valueType: typeof value,
-        sourceSheet,
-        updatedBy,
-        updatedAt
-      }, "Merge");
-
-      weeklyInputCount += 1;
-      touchedWeeks.add(`${entity}|${weekEnding}`);
+    for (const sheetName of ["LA", "Portland", "Denver", "Chicago"]) {
+      const ws = workbook.Sheets[sheetName];
+      if (!ws) continue;
+      const result = await importRegionSheet(regionTable, ws, sheetName);
+      results.regions.push({ sheet: sheetName, ...result });
     }
 
-    async function upsertStatus(entity, weekEnding) {
-      const partitionKey = `${entity}|${weekEnding}`;
-
-      await submissionStatusTable.upsertEntity({
-        partitionKey,
-        rowKey: "STATUS",
-        entity,
-        weekEnding,
-        status: "Submitted",
-        submittedBy: updatedBy,
-        submittedAt: updatedAt,
-        updatedBy,
-        updatedAt
-      }, "Merge");
-
-      submissionCount += 1;
-      touchedWeeks.add(`${entity}|${weekEnding}`);
+    if (workbook.Sheets.PT) {
+      results.shared.push({
+        sheet: "PT",
+        page: "PT",
+        ...(await importPtSheet(sharedTable, workbook.Sheets.PT))
+      });
     }
 
-    for (const config of REGION_SHEETS) {
-      const rows = getSheetRows(workbook, config.sheet);
-
-      for (let i = 6; i < rows.length; i++) {
-        const row = rows[i];
-        const week = toNumber(getCell(row, config.cols.week));
-        const monthMarker = getCell(row, config.monthCol);
-
-        if (!week || !monthMarker) continue;
-
-        const weekEnding = getWeekEndingFromIsoWeek(YEAR, week);
-        const partitionKey = `${config.entity}|${weekEnding}`;
-
-        const values = {
-          visitVolume: toNumber(getCell(row, config.cols.visitVolume)),
-          newPatients: toNumber(getCell(row, config.cols.newPatients)),
-          establishedActual: toNumber(getCell(row, config.cols.establishedActual)),
-          surgeryActual: toNumber(getCell(row, config.cols.surgeryActual)),
-          callVolume: toNumber(getCell(row, config.cols.callVolume)),
-          abandonedCalls: toNumber(getCell(row, config.cols.abandonedCalls)),
-          abandonedCallRate: toPercent(getCell(row, config.cols.abandonedCallRate)),
-          daysInPeriod: toNumber(getCell(row, config.cols.days)),
-          cash: toNumber(getCell(row, config.cols.cash))
-        };
-
-        if (config.cols.imagingActual) {
-          values.imagingActual = toNumber(getCell(row, config.cols.imagingActual));
-        }
-
-        for (const [metricKey, value] of Object.entries(values)) {
-          await upsertMetric(
-            partitionKey,
-            `INPUT|${metricKey}`,
-            config.entity,
-            weekEnding,
-            metricKey,
-            value,
-            config.sheet,
-            "DynamicRegionInput"
-          );
-        }
-
-        await upsertStatus(config.entity, weekEnding);
-      }
+    if (workbook.Sheets.CXNS) {
+      results.shared.push({
+        sheet: "CXNS",
+        page: "CXNS",
+        ...(await importCxnsSheet(sharedTable, workbook.Sheets.CXNS))
+      });
     }
 
-    const cxnsRows = getSheetRows(workbook, "CXNS");
-    const cxnsSharedAgg = new Map();
-
-    for (const block of CXNS_BLOCKS) {
-      for (let i = 12; i < cxnsRows.length; i++) {
-        const row = cxnsRows[i];
-        const week = toNumber(getCell(row, block.startCol));
-        const monthMarker = getCell(row, block.startCol + 1);
-
-        if (!week || !monthMarker) continue;
-
-        const scheduledVisits = toNumber(getCell(row, block.startCol + 2));
-        const cancellations = toNumber(getCell(row, block.startCol + 3));
-        const noShows = toNumber(getCell(row, block.startCol + 4));
-        const rescheduledVisits = toNumber(getCell(row, block.startCol + 5));
-
-        const cancellationRate =
-          scheduledVisits && cancellations !== null
-            ? Number(((cancellations / Math.max(scheduledVisits, 1)) * 100).toFixed(4))
-            : null;
-
-        const noShowRate =
-          scheduledVisits && noShows !== null
-            ? Number(((noShows / Math.max(scheduledVisits, 1)) * 100).toFixed(4))
-            : null;
-
-        const weekEnding = getWeekEndingFromIsoWeek(YEAR, week);
-        const partitionKey = `${block.entity}|${weekEnding}`;
-
-        const regionValues = {
-          scheduledVisits,
-          cancellations,
-          noShows,
-          rescheduledVisits,
-          cancellationRate,
-          noShowRate
-        };
-
-        for (const [metricKey, value] of Object.entries(regionValues)) {
-          await upsertMetric(
-            partitionKey,
-            `INPUT|${metricKey}`,
-            block.entity,
-            weekEnding,
-            metricKey,
-            value,
-            "CXNS",
-            "DynamicRegionInput"
-          );
-        }
-
-        await upsertStatus(block.entity, weekEnding);
-
-        if (!cxnsSharedAgg.has(weekEnding)) {
-          cxnsSharedAgg.set(weekEnding, {
-            scheduledVisits: 0,
-            cancellations: 0,
-            noShows: 0,
-            rescheduledVisits: 0
-          });
-        }
-
-        const agg = cxnsSharedAgg.get(weekEnding);
-        agg.scheduledVisits += scheduledVisits || 0;
-        agg.cancellations += cancellations || 0;
-        agg.noShows += noShows || 0;
-        agg.rescheduledVisits += rescheduledVisits || 0;
-      }
-    }
-
-    for (const [weekEnding, agg] of cxnsSharedAgg.entries()) {
-      const partitionKey = `CXNS|${weekEnding}`;
-
-      const cancellationRate =
-        agg.scheduledVisits > 0
-          ? Number(((agg.cancellations / agg.scheduledVisits) * 100).toFixed(4))
-          : null;
-
-      const noShowRate =
-        agg.scheduledVisits > 0
-          ? Number(((agg.noShows / agg.scheduledVisits) * 100).toFixed(4))
-          : null;
-
-      const sharedValues = {
-        scheduledVisits: agg.scheduledVisits,
-        rescheduledVisits: agg.rescheduledVisits,
-        cancellationRate,
-        noShowRate
-      };
-
-      for (const [metricKey, value] of Object.entries(sharedValues)) {
-        await upsertMetric(
-          partitionKey,
-          `SHARED|${metricKey}`,
-          "CXNS",
-          weekEnding,
-          metricKey,
-          value,
-          "CXNS",
-          "SharedPageInput"
-        );
-      }
-
-      await upsertStatus("CXNS", weekEnding);
-    }
-
-    const ptRows = getSheetRows(workbook, "PT");
-    const ptSharedAgg = new Map();
-
-    for (const block of PT_BLOCKS) {
-      for (let i = 12; i < ptRows.length; i++) {
-        const row = ptRows[i];
-        const week = toNumber(getCell(row, block.startCol));
-        const monthMarker = getCell(row, block.startCol + 1);
-
-        if (!week || !monthMarker) continue;
-
-        const scheduledVisits = toNumber(getCell(row, block.startCol + 2));
-        const cancellations = toNumber(getCell(row, block.startCol + 3));
-        const noShows = toNumber(getCell(row, block.startCol + 4));
-        const rescheduledVisits = toNumber(getCell(row, block.startCol + 5));
-        const ptUnits = toNumber(getCell(row, block.startCol + 6));
-        const ptVisits = toNumber(getCell(row, block.startCol + 9));
-
-        const weekEnding = getWeekEndingFromIsoWeek(YEAR, week);
-
-        if (!ptSharedAgg.has(weekEnding)) {
-          ptSharedAgg.set(weekEnding, {
-            ptVisits: 0,
-            ptUnits: 0,
-            ptCancellations: 0,
-            ptNoShows: 0,
-            ptReschedules: 0,
-            ptScheduledVisits: 0
-          });
-        }
-
-        const agg = ptSharedAgg.get(weekEnding);
-        agg.ptVisits += ptVisits || 0;
-        agg.ptUnits += ptUnits || 0;
-        agg.ptCancellations += cancellations || 0;
-        agg.ptNoShows += noShows || 0;
-        agg.ptReschedules += rescheduledVisits || 0;
-        agg.ptScheduledVisits += scheduledVisits || 0;
-      }
-    }
-
-    for (const [weekEnding, agg] of ptSharedAgg.entries()) {
-      const partitionKey = `PT|${weekEnding}`;
-
-      for (const [metricKey, value] of Object.entries(agg)) {
-        await upsertMetric(
-          partitionKey,
-          `SHARED|${metricKey}`,
-          "PT",
-          weekEnding,
-          metricKey,
-          value,
-          "PT",
-          "SharedPageInput"
-        );
-      }
-
-      await upsertStatus("PT", weekEnding);
+    if (workbook.Sheets.Holidays) {
+      results.reference.push({
+        sheet: "Holidays",
+        kind: "holidays",
+        ...(await importHolidaysSheet(referenceTable, workbook.Sheets.Holidays))
+      });
     }
 
     context.res = {
       status: 200,
+      headers: { "Content-Type": "application/json" },
       body: {
         ok: true,
-        fileName,
-        sheets: workbook.SheetNames,
-        weeklyInputCount,
-        submissionCount,
-        touchedWeekCount: touchedWeeks.size,
-        message: "Workbook imported successfully"
+        message: "Workbook import completed.",
+        results
       }
     };
-  } catch (err) {
-    context.log.error(err);
+  } catch (error) {
+    context.log.error("import-excel failed", error);
     context.res = {
       status: 500,
-      body: { error: err.message }
+      body: {
+        error: "Workbook import failed.",
+        details: error.message
+      }
     };
   }
 };
