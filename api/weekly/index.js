@@ -1,32 +1,51 @@
-const { getUserInfo } = require('shared/auth');
-const { hasPermission } = require('shared/permissions');
-const { getWeeklyData } = require('shared/table');
+const { getTableClient } = require("../shared/table");
+
+const TABLE_NAME = "WeeklyRegionData";
 
 module.exports = async function (context, req) {
-  context.log('Weekly data function processed a request.');
-
-  const userInfo = getUserInfo(req);
-  const entity = req.query.entity;
-  const weekEnding = req.query.weekEnding;
-
-  if (!entity || !weekEnding) {
-    context.res = { status: 400, body: 'Missing entity or weekEnding query parameters.' };
-    return;
-  }
-
-  if (!hasPermission(userInfo, 'canViewRegion', entity)) {
-    context.res = { status: 403, body: 'Forbidden' };
-    return;
-  }
-
   try {
-    const weeklyData = await getWeeklyData(entity, weekEnding);
+    const entity = String(req.query.entity || "").trim();
+    const weekEnding = String(req.query.weekEnding || "").trim();
+
+    if (!entity || !weekEnding) {
+      context.res = {
+        status: 400,
+        body: { error: "Missing entity or weekEnding." }
+      };
+      return;
+    }
+
+    const table = getTableClient(TABLE_NAME);
+
+    let record = null;
+    try {
+      record = await table.getEntity(entity, weekEnding);
+    } catch (err) {
+      if (err.statusCode !== 404) {
+        throw err;
+      }
+    }
+
     context.res = {
       status: 200,
-      body: weeklyData,
+      headers: { "Content-Type": "application/json" },
+      body: {
+        entity,
+        weekEnding,
+        values: record?.valuesJson ? JSON.parse(record.valuesJson) : {},
+        source: record?.source || "app",
+        importedAt: record?.importedAt || null,
+        updatedAt: record?.updatedAt || null
+      }
     };
   } catch (error) {
-    context.log.error('Failed to get weekly data:', error);
-    context.res = { status: 500, body: 'Error fetching weekly data.' };
+    context.log.error("weekly GET failed", error);
+    context.res = {
+      status: 500,
+      body: {
+        error: "Failed to load weekly region data.",
+        details: error.message
+      }
+    };
   }
 };
