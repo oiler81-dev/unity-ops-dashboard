@@ -27,13 +27,15 @@ export async function apiPost(url, body) {
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
+
     if (!response.ok) {
       console.error(`API POST failed for ${url}: Status ${response.status}`);
       const errBody = await response.json().catch(() => ({ error: "Request failed" }));
       return errBody;
     }
+
     return await response.json();
   } catch (err) {
     console.error(`Network error during API POST for ${url}:`, err);
@@ -46,7 +48,7 @@ export async function apiPost(url, body) {
  */
 export function getDefaultWeekEnding() {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // Sunday = 0
+  const dayOfWeek = today.getDay();
   const date = new Date(today);
   date.setDate(today.getDate() - dayOfWeek);
   return date.toISOString().split("T")[0];
@@ -62,7 +64,7 @@ export function formatDate(dateString) {
   return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
-    day: "numeric",
+    day: "numeric"
   });
 }
 
@@ -74,43 +76,31 @@ export function escapeHtml(input) {
   const s = String(input ?? "");
   return s
     .replace(/&/g, "&amp;")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
-/**
- * Escape attributes (same for our usage)
- * @param {string} str
- */
 export function escapeAttr(str) {
   return escapeHtml(str);
 }
 
-/**
- * Simple escape for use inside attribute selectors
- * @param {string} value
- */
 export function cssEscape(value) {
   return String(value ?? "").replace(/["'\\]/g, "\\$&");
 }
 
-/**
- * Render KPI cards into #dashboardCards
- * @param {Array} kpis
- */
 export function renderKpiCards(kpis) {
   const container = document.getElementById("dashboardCards");
+  if (!container) return;
+
   const list = Array.isArray(kpis) && kpis.length
     ? kpis
     : [
-        { label: "Visit Volume", value: "—", statusColor: "yellow", meta: "", status: "—" },
-        { label: "Call Volume", value: "—", statusColor: "yellow", meta: "", status: "—" },
-        { label: "No Show Rate", value: "—", statusColor: "yellow", meta: "", status: "—" }
+        { label: "Total Visits", value: "—", statusColor: "yellow", meta: "" },
+        { label: "Visits / Day", value: "—", statusColor: "yellow", meta: "" },
+        { label: "Abandonment Rate", value: "—", statusColor: "yellow", meta: "" }
       ];
-
-  if (!container) return;
 
   container.innerHTML = list.map((kpi) => `
     <div class="kpi-card">
@@ -122,10 +112,6 @@ export function renderKpiCards(kpis) {
   `).join("");
 }
 
-/**
- * Fatal error handler that shows a simple error page
- * @param {Error} err
- */
 export function handleFatalError(err) {
   console.error("FATAL ERROR:", err);
   const body = document.querySelector("body");
@@ -138,12 +124,7 @@ export function handleFatalError(err) {
   }
 }
 
-/* Utility placeholders used by the app */
-
-/**
- * Return a CSS class for change values
- */
-export function comparisonClass(change, key) {
+export function comparisonClass(change) {
   if (typeof change === "number") {
     if (change > 0) return "positive";
     if (change < 0) return "negative";
@@ -151,18 +132,21 @@ export function comparisonClass(change, key) {
   return "neutral";
 }
 
-/**
- * Simple formatter helper for change values (calls formatByType if available)
- */
 export function formatChange(change, format) {
   const sign = typeof change === "number" && change > 0 ? "+" : "";
-  const str = (typeof formatByType === "function") ? formatByType(change, format) : String(change ?? "0");
-  return sign + str;
+  if (change == null || change === "") return "—";
+
+  if (format === "percent1") {
+    return `${sign}${Number(change).toFixed(1)}%`;
+  }
+
+  if (format === "whole") {
+    return `${sign}${Math.round(Number(change)).toLocaleString()}`;
+  }
+
+  return `${sign}${Number(change).toFixed(2)}`;
 }
 
-/**
- * Minimal render for summary mini card
- */
 export function renderSummaryMiniCard(summary) {
   return `
     <div class="summary-mini-card">
@@ -173,36 +157,59 @@ export function renderSummaryMiniCard(summary) {
   `;
 }
 
-/**
- * Collect region form values (placeholder)
- */
+function parseNumericInputValue(value) {
+  if (value == null || value === "") return "";
+  const n = Number(String(value).replace(/,/g, "").trim());
+  return Number.isFinite(n) ? n : value;
+}
+
+function collectFieldValues() {
+  const fields = Array.from(document.querySelectorAll("[data-key]"));
+  const values = {};
+
+  for (const el of fields) {
+    if (!el.matches("input, textarea, select")) continue;
+
+    const key = el.dataset.key;
+    if (!key) continue;
+
+    values[key] = parseNumericInputValue(el.value);
+  }
+
+  return values;
+}
+
+function detectCurrentEntity() {
+  const assigned = document.getElementById("assignedEntityText")?.textContent?.trim();
+  if (assigned) return assigned;
+
+  const activeRegion = document.querySelector('.nav-link.active[data-route="region"]');
+  return activeRegion?.dataset?.entity || "LAOSS";
+}
+
+function detectCurrentSharedPage() {
+  const activeShared = document.querySelector('.nav-link.active[data-route="shared"]');
+  return activeShared?.dataset?.page || "PT";
+}
+
 export function collectRegionFormValues() {
-  console.log("Collecting Region Form Values (placeholder)...");
+  const weekEnding =
+    document.getElementById("weekEndingSelect")?.value || getDefaultWeekEnding();
+
   return {
-    entity: "LAOSS",
-    weekEnding: getDefaultWeekEnding(),
-    inputs: {},
-    narrative: {}
+    entity: detectCurrentEntity(),
+    weekEnding,
+    values: collectFieldValues()
   };
 }
 
-/**
- * Collect shared form values (placeholder)
- */
 export function collectSharedFormValues() {
-  console.log("Collecting Shared Form Values (placeholder)...");
-  return {
-    page: "Capacity",
-    weekEnding: getDefaultWeekEnding(),
-    inputs: {}
-  };
-}
+  const weekEnding =
+    document.getElementById("weekEndingSelect")?.value || getDefaultWeekEnding();
 
-/* Fallback formatByType to avoid runtime errors if not imported elsewhere */
-export function formatByType(value, fmt) {
-  if (value == null) return "—";
-  if (fmt === "percent") return `${Number(value).toFixed(1)}%`;
-  if (fmt === "integer") return String(Math.round(Number(value) || 0));
-  if (fmt === "decimal2") return Number(value).toFixed(2);
-  return String(value);
+  return {
+    page: detectCurrentSharedPage(),
+    weekEnding,
+    values: collectFieldValues()
+  };
 }
