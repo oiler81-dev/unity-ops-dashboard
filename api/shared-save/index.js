@@ -1,35 +1,52 @@
-const { getUserInfo } = require('shared/auth');
-const { hasPermission } = require('shared/permissions');
-const { saveSharedPageData } = require('shared/sharedPageLogic');
-const { logAuditEvent } = require('shared/audit');
+const { getTableClient } = require("../shared/table");
+
+const TABLE_NAME = "SharedPageData";
 
 module.exports = async function (context, req) {
-    context.log('Shared save function processed a request.');
+  try {
+    const body = req.body || {};
+    const page = String(body.page || "").trim();
+    const weekEnding = String(body.weekEnding || "").trim();
+    const values = body.values && typeof body.values === "object" ? body.values : {};
 
-    const userInfo = getUserInfo(req);
-    const data = req.body;
-    const { page, weekEnding } = data;
-
-    if (!page || !weekEnding || !data.inputs) {
-        context.res = { status: 400, body: 'Invalid payload for shared page save.' };
-        return;
+    if (!page || !weekEnding) {
+      context.res = {
+        status: 400,
+        body: { error: "Missing page or weekEnding." }
+      };
+      return;
     }
 
-    if (!hasPermission(userInfo, 'canEditSharedPage', page)) {
-        context.res = { status: 403, body: 'Forbidden' };
-        return;
-    }
+    const table = getTableClient(TABLE_NAME);
 
-    try {
-        const result = await saveSharedPageData(data, userInfo);
-        await logAuditEvent('shared-save', userInfo, { page, weekEnding, status: result.status });
+    await table.upsertEntity({
+      partitionKey: page,
+      rowKey: weekEnding,
+      page,
+      weekEnding,
+      valuesJson: JSON.stringify(values),
+      source: "app",
+      updatedAt: new Date().toISOString()
+    });
 
-        context.res = {
-            status: 200,
-            body: result,
-        };
-    } catch (error) {
-        context.log.error('Failed to save shared data:', error);
-        context.res = { status: 500, body: 'Error saving shared data.' };
-    }
+    context.res = {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+      body: {
+        ok: true,
+        status: "Draft",
+        page,
+        weekEnding
+      }
+    };
+  } catch (error) {
+    context.log.error("shared-save failed", error);
+    context.res = {
+      status: 500,
+      body: {
+        error: "Failed to save shared page data.",
+        details: error.message
+      }
+    };
+  }
 };
