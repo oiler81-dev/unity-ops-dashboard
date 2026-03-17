@@ -12,12 +12,13 @@ function decodeClientPrincipal(headerValue) {
 function inferEntityFromEmail(email) {
   const lower = String(email || "").toLowerCase();
 
-  if (!lower) return "LAOSS";
+  if (!lower) return null;
   if (lower.includes("nes")) return "NES";
   if (lower.includes("spine")) return "SpineOne";
   if (lower.includes("mro")) return "MRO";
+  if (lower.includes("la") || lower.includes("laoss")) return "LAOSS";
 
-  return "LAOSS";
+  return null;
 }
 
 function getUserInfo(req) {
@@ -30,12 +31,14 @@ function getUserInfo(req) {
       userId: "",
       identityProvider: "",
       roles: ["anonymous"],
-      entity: "LAOSS"
+      entity: null,
+      isAdmin: false
     };
   }
 
   const userDetails = principal.userDetails || "";
-  const roles = Array.isArray(principal.userRoles) ? principal.userRoles : ["authenticated"];
+  const roles = Array.isArray(principal.userRoles) ? principal.userRoles : [];
+  const isAdmin = roles.includes("admin");
 
   return {
     authenticated: true,
@@ -43,7 +46,8 @@ function getUserInfo(req) {
     userId: principal.userId || "",
     identityProvider: principal.identityProvider || "",
     roles,
-    entity: inferEntityFromEmail(userDetails)
+    entity: isAdmin ? null : inferEntityFromEmail(userDetails),
+    isAdmin
   };
 }
 
