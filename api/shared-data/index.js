@@ -1,45 +1,51 @@
-const { requireAuthorizedUser } = require("../shared");
 const { getTableClient } = require("../shared/table");
-const { buildSharedKpis } = require("../shared/sharedPageLogic");
+
+const TABLE_NAME = "SharedPageData";
 
 module.exports = async function (context, req) {
   try {
-    const auth = await requireAuthorizedUser(req);
-    if (!auth.ok) {
-      context.res = { status: auth.status, body: auth.body };
+    const page = String(req.query.page || "").trim();
+    const weekEnding = String(req.query.weekEnding || "").trim();
+
+    if (!page || !weekEnding) {
+      context.res = {
+        status: 400,
+        body: { error: "Missing page or weekEnding." }
+      };
       return;
     }
 
-    const page = req.query.page;
-    const weekEnding = req.query.weekEnding || new Date().toISOString().slice(0, 10);
+    const table = getTableClient(TABLE_NAME);
 
-    if (!page) {
-      context.res = { status: 400, body: { error: "Missing page" } };
-      return;
-    }
-
-    const partitionKey = `${page}|${weekEnding}`;
-    const inputsTable = getTableClient("WeeklyInputs");
-
-    const rows = await inputsTable.listByPartition(partitionKey);
-    const inputs = {};
-
-    for (const row of rows) {
-      if (row.metricKey) inputs[row.metricKey] = row.value;
+    let record = null;
+    try {
+      record = await table.getEntity(page, weekEnding);
+    } catch (err) {
+      if (err.statusCode !== 404) {
+        throw err;
+      }
     }
 
     context.res = {
       status: 200,
+      headers: { "Content-Type": "application/json" },
       body: {
         page,
         weekEnding,
-        status: "Draft",
-        inputs,
-        kpis: buildSharedKpis(page, inputs)
+        values: record?.valuesJson ? JSON.parse(record.valuesJson) : {},
+        source: record?.source || "app",
+        importedAt: record?.importedAt || null,
+        updatedAt: record?.updatedAt || null
       }
     };
-  } catch (err) {
-    context.log.error(err);
-    context.res = { status: 500, body: { error: err.message } };
+  } catch (error) {
+    context.log.error("shared-data failed", error);
+    context.res = {
+      status: 500,
+      body: {
+        error: "Failed to load shared page data.",
+        details: error.message
+      }
+    };
   }
 };
