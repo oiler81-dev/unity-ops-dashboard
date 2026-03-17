@@ -1,5 +1,3 @@
-// helpers.js - full file to copy/paste
-
 /**
  * Safe GET wrapper
  * @param {string} url
@@ -75,11 +73,11 @@ export function formatDate(dateString) {
 export function escapeHtml(input) {
   const s = String(input ?? "");
   return s
-    .replace(/&/g, "&")
+    .replace(/&/g, "&amp;")
     .replace(/</g, "<")
     .replace(/>/g, ">")
-    .replace(/"/g, """)
-    .replace(/'/g, "'");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**
@@ -124,7 +122,6 @@ export function comparisonClass(change, key) {
  */
 export function formatChange(change, format) {
   const sign = typeof change === "number" && change > 0 ? "+" : "";
-  // If formatByType exists globally or will be imported elsewhere, this will still work.
   const str = (typeof formatByType === "function") ? formatByType(change, format) : String(change ?? "0");
   return sign + str;
 }
@@ -143,7 +140,7 @@ export function renderSummaryMiniCard(summary) {
 }
 
 /**
- * Collect region form values (placeholder - app expects shape)
+ * Collect region form values (placeholder)
  */
 export function collectRegionFormValues() {
   console.log("Collecting Region Form Values (placeholder)...");
@@ -167,9 +164,7 @@ export function collectSharedFormValues() {
   };
 }
 
-/* Export compatibility: if formatByType is needed by helpers, we can provide a passthrough default.
-   In your real app this is likely implemented in calculations.js and imported there; providing a safe
-   fallback prevents runtime errors if someone calls it before that module is loaded. */
+/* Fallback formatByType to avoid runtime errors if not imported elsewhere */
 export function formatByType(value, fmt) {
   if (value == null) return "—";
   if (fmt === "percent") return `${Number(value).toFixed(1)}%`;
