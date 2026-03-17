@@ -1,8 +1,9 @@
+// helpers.js - full file to copy/paste
+
 /**
- * A safe wrapper for the Fetch API for GET requests.
- * @param {string} url The API endpoint to call.
- * @param {any} defaultValue The value to return if the fetch fails.
- * @returns {Promise<any>}
+ * Safe GET wrapper
+ * @param {string} url
+ * @param {any} defaultValue
  */
 export async function safeApiGet(url, defaultValue) {
   try {
@@ -19,10 +20,9 @@ export async function safeApiGet(url, defaultValue) {
 }
 
 /**
- * A wrapper for the Fetch API for POST requests.
- * @param {string} url The API endpoint to call.
- * @param {object} body The JSON payload to send.
- * @returns {Promise<any>}
+ * Safe POST wrapper
+ * @param {string} url
+ * @param {object} body
  */
 export async function apiPost(url, body) {
   try {
@@ -33,7 +33,6 @@ export async function apiPost(url, body) {
     });
     if (!response.ok) {
       console.error(`API POST failed for ${url}: Status ${response.status}`);
-      // Try to return error details from the API if possible
       const errBody = await response.json().catch(() => ({ error: "Request failed" }));
       return errBody;
     }
@@ -45,25 +44,23 @@ export async function apiPost(url, body) {
 }
 
 /**
- * Gets the most recent Sunday as a 'YYYY-MM-DD' string.
- * @returns {string}
+ * Get most recent Sunday as YYYY-MM-DD
  */
 export function getDefaultWeekEnding() {
   const today = new Date();
-  const dayOfWeek = today.getDay(); // Sunday is 0, Monday is 1, etc.
+  const dayOfWeek = today.getDay(); // Sunday = 0
   const date = new Date(today);
   date.setDate(today.getDate() - dayOfWeek);
   return date.toISOString().split("T")[0];
 }
 
 /**
- * Formats a 'YYYY-MM-DD' string into a more readable 'Month Day, Year' format.
+ * Format YYYY-MM-DD to readable string
  * @param {string} dateString
- * @returns {string}
  */
 export function formatDate(dateString) {
   if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return "N/A";
-  const date = new Date(`${dateString}T12:00:00Z`); // Use noon UTC to avoid timezone issues
+  const date = new Date(`${dateString}T12:00:00Z`);
   return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
@@ -72,12 +69,11 @@ export function formatDate(dateString) {
 }
 
 /**
- * Escapes HTML to prevent XSS attacks.
- * @param {string} str
- * @returns {string}
+ * Escape HTML to prevent XSS
+ * @param {string} input
  */
-export function escapeHtml(str) {
-  const s = String(str || "");
+export function escapeHtml(input) {
+  const s = String(input ?? "");
   return s
     .replace(/&/g, "&")
     .replace(/</g, "<")
@@ -87,16 +83,15 @@ export function escapeHtml(str) {
 }
 
 /**
- * Escapes attributes for safe use in HTML tags.
+ * Escape attributes (same for our usage)
  * @param {string} str
- * @returns {string}
  */
 export function escapeAttr(str) {
-  return escapeHtml(str); // For this app's purposes, the same escaping is sufficient.
+  return escapeHtml(str);
 }
 
 /**
- * A placeholder for a fatal error handler.
+ * Fatal error handler that shows a simple error page
  * @param {Error} err
  */
 export function handleFatalError(err) {
@@ -106,24 +101,37 @@ export function handleFatalError(err) {
     body.innerHTML = `<div class="fatal-error">
       <h1>Application Error</h1>
       <p>A critical error occurred and the application cannot continue.</p>
-      <pre>${escapeHtml(err.stack)}</pre>
+      <pre>${escapeHtml(err && err.stack ? err.stack : String(err))}</pre>
     </div>`;
   }
 }
 
-// --- Placeholders for other missing functions to prevent errors ---
+/* Utility placeholders used by the app */
 
+/**
+ * Return a CSS class for change values
+ */
 export function comparisonClass(change, key) {
-  if (change > 0) return "positive";
-  if (change < 0) return "negative";
+  if (typeof change === "number") {
+    if (change > 0) return "positive";
+    if (change < 0) return "negative";
+  }
   return "neutral";
 }
 
+/**
+ * Simple formatter helper for change values (calls formatByType if available)
+ */
 export function formatChange(change, format) {
-  const sign = change > 0 ? "+" : "";
-  return sign + formatByType(change, format);
+  const sign = typeof change === "number" && change > 0 ? "+" : "";
+  // If formatByType exists globally or will be imported elsewhere, this will still work.
+  const str = (typeof formatByType === "function") ? formatByType(change, format) : String(change ?? "0");
+  return sign + str;
 }
 
+/**
+ * Minimal render for summary mini card
+ */
 export function renderSummaryMiniCard(summary) {
   return `
     <div class="summary-mini-card">
@@ -134,22 +142,38 @@ export function renderSummaryMiniCard(summary) {
   `;
 }
 
+/**
+ * Collect region form values (placeholder - app expects shape)
+ */
 export function collectRegionFormValues() {
-  // In a real implementation, this would gather all form inputs.
-  console.log("Collecting Region Form Values...");
+  console.log("Collecting Region Form Values (placeholder)...");
   return {
     entity: "LAOSS",
-    weekEnding: "2026-03-15",
+    weekEnding: getDefaultWeekEnding(),
     inputs: {},
     narrative: {}
   };
 }
 
+/**
+ * Collect shared form values (placeholder)
+ */
 export function collectSharedFormValues() {
-  console.log("Collecting Shared Form Values...");
+  console.log("Collecting Shared Form Values (placeholder)...");
   return {
     page: "Capacity",
-    weekEnding: "2026-03-15",
+    weekEnding: getDefaultWeekEnding(),
     inputs: {}
   };
+}
+
+/* Export compatibility: if formatByType is needed by helpers, we can provide a passthrough default.
+   In your real app this is likely implemented in calculations.js and imported there; providing a safe
+   fallback prevents runtime errors if someone calls it before that module is loaded. */
+export function formatByType(value, fmt) {
+  if (value == null) return "—";
+  if (fmt === "percent") return `${Number(value).toFixed(1)}%`;
+  if (fmt === "integer") return String(Math.round(Number(value) || 0));
+  if (fmt === "decimal2") return Number(value).toFixed(2);
+  return String(value);
 }
