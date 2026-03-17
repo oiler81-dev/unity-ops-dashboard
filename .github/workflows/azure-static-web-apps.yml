@@ -22,7 +22,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
           ###### Repository/Build Configurations ######
-          app_location: "/app"
-          output_location: "" 
-          # No api_location is needed
+          app_location: "/app"        # your app folder
+          api_location: ""           # explicitly ignore api folder
+          output_location: ""        # app files are already static in /app
           ###### End of Repository/Build Configurations ######
