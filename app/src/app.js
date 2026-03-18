@@ -91,19 +91,32 @@ function getNavContainer() {
     document.querySelector(".sidebar-nav") ||
     document.querySelector(".nav-list") ||
     document.querySelector(".nav-links") ||
-    document.querySelector(".dashboard-sidebar")
+    document.querySelector(".dashboard-sidebar") ||
+    document.querySelector(".sidebar")
   );
 }
 
+function uniqueRoles(input) {
+  return Array.from(new Set((Array.isArray(input) ? input : []).filter(Boolean)));
+}
+
+function deriveRole(roles) {
+  const normalized = uniqueRoles(roles).map((r) => String(r).toLowerCase());
+
+  if (normalized.includes("admin")) return "admin";
+  if (normalized.includes("authenticated")) return "user";
+  return "guest";
+}
+
 /* =========================
-   AUTH
+   AUTH NORMALIZERS
 ========================= */
 
 function normalizeApiMe(result) {
   if (!result || !result.user) return null;
 
   const user = result.user;
-  const roles = Array.isArray(user.roles) ? user.roles : [];
+  const roles = uniqueRoles(user.roles);
 
   return {
     authenticated: !!user.authenticated,
@@ -116,52 +129,70 @@ function normalizeApiMe(result) {
 function normalizeSwaAuth(result) {
   if (!result) return null;
 
-  // Azure Static Web Apps shape:
-  // { clientPrincipal: { userDetails, userRoles, ... } }
   if (result.clientPrincipal) {
     const cp = result.clientPrincipal;
     return {
       authenticated: !!cp.userDetails,
       userDetails: cp.userDetails || "",
-      roles: Array.isArray(cp.userRoles) ? cp.userRoles : [],
+      roles: uniqueRoles(cp.userRoles),
       entity: ""
     };
   }
 
-  // Defensive fallback in case some other shape appears
-  if (Array.isArray(result) && result.length > 0) {
-    const first = result[0];
-    if (first && first.clientPrincipal) {
-      const cp = first.clientPrincipal;
-      return {
-        authenticated: !!cp.userDetails,
-        userDetails: cp.userDetails || "",
-        roles: Array.isArray(cp.userRoles) ? cp.userRoles : [],
-        entity: ""
-      };
-    }
+  if (Array.isArray(result) && result.length > 0 && result[0]?.clientPrincipal) {
+    const cp = result[0].clientPrincipal;
+    return {
+      authenticated: !!cp.userDetails,
+      userDetails: cp.userDetails || "",
+      roles: uniqueRoles(cp.userRoles),
+      entity: ""
+    };
   }
 
   return null;
 }
 
-function deriveRole(roles) {
-  if (!Array.isArray(roles)) return "guest";
-  if (roles.includes("admin")) return "admin";
-  if (roles.includes("authenticated")) return "user";
-  return "guest";
+function mergeAuth(apiAuth, swaAuth) {
+  const apiRoles = uniqueRoles(apiAuth?.roles);
+  const swaRoles = uniqueRoles(swaAuth?.roles);
+  const mergedRoles = uniqueRoles([...apiRoles, ...swaRoles]);
+
+  const authenticated =
+    !!apiAuth?.authenticated || !!swaAuth?.authenticated;
+
+  const userDetails =
+    swaAuth?.userDetails ||
+    apiAuth?.userDetails ||
+    "";
+
+  const role = deriveRole(mergedRoles);
+
+  const entity =
+    role === "admin"
+      ? "Admin"
+      : (apiAuth?.entity || swaAuth?.entity || "LAOSS");
+
+  return {
+    authenticated,
+    userDetails,
+    roles: mergedRoles,
+    role,
+    entity
+  };
 }
+
+/* =========================
+   AUTH
+========================= */
 
 async function resolveAuth() {
   setLoadingHeader();
 
-  let auth = normalizeApiMe(await safeApiGet("/api/me", null));
+  const apiAuth = normalizeApiMe(await safeApiGet("/api/me", null));
+  const swaAuth = normalizeSwaAuth(await safeApiGet("/.auth/me", null));
+  const auth = mergeAuth(apiAuth, swaAuth);
 
-  if (!auth || !auth.authenticated) {
-    auth = normalizeSwaAuth(await safeApiGet("/.auth/me", null));
-  }
-
-  if (!auth || !auth.authenticated) {
+  if (!auth.authenticated) {
     state.authenticated = false;
     state.userDetails = "";
     state.role = "guest";
@@ -173,9 +204,9 @@ async function resolveAuth() {
 
   state.authenticated = true;
   state.userDetails = auth.userDetails || "Unknown User";
-  state.role = deriveRole(auth.roles);
-  state.entity = state.role === "admin" ? "All Regions" : (auth.entity || "LAOSS");
-  state.currentRegion = state.role === "admin" ? "LAOSS" : (auth.entity || "LAOSS");
+  state.role = auth.role;
+  state.entity = auth.entity;
+  state.currentRegion = auth.role === "admin" ? "LAOSS" : auth.entity;
 
   syncAuthUi();
 }
@@ -412,7 +443,7 @@ async function loadCurrentView() {
 async function saveRegion() {
   const payload = collectRegionFormValues();
 
-  if (!payload.entity || payload.entity === "Loading..." || payload.entity === "None") {
+  if (!payload.entity || payload.entity === "Loading..." || payload.entity === "None" || payload.entity === "Admin") {
     payload.entity = state.currentRegion;
   }
 
@@ -521,7 +552,7 @@ function initHeroButtons() {
   if (goToRegionBtn) {
     goToRegionBtn.addEventListener("click", async () => {
       state.currentRoute = "region";
-      state.currentRegion = isAdmin() ? "LAOSS" : (state.entity === "All Regions" ? "LAOSS" : state.entity);
+      state.currentRegion = isAdmin() ? "LAOSS" : state.entity;
 
       const regionLink = Array.from(document.querySelectorAll(".nav-link")).find((el) => {
         const text = (el.textContent || "").trim();
