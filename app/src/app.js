@@ -9,10 +9,6 @@ import {
   renderKpiCards
 } from "./helpers.js";
 
-/* =========================
-   STATE
-========================= */
-
 const state = {
   authenticated: false,
   userDetails: "",
@@ -25,65 +21,11 @@ const state = {
   currentSharedPage: "PT"
 };
 
-/* =========================
-   HELPERS
-========================= */
-
 const $ = (id) => document.getElementById(id);
 
 function setText(id, value) {
   const el = $(id);
   if (el) el.textContent = value;
-}
-
-function setTextBySelectors(selectors, value) {
-  selectors.forEach((selector) => {
-    const el = document.querySelector(selector);
-    if (el) el.textContent = value;
-  });
-}
-
-function setSignedInUserText(value) {
-  setText("signedInUserText", value);
-  setText("signedInAsText", value);
-  setTextBySelectors(
-    [
-      "#signedInUserText",
-      "#signedInAsText",
-      "[data-auth-user]",
-      ".signed-in-user",
-      ".auth-user"
-    ],
-    value
-  );
-}
-
-function setAssignedEntityText(value) {
-  setText("assignedEntityText", value);
-  setText("assignedEntityValue", value);
-  setTextBySelectors(
-    [
-      "#assignedEntityText",
-      "#assignedEntityValue",
-      "[data-assigned-entity]",
-      ".assigned-entity"
-    ],
-    value
-  );
-}
-
-function setRoleText(value) {
-  setText("roleText", value);
-  setText("roleValue", value);
-  setTextBySelectors(
-    [
-      "#roleText",
-      "#roleValue",
-      "[data-role-text]",
-      ".role-text"
-    ],
-    value
-  );
 }
 
 function show(el) {
@@ -102,59 +44,65 @@ function isAdmin() {
   return state.isAdmin === true || state.role === "admin";
 }
 
+function getSignInEl() {
+  return $("signInButton");
+}
+
+function getSignOutEl() {
+  return $("signOutButton");
+}
+
+function getNavContainer() {
+  return $("dashboardNav");
+}
+
+function setSignedInUserText(value) {
+  setText("signedInUserText", value);
+}
+
+function setAssignedEntityText(value) {
+  setText("assignedEntityText", value);
+}
+
+function setRoleText(value) {
+  setText("roleText", value);
+}
+
 function setLoadingHeader() {
   setSignedInUserText("Loading...");
   setAssignedEntityText("Loading...");
   setRoleText("Loading...");
 }
 
-function fillFormValues(values) {
-  const fields = document.querySelectorAll("[data-key]");
-  fields.forEach((el) => {
-    const key = el.dataset.key;
-    if (!key) return;
-    el.value = values[key] ?? "";
-  });
+function setViewHeader(title, subtitle) {
+  setText("dashboardTitle", title);
+  setText("dashboardSubtitle", subtitle);
 }
 
-function getSignInEl() {
-  return (
-    $("signInButton") ||
-    Array.from(document.querySelectorAll("a,button")).find(
-      (el) => (el.textContent || "").trim().toLowerCase() === "sign in"
-    )
-  );
+function setStatusPanelText(value) {
+  setText("dashboardStatusPanel", value);
 }
 
-function getSignOutEl() {
-  return (
-    $("signOutButton") ||
-    Array.from(document.querySelectorAll("a,button")).find(
-      (el) => (el.textContent || "").trim().toLowerCase() === "sign out"
-    )
-  );
+function unique(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
 }
 
-function getNavContainer() {
-  return (
-    $("dashboardNav") ||
-    document.querySelector(".dashboard-nav") ||
-    document.querySelector(".sidebar-nav") ||
-    document.querySelector(".nav-list") ||
-    document.querySelector(".nav-links") ||
-    document.querySelector(".dashboard-sidebar") ||
-    document.querySelector(".sidebar")
-  );
-}
+function normalizeApiMe(result) {
+  if (!result || !result.authenticated) return null;
 
-/* =========================
-   AUTH
-========================= */
+  return {
+    authenticated: !!result.authenticated,
+    userDetails: result.userDetails || "",
+    roles: unique(result.roles),
+    entity: result.entity || "",
+    isAdmin: !!result.isAdmin
+  };
+}
 
 async function resolveAuth() {
   setLoadingHeader();
 
-  const me = await safeApiGet("/api/me", null);
+  const me = normalizeApiMe(await safeApiGet("/api/me", null));
 
   if (!me || !me.authenticated) {
     state.authenticated = false;
@@ -172,7 +120,7 @@ async function resolveAuth() {
   state.isAdmin = !!me.isAdmin;
   state.role = state.isAdmin ? "admin" : "user";
   state.entity = state.isAdmin ? "Admin" : (me.entity || "LAOSS");
-  state.currentRegion = state.isAdmin ? "LAOSS" : state.entity;
+  state.currentRegion = state.isAdmin ? "LAOSS" : (me.entity || "LAOSS");
 
   syncAuthUi();
 }
@@ -188,12 +136,6 @@ function syncAuthUi() {
 
     hide(signInEl);
     show(signOutEl);
-
-    if (signOutEl && !signOutEl.getAttribute("href")) {
-      signOutEl.onclick = () => {
-        window.location.href = "/.auth/logout";
-      };
-    }
   } else {
     setSignedInUserText("Not signed in");
     setAssignedEntityText("None");
@@ -201,20 +143,10 @@ function syncAuthUi() {
 
     show(signInEl);
     hide(signOutEl);
-
-    if (signInEl && !signInEl.getAttribute("href")) {
-      signInEl.onclick = () => {
-        window.location.href = "/.auth/login/aad";
-      };
-    }
   }
 
   ensureAdminImportLink();
 }
-
-/* =========================
-   WEEK SELECTOR
-========================= */
 
 function initWeekSelector() {
   const select = $("weekEndingSelect");
@@ -245,10 +177,6 @@ function initWeekSelector() {
   setText("sidebarWeekEndingText", formatDate(select.value));
 }
 
-/* =========================
-   ADMIN IMPORT NAV
-========================= */
-
 function ensureAdminImportLink() {
   const existing = $("adminImportNavItem");
 
@@ -258,19 +186,14 @@ function ensureAdminImportLink() {
   }
 
   const nav = getNavContainer();
-  if (!nav) return;
-
-  if (existing) return;
+  if (!nav || existing) return;
 
   const wrapper = document.createElement("div");
   wrapper.id = "adminImportNavItem";
-  wrapper.innerHTML = `<a class="nav-link" href="/admin-import.html">Admin Import</a>`;
+  wrapper.className = "sidebar-admin-link-wrap";
+  wrapper.innerHTML = `<a class="nav-link" href="./admin-import.html">Admin Import</a>`;
   nav.appendChild(wrapper);
 }
-
-/* =========================
-   ROUTING
-========================= */
 
 function activateNav(link) {
   document.querySelectorAll(".nav-link").forEach((el) => {
@@ -279,73 +202,233 @@ function activateNav(link) {
   if (link) link.classList.add("active");
 }
 
-function inferRoute(link) {
-  const explicit = link?.dataset?.route;
-  if (explicit && explicit !== "admin-import") return explicit;
-
-  const text = (link?.textContent || "").trim().toLowerCase();
-
-  if (text.includes("executive")) return "dashboard";
-  if (["laoss", "nes", "spineone", "mro"].includes(text)) return "region";
-  if (["pt", "cxns", "capacity", "productivity builder"].includes(text)) return "shared";
-
-  return "dashboard";
+function formatWhole(value) {
+  return Math.round(Number(value || 0)).toLocaleString();
 }
 
-function inferRegion(link) {
-  const explicit = link?.dataset?.entity;
-  if (explicit) return explicit;
-
-  const text = (link?.textContent || "").trim();
-  if (["LAOSS", "NES", "SpineOne", "MRO"].includes(text)) return text;
-
-  return null;
+function formatDecimal(value, digits = 1) {
+  return Number(value || 0).toFixed(digits);
 }
 
-function inferSharedPage(link) {
-  const explicit = link?.dataset?.page;
-  if (explicit) return explicit;
-
-  const text = (link?.textContent || "").trim();
-  if (["PT", "CXNS", "Capacity", "Productivity Builder"].includes(text)) return text;
-
-  return null;
+function formatPercent(value, digits = 1) {
+  return `${Number(value || 0).toFixed(digits)}%`;
 }
 
-function initNavigation() {
-  document.querySelectorAll(".nav-link").forEach((link) => {
-    link.addEventListener("click", async (e) => {
-      const href = link.getAttribute("href") || "";
-      if (href.includes("admin-import.html")) return;
+function badgeFromStatus(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "up" || s === "improved") return "green";
+  if (s === "down" || s === "worse") return "red";
+  return "yellow";
+}
 
-      e.preventDefault();
+function renderCardsFromItems(items) {
+  renderKpiCards(
+    items.map((item) => ({
+      label: item.label,
+      value: item.value,
+      meta: item.meta || "",
+      status: item.status || "",
+      statusColor: item.statusColor || badgeFromStatus(item.status)
+    }))
+  );
+}
 
-      const route = inferRoute(link);
-      const region = inferRegion(link);
-      const page = inferSharedPage(link);
+function inferTrend(current, previous, betterDirection = "up") {
+  const c = Number(current || 0);
+  const p = Number(previous || 0);
+  const diff = c - p;
 
-      state.currentRoute = route;
+  if (betterDirection === "down") {
+    if (diff < 0) return { status: "Improved", statusColor: "green", diff };
+    if (diff > 0) return { status: "Worse", statusColor: "red", diff };
+    return { status: "Flat", statusColor: "yellow", diff };
+  }
 
-      if (route === "region" && region) {
-        state.currentRegion = region;
+  if (diff > 0) return { status: "Up", statusColor: "green", diff };
+  if (diff < 0) return { status: "Down", statusColor: "red", diff };
+  return { status: "Flat", statusColor: "yellow", diff };
+}
+
+function buildRegionCards(current, previous = {}) {
+  const visitTrend = inferTrend(current.totalVisits, previous.totalVisits, "up");
+  const vpdTrend = inferTrend(current.visitsPerDay, previous.visitsPerDay, "up");
+  const npTrend = inferTrend(current.npActual, previous.npActual, "up");
+  const surgTrend = inferTrend(current.surgeryActual, previous.surgeryActual, "up");
+  const callTrend = inferTrend(current.totalCalls, previous.totalCalls, "up");
+  const abdTrend = inferTrend(current.abandonmentRate, previous.abandonmentRate, "down");
+  const convTrend = inferTrend(current.answeredCallToNpConversion, previous.answeredCallToNpConversion, "up");
+  const cashTrend = inferTrend(current.cashActual, previous.cashActual, "up");
+
+  return [
+    {
+      label: "Total Visits",
+      value: formatWhole(current.totalVisits),
+      meta: `${visitTrend.diff >= 0 ? "+" : ""}${formatWhole(visitTrend.diff)} vs prior week`,
+      status: visitTrend.status,
+      statusColor: visitTrend.statusColor
+    },
+    {
+      label: "Visits / Day",
+      value: formatDecimal(current.visitsPerDay, 1),
+      meta: `${vpdTrend.diff >= 0 ? "+" : ""}${formatDecimal(vpdTrend.diff, 1)} vs prior week`,
+      status: vpdTrend.status,
+      statusColor: vpdTrend.statusColor
+    },
+    {
+      label: "New Patients",
+      value: formatWhole(current.npActual),
+      meta: `${npTrend.diff >= 0 ? "+" : ""}${formatWhole(npTrend.diff)} vs prior week`,
+      status: npTrend.status,
+      statusColor: npTrend.statusColor
+    },
+    {
+      label: "Surgical Cases",
+      value: formatWhole(current.surgeryActual),
+      meta: `${surgTrend.diff >= 0 ? "+" : ""}${formatWhole(surgTrend.diff)} vs prior week`,
+      status: surgTrend.status,
+      statusColor: surgTrend.statusColor
+    },
+    {
+      label: "Call Volume",
+      value: formatWhole(current.totalCalls),
+      meta: `${callTrend.diff >= 0 ? "+" : ""}${formatWhole(callTrend.diff)} vs prior week`,
+      status: callTrend.status,
+      statusColor: callTrend.statusColor
+    },
+    {
+      label: "Abandonment Rate",
+      value: formatPercent(current.abandonmentRate, 1),
+      meta: `${abdTrend.diff >= 0 ? "+" : ""}${formatDecimal(abdTrend.diff, 1)} pts vs prior week`,
+      status: abdTrend.status,
+      statusColor: abdTrend.statusColor
+    },
+    {
+      label: "Answered Call to NP %",
+      value: formatPercent(current.answeredCallToNpConversion, 1),
+      meta: `${convTrend.diff >= 0 ? "+" : ""}${formatDecimal(convTrend.diff, 1)} pts vs prior week`,
+      status: convTrend.status,
+      statusColor: convTrend.statusColor
+    },
+    {
+      label: "Cash Collected",
+      value: `$${formatWhole(current.cashActual)}`,
+      meta: `${cashTrend.diff >= 0 ? "+" : ""}$${formatWhole(cashTrend.diff)} vs prior week`,
+      status: cashTrend.status,
+      statusColor: cashTrend.statusColor
+    }
+  ];
+}
+
+function buildSharedCards(page, current, previous = {}) {
+  if (page === "PT") {
+    const visitTrend = inferTrend(current.ptScheduledVisits, previous.ptScheduledVisits, "up");
+    const cancelTrend = inferTrend(current.ptCancellations, previous.ptCancellations, "down");
+    const noShowTrend = inferTrend(current.ptNoShows, previous.ptNoShows, "down");
+    const rescheduleTrend = inferTrend(current.ptReschedules, previous.ptReschedules, "down");
+    const unitsTrend = inferTrend(current.totalUnitsBilled, previous.totalUnitsBilled, "up");
+
+    return [
+      {
+        label: "PT Scheduled Visits",
+        value: formatWhole(current.ptScheduledVisits),
+        meta: `${visitTrend.diff >= 0 ? "+" : ""}${formatWhole(visitTrend.diff)} vs prior week`,
+        status: visitTrend.status,
+        statusColor: visitTrend.statusColor
+      },
+      {
+        label: "PT Cancellations",
+        value: formatWhole(current.ptCancellations),
+        meta: `${cancelTrend.diff >= 0 ? "+" : ""}${formatWhole(cancelTrend.diff)} vs prior week`,
+        status: cancelTrend.status,
+        statusColor: cancelTrend.statusColor
+      },
+      {
+        label: "PT No Shows",
+        value: formatWhole(current.ptNoShows),
+        meta: `${noShowTrend.diff >= 0 ? "+" : ""}${formatWhole(noShowTrend.diff)} vs prior week`,
+        status: noShowTrend.status,
+        statusColor: noShowTrend.statusColor
+      },
+      {
+        label: "PT Reschedules",
+        value: formatWhole(current.ptReschedules),
+        meta: `${rescheduleTrend.diff >= 0 ? "+" : ""}${formatWhole(rescheduleTrend.diff)} vs prior week`,
+        status: rescheduleTrend.status,
+        statusColor: rescheduleTrend.statusColor
+      },
+      {
+        label: "Units Billed",
+        value: formatWhole(current.totalUnitsBilled),
+        meta: `${unitsTrend.diff >= 0 ? "+" : ""}${formatWhole(unitsTrend.diff)} vs prior week`,
+        status: unitsTrend.status,
+        statusColor: unitsTrend.statusColor
       }
+    ];
+  }
 
-      if (route === "shared" && page) {
-        state.currentSharedPage = page;
+  if (page === "CXNS") {
+    const scheduledTrend = inferTrend(current.scheduledAppts, previous.scheduledAppts, "up");
+    const cancelTrend = inferTrend(current.cancellations, previous.cancellations, "down");
+    const noShowTrend = inferTrend(current.noShows, previous.noShows, "down");
+    const rescheduleTrend = inferTrend(current.reschedules, previous.reschedules, "down");
+
+    return [
+      {
+        label: "CXNS Scheduled",
+        value: formatWhole(current.scheduledAppts),
+        meta: `${scheduledTrend.diff >= 0 ? "+" : ""}${formatWhole(scheduledTrend.diff)} vs prior week`,
+        status: scheduledTrend.status,
+        statusColor: scheduledTrend.statusColor
+      },
+      {
+        label: "CXNS Cancellations",
+        value: formatWhole(current.cancellations),
+        meta: `${cancelTrend.diff >= 0 ? "+" : ""}${formatWhole(cancelTrend.diff)} vs prior week`,
+        status: cancelTrend.status,
+        statusColor: cancelTrend.statusColor
+      },
+      {
+        label: "CXNS No Shows",
+        value: formatWhole(current.noShows),
+        meta: `${noShowTrend.diff >= 0 ? "+" : ""}${formatWhole(noShowTrend.diff)} vs prior week`,
+        status: noShowTrend.status,
+        statusColor: noShowTrend.statusColor
+      },
+      {
+        label: "CXNS Reschedules",
+        value: formatWhole(current.reschedules),
+        meta: `${rescheduleTrend.diff >= 0 ? "+" : ""}${formatWhole(rescheduleTrend.diff)} vs prior week`,
+        status: rescheduleTrend.status,
+        statusColor: rescheduleTrend.statusColor
       }
+    ];
+  }
 
-      activateNav(link);
-      await loadCurrentView();
-    });
-  });
+  return [
+    {
+      label: page,
+      value: "Coming Soon",
+      meta: "This page is not fully wired yet.",
+      status: "Flat",
+      statusColor: "yellow"
+    }
+  ];
 }
 
-/* =========================
-   DATA LOADERS
-========================= */
+function getPreviousWeekEnding(weekEnding) {
+  const d = new Date(`${weekEnding}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 7);
+  return d.toISOString().split("T")[0];
+}
 
 async function loadDashboard() {
   const week = currentWeekEnding();
+
+  setViewHeader(
+    "Executive Summary",
+    "Weekly companywide KPI overview with trends, target comparisons, and submission visibility."
+  );
+  setStatusPanelText("Loading dashboard...");
 
   const result = await safeApiGet(
     `/api/dashboard?weekEnding=${encodeURIComponent(week)}`,
@@ -353,33 +436,71 @@ async function loadDashboard() {
   );
 
   renderKpiCards(Array.isArray(result.kpis) ? result.kpis : []);
+  setStatusPanelText("Executive dashboard loaded.");
 }
 
 async function loadRegionPage(entity) {
   const week = currentWeekEnding();
+  const previousWeek = getPreviousWeekEnding(week);
 
-  const data = await safeApiGet(
+  setViewHeader(
+    `${entity} Weekly View`,
+    `Weekly operational performance for ${entity}.`
+  );
+  setStatusPanelText(`Loading ${entity} weekly data...`);
+
+  const current = await safeApiGet(
     `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
     { values: {} }
   );
 
-  fillFormValues(data.values || {});
+  const previous = await safeApiGet(
+    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(previousWeek)}`,
+    { values: {} }
+  );
+
+  const cards = buildRegionCards(current.values || {}, previous.values || {});
+  renderCardsFromItems(cards);
+  setStatusPanelText(`${entity} weekly data loaded.`);
 }
 
 async function loadSharedPage(page) {
   const week = currentWeekEnding();
+  const previousWeek = getPreviousWeekEnding(week);
+
+  setViewHeader(
+    `${page} Weekly View`,
+    `Weekly metrics for ${page}.`
+  );
+  setStatusPanelText(`Loading ${page} data...`);
 
   if (page === "Capacity" || page === "Productivity Builder") {
-    fillFormValues({});
+    renderCardsFromItems([
+      {
+        label: page,
+        value: "Coming Soon",
+        meta: "This section is not fully wired yet.",
+        status: "Flat",
+        statusColor: "yellow"
+      }
+    ]);
+    setStatusPanelText(`${page} is not fully wired yet.`);
     return;
   }
 
-  const data = await safeApiGet(
+  const current = await safeApiGet(
     `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(week)}`,
     { values: {} }
   );
 
-  fillFormValues(data.values || {});
+  const previous = await safeApiGet(
+    `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(previousWeek)}`,
+    { values: {} }
+  );
+
+  const cards = buildSharedCards(page, current.values || {}, previous.values || {});
+  renderCardsFromItems(cards);
+  setStatusPanelText(`${page} weekly data loaded.`);
 }
 
 async function loadCurrentView() {
@@ -400,9 +521,45 @@ async function loadCurrentView() {
   }
 }
 
-/* =========================
-   SAVE
-========================= */
+function routeFromLink(link) {
+  const explicit = link.dataset.route;
+  if (explicit) return explicit;
+
+  const text = (link.textContent || "").trim().toLowerCase();
+  if (text.includes("executive")) return "dashboard";
+  if (["laoss", "nes", "spineone", "mro"].includes(text)) return "region";
+  if (["pt", "cxns", "capacity", "productivity builder"].includes(text)) return "shared";
+  return "dashboard";
+}
+
+function initNavigation() {
+  const nav = getNavContainer();
+  if (!nav) return;
+
+  nav.addEventListener("click", async (e) => {
+    const link = e.target.closest(".nav-link");
+    if (!link) return;
+
+    const href = link.getAttribute("href") || "";
+    if (href.includes("admin-import.html")) return;
+
+    e.preventDefault();
+
+    const route = routeFromLink(link);
+    state.currentRoute = route;
+
+    if (route === "region") {
+      state.currentRegion = link.dataset.entity || state.currentRegion;
+    }
+
+    if (route === "shared") {
+      state.currentSharedPage = link.dataset.page || state.currentSharedPage;
+    }
+
+    activateNav(link);
+    await loadCurrentView();
+  });
+}
 
 async function saveRegion() {
   const payload = collectRegionFormValues();
@@ -446,25 +603,23 @@ async function saveShared() {
   alert("Saved successfully.");
 }
 
-/* =========================
-   BUTTONS
-========================= */
-
 function initButtons() {
   const saveBtn = $("saveButton");
   const submitBtn = $("submitWeekButton");
-  const signInEl = getSignInEl();
-  const signOutEl = getSignOutEl();
 
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       if (state.currentRoute === "region") {
         await saveRegion();
-      } else if (state.currentRoute === "shared") {
-        await saveShared();
-      } else {
-        alert("Nothing to save on this page.");
+        return;
       }
+
+      if (state.currentRoute === "shared") {
+        await saveShared();
+        return;
+      }
+
+      alert("Nothing to save on this page.");
     });
   }
 
@@ -472,51 +627,29 @@ function initButtons() {
     submitBtn.addEventListener("click", async () => {
       if (state.currentRoute === "region") {
         await saveRegion();
-      } else if (state.currentRoute === "shared") {
-        await saveShared();
-      } else {
-        alert("Nothing to submit on this page.");
+        alert("Week submitted.");
         return;
       }
 
-      alert("Week submitted.");
-    });
-  }
+      if (state.currentRoute === "shared") {
+        await saveShared();
+        alert("Week submitted.");
+        return;
+      }
 
-  if (signInEl && !signInEl.getAttribute("href")) {
-    signInEl.addEventListener("click", () => {
-      window.location.href = "/.auth/login/aad";
-    });
-  }
-
-  if (signOutEl && !signOutEl.getAttribute("href")) {
-    signOutEl.addEventListener("click", () => {
-      window.location.href = "/.auth/logout";
+      alert("Nothing to submit on this page.");
     });
   }
 }
 
-/* =========================
-   HERO BUTTONS
-========================= */
-
 function initHeroButtons() {
-  const goToRegionBtn =
-    $("goToMyRegionButton") ||
-    Array.from(document.querySelectorAll("a,button")).find((el) =>
-      (el.textContent || "").trim().toLowerCase().includes("go to my region")
-    );
-
-  const executiveBtn =
-    $("executiveSummaryButton") ||
-    Array.from(document.querySelectorAll("a,button")).find((el) =>
-      (el.textContent || "").trim().toLowerCase().includes("executive summary")
-    );
+  const goToRegionBtn = $("goToMyRegionButton");
+  const executiveBtn = $("executiveSummaryButton");
 
   if (goToRegionBtn) {
     goToRegionBtn.addEventListener("click", async () => {
       state.currentRoute = "region";
-      state.currentRegion = isAdmin() ? "LAOSS" : state.entity;
+      state.currentRegion = isAdmin() ? "LAOSS" : (state.entity === "Admin" ? "LAOSS" : state.entity);
 
       const regionLink = Array.from(document.querySelectorAll(".nav-link")).find((el) => {
         const text = (el.textContent || "").trim();
@@ -541,10 +674,6 @@ function initHeroButtons() {
     });
   }
 }
-
-/* =========================
-   INIT
-========================= */
 
 async function init() {
   try {
