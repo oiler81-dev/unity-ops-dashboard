@@ -14,20 +14,18 @@ import {
 ========================= */
 
 const state = {
-  authResolved: false,
   authenticated: false,
   userDetails: "",
-  role: "user",
+  role: "guest",
   entity: "LAOSS",
   weekEnding: getDefaultWeekEnding(),
   currentRoute: "dashboard",
   currentRegion: "LAOSS",
-  currentSharedPage: "PT",
-  me: null
+  currentSharedPage: "PT"
 };
 
 /* =========================
-   BASIC HELPERS
+   HELPERS
 ========================= */
 
 const $ = (id) => document.getElementById(id);
@@ -45,24 +43,15 @@ function hide(el) {
   if (el) el.style.display = "none";
 }
 
-function bySelectors(selectors) {
-  for (const selector of selectors) {
-    const el = document.querySelector(selector);
-    if (el) return el;
-  }
-  return null;
-}
-
 function currentWeekEnding() {
-  const el = $("weekEndingSelect");
-  return el?.value || state.weekEnding || getDefaultWeekEnding();
+  return $("weekEndingSelect")?.value || state.weekEnding || getDefaultWeekEnding();
 }
 
 function isAdmin() {
   return state.role === "admin";
 }
 
-function setLoadingHeaderState() {
+function setLoadingHeader() {
   setText("signedInUserText", "Loading...");
   setText("assignedEntityText", "Loading...");
   setText("roleText", "Loading...");
@@ -73,17 +62,44 @@ function fillFormValues(values) {
   fields.forEach((el) => {
     const key = el.dataset.key;
     if (!key) return;
-    const val = values[key];
-    el.value = val == null ? "" : val;
+    el.value = values[key] ?? "";
   });
+}
+
+function getSignInEl() {
+  return (
+    $("signInButton") ||
+    Array.from(document.querySelectorAll("a,button")).find(
+      (el) => (el.textContent || "").trim().toLowerCase() === "sign in"
+    )
+  );
+}
+
+function getSignOutEl() {
+  return (
+    $("signOutButton") ||
+    Array.from(document.querySelectorAll("a,button")).find(
+      (el) => (el.textContent || "").trim().toLowerCase() === "sign out"
+    )
+  );
+}
+
+function getNavContainer() {
+  return (
+    $("dashboardNav") ||
+    document.querySelector(".dashboard-nav") ||
+    document.querySelector(".sidebar-nav") ||
+    document.querySelector(".nav-list") ||
+    document.querySelector(".nav-links") ||
+    document.querySelector(".dashboard-sidebar")
+  );
 }
 
 /* =========================
    AUTH
 ========================= */
 
-async function fetchApiMe() {
-  const result = await safeApiGet("/api/me", null);
+function normalizeApiMe(result) {
   if (!result || !result.user) return null;
 
   const user = result.user;
@@ -97,110 +113,103 @@ async function fetchApiMe() {
   };
 }
 
-async function fetchStaticWebAppAuth() {
-  const result = await safeApiGet("/.auth/me", null);
+function normalizeSwaAuth(result) {
+  if (!result) return null;
 
-  if (!Array.isArray(result) || !result.length) return null;
+  // Azure Static Web Apps shape:
+  // { clientPrincipal: { userDetails, userRoles, ... } }
+  if (result.clientPrincipal) {
+    const cp = result.clientPrincipal;
+    return {
+      authenticated: !!cp.userDetails,
+      userDetails: cp.userDetails || "",
+      roles: Array.isArray(cp.userRoles) ? cp.userRoles : [],
+      entity: ""
+    };
+  }
 
-  const principal = result[0] || {};
-  const claims = Array.isArray(principal.userClaims) ? principal.userClaims : [];
+  // Defensive fallback in case some other shape appears
+  if (Array.isArray(result) && result.length > 0) {
+    const first = result[0];
+    if (first && first.clientPrincipal) {
+      const cp = first.clientPrincipal;
+      return {
+        authenticated: !!cp.userDetails,
+        userDetails: cp.userDetails || "",
+        roles: Array.isArray(cp.userRoles) ? cp.userRoles : [],
+        entity: ""
+      };
+    }
+  }
 
-  const nameClaim =
-    claims.find((c) => c.typ === "preferred_username")?.val ||
-    claims.find((c) => c.typ === "email")?.val ||
-    claims.find((c) => c.typ === "name")?.val ||
-    principal.userDetails ||
-    "";
-
-  const roleClaims = claims
-    .filter((c) => c.typ === "roles")
-    .map((c) => c.val)
-    .filter(Boolean);
-
-  const roles = Array.from(
-    new Set([
-      ...(Array.isArray(principal.userRoles) ? principal.userRoles : []),
-      ...roleClaims
-    ])
-  );
-
-  return {
-    authenticated: true,
-    userDetails: nameClaim,
-    roles,
-    entity: ""
-  };
+  return null;
 }
 
-function normalizeRoleFromRoles(roles) {
-  if (!Array.isArray(roles)) return "user";
-  return roles.includes("admin") ? "admin" : "user";
+function deriveRole(roles) {
+  if (!Array.isArray(roles)) return "guest";
+  if (roles.includes("admin")) return "admin";
+  if (roles.includes("authenticated")) return "user";
+  return "guest";
 }
 
 async function resolveAuth() {
-  setLoadingHeaderState();
+  setLoadingHeader();
 
-  let auth = await fetchApiMe();
+  let auth = normalizeApiMe(await safeApiGet("/api/me", null));
 
   if (!auth || !auth.authenticated) {
-    const fallback = await fetchStaticWebAppAuth();
-    if (fallback) auth = fallback;
+    auth = normalizeSwaAuth(await safeApiGet("/.auth/me", null));
   }
 
   if (!auth || !auth.authenticated) {
-    state.authResolved = true;
     state.authenticated = false;
     state.userDetails = "";
-    state.role = "user";
-    state.entity = "LAOSS";
+    state.role = "guest";
+    state.entity = "None";
     state.currentRegion = "LAOSS";
-    state.me = null;
     syncAuthUi();
     return;
   }
 
-  state.authResolved = true;
   state.authenticated = true;
   state.userDetails = auth.userDetails || "Unknown User";
-  state.role = normalizeRoleFromRoles(auth.roles);
-  state.entity = state.role === "admin" ? "ALL" : (auth.entity || "LAOSS");
-  state.currentRegion = state.role === "admin" ? "LAOSS" : state.entity;
-  state.me = auth;
+  state.role = deriveRole(auth.roles);
+  state.entity = state.role === "admin" ? "All Regions" : (auth.entity || "LAOSS");
+  state.currentRegion = state.role === "admin" ? "LAOSS" : (auth.entity || "LAOSS");
 
   syncAuthUi();
 }
 
 function syncAuthUi() {
-  const signInButton =
-    $("signInButton") ||
-    bySelectors([
-      '[data-action="sign-in"]',
-      'a[href="/.auth/login/aad"]',
-      'a[href*="/.auth/login"]'
-    ]);
-
-  const signOutButton =
-    $("signOutButton") ||
-    bySelectors([
-      '[data-action="sign-out"]',
-      'a[href="/.auth/logout"]',
-      'a[href*="/.auth/logout"]'
-    ]);
+  const signInEl = getSignInEl();
+  const signOutEl = getSignOutEl();
 
   if (state.authenticated) {
     setText("signedInUserText", state.userDetails);
-    setText("assignedEntityText", isAdmin() ? "All Regions" : state.entity);
-    setText("roleText", isAdmin() ? "admin" : "user");
+    setText("assignedEntityText", state.entity);
+    setText("roleText", state.role);
 
-    hide(signInButton);
-    show(signOutButton);
+    hide(signInEl);
+    show(signOutEl);
+
+    if (signOutEl && !signOutEl.getAttribute("href")) {
+      signOutEl.onclick = () => {
+        window.location.href = "/.auth/logout";
+      };
+    }
   } else {
     setText("signedInUserText", "Not signed in");
     setText("assignedEntityText", "None");
     setText("roleText", "guest");
 
-    show(signInButton);
-    hide(signOutButton);
+    show(signInEl);
+    hide(signOutEl);
+
+    if (signInEl && !signInEl.getAttribute("href")) {
+      signInEl.onclick = () => {
+        window.location.href = "/.auth/login/aad";
+      };
+    }
   }
 
   ensureAdminImportLink();
@@ -214,108 +223,81 @@ function initWeekSelector() {
   const select = $("weekEndingSelect");
   if (!select) return;
 
-  const base = new Date();
-  const thisSunday = new Date(base);
-  thisSunday.setDate(base.getDate() - base.getDay());
+  const today = new Date();
+  const weeks = [];
 
-  const options = [];
   for (let i = 0; i < 20; i += 1) {
-    const d = new Date(thisSunday);
-    d.setDate(thisSunday.getDate() - i * 7);
+    const d = new Date(today);
+    d.setDate(today.getDate() - today.getDay() - i * 7);
     const iso = d.toISOString().split("T")[0];
-    options.push({
-      value: iso,
-      label: formatDate(iso)
-    });
+    weeks.push(iso);
   }
 
-  select.innerHTML = options
-    .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
+  select.innerHTML = weeks
+    .map((w) => `<option value="${w}">${formatDate(w)}</option>`)
     .join("");
 
   select.value = state.weekEnding;
 
   select.addEventListener("change", async () => {
     state.weekEnding = select.value;
-    updateWeekBadges();
+    setText("sidebarWeekEndingText", formatDate(select.value));
     await loadCurrentView();
   });
 
-  updateWeekBadges();
-}
-
-function updateWeekBadges() {
-  const week = currentWeekEnding();
-  setText("currentWeekEndingText", formatDate(week));
-  setText("sidebarWeekEndingText", formatDate(week));
+  setText("sidebarWeekEndingText", formatDate(select.value));
 }
 
 /* =========================
-   ADMIN IMPORT LINK
+   ADMIN IMPORT NAV
 ========================= */
 
 function ensureAdminImportLink() {
-  let existing = $("adminImportNavItem");
+  const existing = $("adminImportNavItem");
 
   if (!isAdmin()) {
     if (existing) existing.remove();
     return;
   }
 
-  const navHost =
-    $("dashboardNav") ||
-    bySelectors([
-      ".dashboard-nav",
-      ".sidebar-nav",
-      ".nav-list",
-      ".nav-links",
-      "aside nav",
-      ".sidebar"
-    ]);
+  const nav = getNavContainer();
+  if (!nav) return;
 
-  if (!navHost) return;
+  if (existing) return;
 
-  if (!existing) {
-    const wrapper = document.createElement("div");
-    wrapper.id = "adminImportNavItem";
-    wrapper.innerHTML = `
-      <a href="/admin-import.html" class="nav-link nav-link-admin-import" data-route="admin-import">
-        Admin Import
-      </a>
-    `;
-    navHost.appendChild(wrapper);
-  }
+  const wrapper = document.createElement("div");
+  wrapper.id = "adminImportNavItem";
+  wrapper.innerHTML = `
+    <a class="nav-link" href="/admin-import.html">Admin Import</a>
+  `;
+  nav.appendChild(wrapper);
 }
 
 /* =========================
-   NAVIGATION
+   ROUTING
 ========================= */
 
-function setActiveNav(link) {
+function activateNav(link) {
   document.querySelectorAll(".nav-link").forEach((el) => {
     el.classList.remove("active");
   });
-
   if (link) link.classList.add("active");
 }
 
-function inferRouteFromLink(link) {
+function inferRoute(link) {
   const explicit = link?.dataset?.route;
   if (explicit && explicit !== "admin-import") return explicit;
 
   const text = (link?.textContent || "").trim().toLowerCase();
 
   if (text.includes("executive")) return "dashboard";
-  if (text === "pt") return "shared";
-  if (text === "cxns") return "shared";
-  if (text.includes("capacity")) return "shared";
-  if (text.includes("productivity")) return "shared";
   if (["laoss", "nes", "spineone", "mro"].includes(text)) return "region";
+  if (["pt", "cxns", "capacity", "productivity builder"].includes(text)) return "shared";
 
   return "dashboard";
 }
 
-function inferRegionFromLink(link) {
+function inferRegion(link) {
   const explicit = link?.dataset?.entity;
   if (explicit) return explicit;
 
@@ -325,7 +307,7 @@ function inferRegionFromLink(link) {
   return null;
 }
 
-function inferSharedPageFromLink(link) {
+function inferSharedPage(link) {
   const explicit = link?.dataset?.page;
   if (explicit) return explicit;
 
@@ -337,18 +319,15 @@ function inferSharedPageFromLink(link) {
 
 function initNavigation() {
   document.querySelectorAll(".nav-link").forEach((link) => {
-    link.addEventListener("click", async (event) => {
+    link.addEventListener("click", async (e) => {
       const href = link.getAttribute("href") || "";
+      if (href.includes("admin-import.html")) return;
 
-      if (href.includes("admin-import.html")) {
-        return;
-      }
+      e.preventDefault();
 
-      event.preventDefault();
-
-      const route = inferRouteFromLink(link);
-      const region = inferRegionFromLink(link);
-      const sharedPage = inferSharedPageFromLink(link);
+      const route = inferRoute(link);
+      const region = inferRegion(link);
+      const page = inferSharedPage(link);
 
       state.currentRoute = route;
 
@@ -356,67 +335,67 @@ function initNavigation() {
         state.currentRegion = region;
       }
 
-      if (route === "shared" && sharedPage) {
-        state.currentSharedPage = sharedPage;
+      if (route === "shared" && page) {
+        state.currentSharedPage = page;
       }
 
-      setActiveNav(link);
+      activateNav(link);
       await loadCurrentView();
     });
   });
 }
 
 /* =========================
-   API LOADERS
+   DATA LOADERS
 ========================= */
 
 async function loadDashboard() {
-  const weekEnding = currentWeekEnding();
+  const week = currentWeekEnding();
 
   const result = await safeApiGet(
-    `/api/dashboard?weekEnding=${encodeURIComponent(weekEnding)}`,
-    { ok: true, kpis: [] }
+    `/api/dashboard?weekEnding=${encodeURIComponent(week)}`,
+    { kpis: [] }
   );
 
   renderKpiCards(Array.isArray(result.kpis) ? result.kpis : []);
 }
 
-async function loadRegion(entity) {
-  const weekEnding = currentWeekEnding();
+async function loadRegionPage(entity) {
+  const week = currentWeekEnding();
 
-  const result = await safeApiGet(
-    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`,
+  const data = await safeApiGet(
+    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
     { values: {} }
   );
 
-  fillFormValues(result.values || {});
+  fillFormValues(data.values || {});
 }
 
-async function loadShared(page) {
-  const weekEnding = currentWeekEnding();
+async function loadSharedPage(page) {
+  const week = currentWeekEnding();
 
   if (page === "Capacity" || page === "Productivity Builder") {
     fillFormValues({});
     return;
   }
 
-  const result = await safeApiGet(
-    `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(weekEnding)}`,
+  const data = await safeApiGet(
+    `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(week)}`,
     { values: {} }
   );
 
-  fillFormValues(result.values || {});
+  fillFormValues(data.values || {});
 }
 
 async function loadCurrentView() {
   try {
     if (state.currentRoute === "region") {
-      await loadRegion(state.currentRegion);
+      await loadRegionPage(state.currentRegion);
       return;
     }
 
     if (state.currentRoute === "shared") {
-      await loadShared(state.currentSharedPage);
+      await loadSharedPage(state.currentSharedPage);
       return;
     }
 
@@ -427,53 +406,49 @@ async function loadCurrentView() {
 }
 
 /* =========================
-   SAVE / SUBMIT
+   SAVE
 ========================= */
 
-async function saveCurrentView() {
-  if (state.currentRoute === "region") {
-    const payload = collectRegionFormValues();
+async function saveRegion() {
+  const payload = collectRegionFormValues();
 
-    if (!payload.entity || payload.entity === "Loading...") {
-      payload.entity = state.currentRegion;
-    }
+  if (!payload.entity || payload.entity === "Loading..." || payload.entity === "None") {
+    payload.entity = state.currentRegion;
+  }
 
-    if (!payload.weekEnding) {
-      payload.weekEnding = currentWeekEnding();
-    }
+  if (!payload.weekEnding) {
+    payload.weekEnding = currentWeekEnding();
+  }
 
-    const result = await apiPost("/api/weekly-save", payload);
-    if (!result || result.error) {
-      alert("Save failed.");
-      return;
-    }
+  const result = await apiPost("/api/weekly-save", payload);
 
-    alert("Saved successfully.");
+  if (!result || result.error) {
+    alert("Save failed.");
     return;
   }
 
-  if (state.currentRoute === "shared") {
-    const payload = collectSharedFormValues();
+  alert("Saved successfully.");
+}
 
-    if (!payload.page || payload.page === "Loading...") {
-      payload.page = state.currentSharedPage;
-    }
+async function saveShared() {
+  const payload = collectSharedFormValues();
 
-    if (!payload.weekEnding) {
-      payload.weekEnding = currentWeekEnding();
-    }
+  if (!payload.page || payload.page === "Loading...") {
+    payload.page = state.currentSharedPage;
+  }
 
-    const result = await apiPost("/api/shared-save", payload);
-    if (!result || result.error) {
-      alert("Save failed.");
-      return;
-    }
+  if (!payload.weekEnding) {
+    payload.weekEnding = currentWeekEnding();
+  }
 
-    alert("Saved successfully.");
+  const result = await apiPost("/api/shared-save", payload);
+
+  if (!result || result.error) {
+    alert("Save failed.");
     return;
   }
 
-  alert("Nothing to save on this page.");
+  alert("Saved successfully.");
 }
 
 /* =========================
@@ -481,53 +456,46 @@ async function saveCurrentView() {
 ========================= */
 
 function initButtons() {
-  const saveBtn =
-    $("saveButton") ||
-    bySelectors([
-      '[data-action="save"]',
-      'button[title="Save"]'
-    ]);
-
-  const submitBtn =
-    $("submitWeekButton") ||
-    bySelectors([
-      '[data-action="submit-week"]',
-      'button[title="Submit Week"]'
-    ]);
-
-  const signInBtn =
-    $("signInButton") ||
-    bySelectors([
-      '[data-action="sign-in"]'
-    ]);
-
-  const signOutBtn =
-    $("signOutButton") ||
-    bySelectors([
-      '[data-action="sign-out"]'
-    ]);
+  const saveBtn = $("saveButton");
+  const submitBtn = $("submitWeekButton");
+  const signInEl = getSignInEl();
+  const signOutEl = getSignOutEl();
 
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
-      await saveCurrentView();
+      if (state.currentRoute === "region") {
+        await saveRegion();
+      } else if (state.currentRoute === "shared") {
+        await saveShared();
+      } else {
+        alert("Nothing to save on this page.");
+      }
     });
   }
 
   if (submitBtn) {
     submitBtn.addEventListener("click", async () => {
-      await saveCurrentView();
+      if (state.currentRoute === "region") {
+        await saveRegion();
+      } else if (state.currentRoute === "shared") {
+        await saveShared();
+      } else {
+        alert("Nothing to submit on this page.");
+        return;
+      }
+
       alert("Week submitted.");
     });
   }
 
-  if (signInBtn && !signInBtn.getAttribute("href")) {
-    signInBtn.addEventListener("click", () => {
+  if (signInEl && !signInEl.getAttribute("href")) {
+    signInEl.addEventListener("click", () => {
       window.location.href = "/.auth/login/aad";
     });
   }
 
-  if (signOutBtn && !signOutBtn.getAttribute("href")) {
-    signOutBtn.addEventListener("click", () => {
+  if (signOutEl && !signOutEl.getAttribute("href")) {
+    signOutEl.addEventListener("click", () => {
       window.location.href = "/.auth/logout";
     });
   }
@@ -538,29 +506,29 @@ function initButtons() {
 ========================= */
 
 function initHeroButtons() {
-  const regionBtn =
+  const goToRegionBtn =
     $("goToMyRegionButton") ||
-    bySelectors([
-      '[data-action="go-to-region"]'
-    ]);
+    Array.from(document.querySelectorAll("a,button")).find((el) =>
+      (el.textContent || "").trim().toLowerCase().includes("go to my region")
+    );
 
   const executiveBtn =
     $("executiveSummaryButton") ||
-    bySelectors([
-      '[data-action="go-to-dashboard"]'
-    ]);
+    Array.from(document.querySelectorAll("a,button")).find((el) =>
+      (el.textContent || "").trim().toLowerCase().includes("executive summary")
+    );
 
-  if (regionBtn) {
-    regionBtn.addEventListener("click", async () => {
+  if (goToRegionBtn) {
+    goToRegionBtn.addEventListener("click", async () => {
       state.currentRoute = "region";
-      state.currentRegion = isAdmin() ? "LAOSS" : state.entity;
+      state.currentRegion = isAdmin() ? "LAOSS" : (state.entity === "All Regions" ? "LAOSS" : state.entity);
 
       const regionLink = Array.from(document.querySelectorAll(".nav-link")).find((el) => {
         const text = (el.textContent || "").trim();
         return text === state.currentRegion;
       });
 
-      setActiveNav(regionLink);
+      activateNav(regionLink);
       await loadCurrentView();
     });
   }
@@ -569,12 +537,11 @@ function initHeroButtons() {
     executiveBtn.addEventListener("click", async () => {
       state.currentRoute = "dashboard";
 
-      const dashboardLink = Array.from(document.querySelectorAll(".nav-link")).find((el) => {
-        const text = (el.textContent || "").trim().toLowerCase();
-        return text.includes("executive");
-      });
+      const executiveLink = Array.from(document.querySelectorAll(".nav-link")).find((el) =>
+        ((el.textContent || "").trim().toLowerCase().includes("executive"))
+      );
 
-      setActiveNav(dashboardLink);
+      activateNav(executiveLink);
       await loadCurrentView();
     });
   }
@@ -586,15 +553,15 @@ function initHeroButtons() {
 
 async function init() {
   try {
-    setLoadingHeaderState();
+    setLoadingHeader();
     initWeekSelector();
     initButtons();
     initHeroButtons();
     await resolveAuth();
     initNavigation();
     await loadCurrentView();
-  } catch (error) {
-    handleFatalError(error);
+  } catch (err) {
+    handleFatalError(err);
   }
 }
 
