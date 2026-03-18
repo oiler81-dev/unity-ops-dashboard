@@ -4,21 +4,19 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>UnityMSK Admin Import</title>
-  <link rel="stylesheet" href="./src/styles.css" />
+  <link rel="stylesheet" href="./src/main.css" />
   <style>
     .import-page-wrap{
       max-width:1200px;
       margin:0 auto;
       padding:32px 20px 48px;
     }
-
     .import-layout{
       display:grid;
       grid-template-columns:280px 1fr;
       gap:22px;
       align-items:start;
     }
-
     .import-sidebar,
     .import-panel{
       background:rgba(22,52,83,.92);
@@ -26,21 +24,13 @@
       border-radius:22px;
       box-shadow:0 12px 30px rgba(0,0,0,.18);
     }
-
-    .import-sidebar{
-      padding:18px;
-    }
-
-    .import-panel{
-      padding:20px;
-    }
-
+    .import-sidebar{ padding:18px; }
+    .import-panel{ padding:20px; }
     .import-nav{
       display:flex;
       flex-direction:column;
       gap:10px;
     }
-
     .import-nav a{
       text-decoration:none;
       color:#fff;
@@ -51,22 +41,16 @@
       font-weight:700;
       font-size:15px;
     }
-
     .import-nav a.active{
       outline:1px solid rgba(245,197,24,.5);
       box-shadow: inset 0 0 0 1px rgba(245,197,24,.35);
     }
-
     .import-meta{
       margin-top:22px;
       padding-top:18px;
       border-top:1px solid rgba(255,255,255,.08);
     }
-
-    .import-meta-block + .import-meta-block{
-      margin-top:14px;
-    }
-
+    .import-meta-block + .import-meta-block{ margin-top:14px; }
     .import-meta-label{
       color:#9fb2c6;
       text-transform:uppercase;
@@ -74,14 +58,12 @@
       font-weight:700;
       margin-bottom:4px;
     }
-
     .import-meta-value{
       font-weight:700;
       font-size:15px;
       color:#fff;
       word-break:break-word;
     }
-
     .import-panel-header{
       display:flex;
       justify-content:space-between;
@@ -90,7 +72,6 @@
       margin-bottom:18px;
       flex-wrap:wrap;
     }
-
     .import-status-card{
       min-width:220px;
       background:rgba(255,255,255,.04);
@@ -98,7 +79,6 @@
       border-radius:16px;
       padding:14px;
     }
-
     .import-status-label{
       color:#9fb2c6;
       text-transform:uppercase;
@@ -106,28 +86,24 @@
       font-weight:700;
       margin-bottom:4px;
     }
-
     .import-status-value{
       font-size:16px;
       font-weight:800;
       margin-bottom:10px;
       color:#fff;
     }
-
     .import-grid{
       display:grid;
       grid-template-columns:repeat(2,minmax(0,1fr));
       gap:16px;
       margin:18px 0 20px;
     }
-
     .import-card{
       background:rgba(255,255,255,.04);
       border:1px solid rgba(255,255,255,.10);
       border-radius:16px;
       padding:16px;
     }
-
     .import-card-label{
       color:#9fb2c6;
       text-transform:uppercase;
@@ -135,14 +111,12 @@
       font-weight:700;
       margin-bottom:8px;
     }
-
     .import-card-value{
       font-size:18px;
       font-weight:800;
       word-break:break-word;
       color:#fff;
     }
-
     .upload-box{
       margin-top:14px;
       background:rgba(255,255,255,.03);
@@ -150,7 +124,6 @@
       border-radius:18px;
       padding:18px;
     }
-
     .upload-box label{
       display:block;
       font-size:12px;
@@ -159,7 +132,6 @@
       font-weight:700;
       margin-bottom:10px;
     }
-
     .file-input{
       width:100%;
       padding:14px;
@@ -168,14 +140,12 @@
       background:#25496e;
       color:#fff;
     }
-
     .import-actions{
       display:flex;
       gap:12px;
       margin-top:16px;
       flex-wrap:wrap;
     }
-
     .import-log{
       margin-top:20px;
       background:rgba(0,0,0,.18);
@@ -188,22 +158,15 @@
       overflow:auto;
       color:#fff;
     }
-
     .small-note{
       font-size:13px;
       color:#9fb2c6;
       line-height:1.55;
       margin-top:14px;
     }
-
     @media (max-width: 900px){
-      .import-layout{
-        grid-template-columns:1fr;
-      }
-
-      .import-grid{
-        grid-template-columns:1fr;
-      }
+      .import-layout{ grid-template-columns:1fr; }
+      .import-grid{ grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -211,7 +174,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <a href="./index.html" class="brand-link" aria-label="UnityMSK Dashboard Home">
-        <img src="./src/assets/unitymsk-logo.png" alt="UnityMSK" class="brand-logo" onerror="this.style.display='none';" />
+        <img src="./assets/unitymsk-logo.png" alt="UnityMSK" class="brand-logo" onerror="this.style.display='none';" />
       </a>
     </div>
 
