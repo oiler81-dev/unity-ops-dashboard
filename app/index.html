@@ -49,7 +49,7 @@
     }
 
     .topbar-auth-card{
-      min-width:125px;
+      min-width:155px;
     }
 
     .topbar-select{
@@ -73,10 +73,6 @@
       max-width:1100px;
       margin:0 auto;
       text-align:center;
-    }
-
-    .hero-kicker{
-      margin-bottom:10px;
     }
 
     .hero-title{
@@ -127,7 +123,8 @@
       margin-top:12px;
     }
 
-    .sidebar-nav .nav-link{
+    .sidebar-nav .nav-link,
+    .sidebar-admin-link-wrap .nav-link{
       display:block;
       text-decoration:none;
       width:100%;
@@ -141,7 +138,11 @@
     }
 
     .meta-block + .meta-block{
-      margin-top:14px;
+      margin-top:16px;
+    }
+
+    .sidebar-admin-link-wrap{
+      margin-top:16px;
     }
 
     .dashboard-main{
@@ -304,8 +305,8 @@
         <section class="dashboard-main">
           <div class="dashboard-main-header">
             <div>
-              <h2 class="dashboard-title">Executive Summary</h2>
-              <p class="dashboard-subtitle">
+              <h2 id="dashboardTitle" class="dashboard-title">Executive Summary</h2>
+              <p id="dashboardSubtitle" class="dashboard-subtitle">
                 Weekly companywide KPI overview with trends, target comparisons, and submission visibility.
               </p>
             </div>
@@ -347,7 +348,7 @@
             </div>
           </div>
 
-          <div class="dashboard-status-panel">
+          <div id="dashboardStatusPanel" class="dashboard-status-panel">
             Loading dashboard...
           </div>
         </section>
