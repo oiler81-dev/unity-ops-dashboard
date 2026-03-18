@@ -17,7 +17,8 @@ const state = {
   authenticated: false,
   userDetails: "",
   role: "guest",
-  entity: "LAOSS",
+  entity: "None",
+  isAdmin: false,
   weekEnding: getDefaultWeekEnding(),
   currentRoute: "dashboard",
   currentRegion: "LAOSS",
@@ -35,6 +36,56 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
+function setTextBySelectors(selectors, value) {
+  selectors.forEach((selector) => {
+    const el = document.querySelector(selector);
+    if (el) el.textContent = value;
+  });
+}
+
+function setSignedInUserText(value) {
+  setText("signedInUserText", value);
+  setText("signedInAsText", value);
+  setTextBySelectors(
+    [
+      "#signedInUserText",
+      "#signedInAsText",
+      "[data-auth-user]",
+      ".signed-in-user",
+      ".auth-user"
+    ],
+    value
+  );
+}
+
+function setAssignedEntityText(value) {
+  setText("assignedEntityText", value);
+  setText("assignedEntityValue", value);
+  setTextBySelectors(
+    [
+      "#assignedEntityText",
+      "#assignedEntityValue",
+      "[data-assigned-entity]",
+      ".assigned-entity"
+    ],
+    value
+  );
+}
+
+function setRoleText(value) {
+  setText("roleText", value);
+  setText("roleValue", value);
+  setTextBySelectors(
+    [
+      "#roleText",
+      "#roleValue",
+      "[data-role-text]",
+      ".role-text"
+    ],
+    value
+  );
+}
+
 function show(el) {
   if (el) el.style.display = "";
 }
@@ -48,13 +99,13 @@ function currentWeekEnding() {
 }
 
 function isAdmin() {
-  return state.role === "admin";
+  return state.isAdmin === true || state.role === "admin";
 }
 
 function setLoadingHeader() {
-  setText("signedInUserText", "Loading...");
-  setText("assignedEntityText", "Loading...");
-  setText("roleText", "Loading...");
+  setSignedInUserText("Loading...");
+  setAssignedEntityText("Loading...");
+  setRoleText("Loading...");
 }
 
 function fillFormValues(values) {
@@ -96,91 +147,6 @@ function getNavContainer() {
   );
 }
 
-function uniqueRoles(input) {
-  return Array.from(new Set((Array.isArray(input) ? input : []).filter(Boolean)));
-}
-
-function deriveRole(roles) {
-  const normalized = uniqueRoles(roles).map((r) => String(r).toLowerCase());
-
-  if (normalized.includes("admin")) return "admin";
-  if (normalized.includes("authenticated")) return "user";
-  return "guest";
-}
-
-/* =========================
-   AUTH NORMALIZERS
-========================= */
-
-function normalizeApiMe(result) {
-  if (!result || !result.user) return null;
-
-  const user = result.user;
-  const roles = uniqueRoles(user.roles);
-
-  return {
-    authenticated: !!user.authenticated,
-    userDetails: user.userDetails || "",
-    roles,
-    entity: user.entity || ""
-  };
-}
-
-function normalizeSwaAuth(result) {
-  if (!result) return null;
-
-  if (result.clientPrincipal) {
-    const cp = result.clientPrincipal;
-    return {
-      authenticated: !!cp.userDetails,
-      userDetails: cp.userDetails || "",
-      roles: uniqueRoles(cp.userRoles),
-      entity: ""
-    };
-  }
-
-  if (Array.isArray(result) && result.length > 0 && result[0]?.clientPrincipal) {
-    const cp = result[0].clientPrincipal;
-    return {
-      authenticated: !!cp.userDetails,
-      userDetails: cp.userDetails || "",
-      roles: uniqueRoles(cp.userRoles),
-      entity: ""
-    };
-  }
-
-  return null;
-}
-
-function mergeAuth(apiAuth, swaAuth) {
-  const apiRoles = uniqueRoles(apiAuth?.roles);
-  const swaRoles = uniqueRoles(swaAuth?.roles);
-  const mergedRoles = uniqueRoles([...apiRoles, ...swaRoles]);
-
-  const authenticated =
-    !!apiAuth?.authenticated || !!swaAuth?.authenticated;
-
-  const userDetails =
-    swaAuth?.userDetails ||
-    apiAuth?.userDetails ||
-    "";
-
-  const role = deriveRole(mergedRoles);
-
-  const entity =
-    role === "admin"
-      ? "Admin"
-      : (apiAuth?.entity || swaAuth?.entity || "LAOSS");
-
-  return {
-    authenticated,
-    userDetails,
-    roles: mergedRoles,
-    role,
-    entity
-  };
-}
-
 /* =========================
    AUTH
 ========================= */
@@ -188,25 +154,25 @@ function mergeAuth(apiAuth, swaAuth) {
 async function resolveAuth() {
   setLoadingHeader();
 
-  const apiAuth = normalizeApiMe(await safeApiGet("/api/me", null));
-  const swaAuth = normalizeSwaAuth(await safeApiGet("/.auth/me", null));
-  const auth = mergeAuth(apiAuth, swaAuth);
+  const me = await safeApiGet("/api/me", null);
 
-  if (!auth.authenticated) {
+  if (!me || !me.authenticated) {
     state.authenticated = false;
     state.userDetails = "";
     state.role = "guest";
     state.entity = "None";
+    state.isAdmin = false;
     state.currentRegion = "LAOSS";
     syncAuthUi();
     return;
   }
 
   state.authenticated = true;
-  state.userDetails = auth.userDetails || "Unknown User";
-  state.role = auth.role;
-  state.entity = auth.entity;
-  state.currentRegion = auth.role === "admin" ? "LAOSS" : auth.entity;
+  state.userDetails = me.userDetails || "Unknown User";
+  state.isAdmin = !!me.isAdmin;
+  state.role = state.isAdmin ? "admin" : "user";
+  state.entity = state.isAdmin ? "Admin" : (me.entity || "LAOSS");
+  state.currentRegion = state.isAdmin ? "LAOSS" : state.entity;
 
   syncAuthUi();
 }
@@ -216,9 +182,9 @@ function syncAuthUi() {
   const signOutEl = getSignOutEl();
 
   if (state.authenticated) {
-    setText("signedInUserText", state.userDetails);
-    setText("assignedEntityText", state.entity);
-    setText("roleText", state.role);
+    setSignedInUserText(state.userDetails);
+    setAssignedEntityText(state.entity);
+    setRoleText(state.role);
 
     hide(signInEl);
     show(signOutEl);
@@ -229,9 +195,9 @@ function syncAuthUi() {
       };
     }
   } else {
-    setText("signedInUserText", "Not signed in");
-    setText("assignedEntityText", "None");
-    setText("roleText", "guest");
+    setSignedInUserText("Not signed in");
+    setAssignedEntityText("None");
+    setRoleText("guest");
 
     show(signInEl);
     hide(signOutEl);
@@ -298,9 +264,7 @@ function ensureAdminImportLink() {
 
   const wrapper = document.createElement("div");
   wrapper.id = "adminImportNavItem";
-  wrapper.innerHTML = `
-    <a class="nav-link" href="/admin-import.html">Admin Import</a>
-  `;
+  wrapper.innerHTML = `<a class="nav-link" href="/admin-import.html">Admin Import</a>`;
   nav.appendChild(wrapper);
 }
 
