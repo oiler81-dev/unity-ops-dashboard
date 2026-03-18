@@ -9,6 +9,9 @@ import {
   renderKpiCards
 } from "./helpers.js";
 
+const REGION_KEYS = ["LAOSS", "NES", "SpineOne", "MRO"];
+const SHARED_KEYS = ["PT", "CXNS", "Capacity", "Productivity Builder"];
+
 const state = {
   authenticated: false,
   userDetails: "",
@@ -97,6 +100,73 @@ function normalizeApiMe(result) {
     entity: result.entity || "",
     isAdmin: !!result.isAdmin
   };
+}
+
+function parseJsonSafely(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeRegionValues(result) {
+  if (!result || typeof result !== "object") return {};
+
+  if (result.values && typeof result.values === "object") {
+    return result.values;
+  }
+
+  if (result.valuesJson) {
+    return parseJsonSafely(result.valuesJson, {});
+  }
+
+  const directKeys = [
+    "weekNumber",
+    "monthTag",
+    "daysInPeriod",
+    "totalVisits",
+    "visitsPerDay",
+    "npActual",
+    "establishedActual",
+    "surgeryActual",
+    "totalCalls",
+    "abandonedCalls",
+    "abandonmentRate",
+    "answeredCallToNpConversion",
+    "cashActual"
+  ];
+
+  const direct = {};
+  for (const key of directKeys) {
+    if (key in result) direct[key] = result[key];
+  }
+
+  return direct;
+}
+
+function normalizeSharedValues(result) {
+  if (!result || typeof result !== "object") return {};
+
+  if (result.values && typeof result.values === "object") {
+    return result.values;
+  }
+
+  if (result.valuesJson) {
+    return parseJsonSafely(result.valuesJson, {});
+  }
+
+  const direct = {};
+  for (const [key, value] of Object.entries(result)) {
+    if (!["page", "weekEnding", "source", "updatedAt", "importedAt"].includes(key)) {
+      direct[key] = value;
+    }
+  }
+
+  return direct;
 }
 
 async function resolveAuth() {
@@ -421,6 +491,28 @@ function getPreviousWeekEnding(weekEnding) {
   return d.toISOString().split("T")[0];
 }
 
+function findNavLinkForRegion(entity) {
+  return Array.from(document.querySelectorAll(".nav-link")).find((el) => {
+    const dataEntity = (el.dataset.entity || "").trim();
+    const text = (el.textContent || "").trim();
+    return dataEntity === entity || text === entity;
+  });
+}
+
+function findNavLinkForShared(page) {
+  return Array.from(document.querySelectorAll(".nav-link")).find((el) => {
+    const dataPage = (el.dataset.page || "").trim();
+    const text = (el.textContent || "").trim();
+    return dataPage === page || text === page;
+  });
+}
+
+function findExecutiveNavLink() {
+  return Array.from(document.querySelectorAll(".nav-link")).find((el) =>
+    ((el.textContent || "").trim().toLowerCase().includes("executive"))
+  );
+}
+
 async function loadDashboard() {
   const week = currentWeekEnding();
 
@@ -449,19 +541,28 @@ async function loadRegionPage(entity) {
   );
   setStatusPanelText(`Loading ${entity} weekly data...`);
 
-  const current = await safeApiGet(
+  const currentResponse = await safeApiGet(
     `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
-    { values: {} }
+    {}
   );
 
-  const previous = await safeApiGet(
+  const previousResponse = await safeApiGet(
     `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(previousWeek)}`,
-    { values: {} }
+    {}
   );
 
-  const cards = buildRegionCards(current.values || {}, previous.values || {});
+  const currentValues = normalizeRegionValues(currentResponse);
+  const previousValues = normalizeRegionValues(previousResponse);
+
+  const cards = buildRegionCards(currentValues, previousValues);
   renderCardsFromItems(cards);
-  setStatusPanelText(`${entity} weekly data loaded.`);
+
+  const hasAnyCurrentValue = Object.values(currentValues).some((v) => v !== null && v !== undefined && v !== "");
+  setStatusPanelText(
+    hasAnyCurrentValue
+      ? `${entity} weekly data loaded.`
+      : `${entity} has no saved data for ${formatDate(week)}.`
+  );
 }
 
 async function loadSharedPage(page) {
@@ -488,19 +589,28 @@ async function loadSharedPage(page) {
     return;
   }
 
-  const current = await safeApiGet(
+  const currentResponse = await safeApiGet(
     `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(week)}`,
-    { values: {} }
+    {}
   );
 
-  const previous = await safeApiGet(
+  const previousResponse = await safeApiGet(
     `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(previousWeek)}`,
-    { values: {} }
+    {}
   );
 
-  const cards = buildSharedCards(page, current.values || {}, previous.values || {});
+  const currentValues = normalizeSharedValues(currentResponse);
+  const previousValues = normalizeSharedValues(previousResponse);
+
+  const cards = buildSharedCards(page, currentValues, previousValues);
   renderCardsFromItems(cards);
-  setStatusPanelText(`${page} weekly data loaded.`);
+
+  const hasAnyCurrentValue = Object.values(currentValues).some((v) => v !== null && v !== undefined && v !== "");
+  setStatusPanelText(
+    hasAnyCurrentValue
+      ? `${page} weekly data loaded.`
+      : `${page} has no saved data for ${formatDate(week)}.`
+  );
 }
 
 async function loadCurrentView() {
@@ -525,10 +635,18 @@ function routeFromLink(link) {
   const explicit = link.dataset.route;
   if (explicit) return explicit;
 
-  const text = (link.textContent || "").trim().toLowerCase();
-  if (text.includes("executive")) return "dashboard";
-  if (["laoss", "nes", "spineone", "mro"].includes(text)) return "region";
-  if (["pt", "cxns", "capacity", "productivity builder"].includes(text)) return "shared";
+  const dataEntity = (link.dataset.entity || "").trim();
+  const dataPage = (link.dataset.page || "").trim();
+
+  if (REGION_KEYS.includes(dataEntity)) return "region";
+  if (SHARED_KEYS.includes(dataPage)) return "shared";
+
+  const text = (link.textContent || "").trim();
+
+  if (REGION_KEYS.includes(text)) return "region";
+  if (SHARED_KEYS.includes(text)) return "shared";
+  if (text.toLowerCase().includes("executive")) return "dashboard";
+
   return "dashboard";
 }
 
@@ -549,11 +667,13 @@ function initNavigation() {
     state.currentRoute = route;
 
     if (route === "region") {
-      state.currentRegion = link.dataset.entity || state.currentRegion;
+      const clickedEntity = (link.dataset.entity || link.textContent || "").trim();
+      state.currentRegion = REGION_KEYS.includes(clickedEntity) ? clickedEntity : state.currentRegion;
     }
 
     if (route === "shared") {
-      state.currentSharedPage = link.dataset.page || state.currentSharedPage;
+      const clickedPage = (link.dataset.page || link.textContent || "").trim();
+      state.currentSharedPage = SHARED_KEYS.includes(clickedPage) ? clickedPage : state.currentSharedPage;
     }
 
     activateNav(link);
@@ -580,6 +700,7 @@ async function saveRegion() {
   }
 
   alert("Saved successfully.");
+  await loadCurrentView();
 }
 
 async function saveShared() {
@@ -601,6 +722,7 @@ async function saveShared() {
   }
 
   alert("Saved successfully.");
+  await loadCurrentView();
 }
 
 function initButtons() {
@@ -649,14 +771,11 @@ function initHeroButtons() {
   if (goToRegionBtn) {
     goToRegionBtn.addEventListener("click", async () => {
       state.currentRoute = "region";
-      state.currentRegion = isAdmin() ? "LAOSS" : (state.entity === "Admin" ? "LAOSS" : state.entity);
+      state.currentRegion = isAdmin()
+        ? "LAOSS"
+        : (state.entity === "Admin" ? "LAOSS" : state.entity);
 
-      const regionLink = Array.from(document.querySelectorAll(".nav-link")).find((el) => {
-        const text = (el.textContent || "").trim();
-        return text === state.currentRegion;
-      });
-
-      activateNav(regionLink);
+      activateNav(findNavLinkForRegion(state.currentRegion));
       await loadCurrentView();
     });
   }
@@ -664,15 +783,24 @@ function initHeroButtons() {
   if (executiveBtn) {
     executiveBtn.addEventListener("click", async () => {
       state.currentRoute = "dashboard";
-
-      const executiveLink = Array.from(document.querySelectorAll(".nav-link")).find((el) =>
-        ((el.textContent || "").trim().toLowerCase().includes("executive"))
-      );
-
-      activateNav(executiveLink);
+      activateNav(findExecutiveNavLink());
       await loadCurrentView();
     });
   }
+}
+
+function activateInitialNav() {
+  if (state.currentRoute === "region") {
+    activateNav(findNavLinkForRegion(state.currentRegion));
+    return;
+  }
+
+  if (state.currentRoute === "shared") {
+    activateNav(findNavLinkForShared(state.currentSharedPage));
+    return;
+  }
+
+  activateNav(findExecutiveNavLink());
 }
 
 async function init() {
@@ -683,6 +811,7 @@ async function init() {
     initHeroButtons();
     await resolveAuth();
     initNavigation();
+    activateInitialNav();
     await loadCurrentView();
   } catch (err) {
     handleFatalError(err);
