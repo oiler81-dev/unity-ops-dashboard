@@ -153,6 +153,7 @@ async function importRegionSheet(regionTable, ws, sheetName) {
 
   const rows = sheetRows(ws);
   let imported = 0;
+  const skipped = [];
 
   for (let r = 6; r < rows.length; r += 1) {
     const row = rows[r];
@@ -168,10 +169,16 @@ async function importRegionSheet(regionTable, ws, sheetName) {
     const cashActual = sheetName === "Denver" ? toNumber(row[17]) : toNumber(row[16]);
     const monthTag = sheetName === "Denver" ? safeText(row[18]) : safeText(row[17]);
 
-    if (!weekNumber || !monthTag) continue;
+    if (!weekNumber || !monthTag) {
+      skipped.push({ row: r + 1, reason: "Missing week number or month tag" });
+      continue;
+    }
 
     const weekEnding = weekEndingFromMonthAndWeek(monthTag, weekNumber);
-    if (!weekEnding) continue;
+    if (!weekEnding) {
+      skipped.push({ row: r + 1, reason: `Could not derive week ending from month "${monthTag}" and week "${weekNumber}"` });
+      continue;
+    }
 
     const totalVisits = sheetName === "Denver"
       ? sumNullable(row[5], row[6], row[7], row[8])
@@ -192,15 +199,15 @@ async function importRegionSheet(regionTable, ws, sheetName) {
       weekNumber,
       monthTag: normalizeMonthLabel(monthTag),
       daysInPeriod: daysInPeriod || 0,
-      totalVisits,
-      visitsPerDay,
+      totalVisits: totalVisits || 0,
+      visitsPerDay: visitsPerDay || 0,
       npActual: npActual || 0,
       establishedActual: establishedActual || 0,
       surgeryActual: surgeryActual || 0,
       totalCalls: totalCalls || 0,
       abandonedCalls: abandonedCalls || 0,
-      abandonmentRate,
-      answeredCallToNpConversion,
+      abandonmentRate: abandonmentRate || 0,
+      answeredCallToNpConversion: answeredCallToNpConversion || 0,
       cashActual: cashActual || 0
     };
 
@@ -208,7 +215,12 @@ async function importRegionSheet(regionTable, ws, sheetName) {
     imported += 1;
   }
 
-  return { sheet: sheetName, entity, imported };
+  return {
+    sheet: sheetName,
+    entity,
+    imported,
+    skipped: skipped.slice(0, 25)
+  };
 }
 
 async function importPtSheet(sharedTable, ws) {
