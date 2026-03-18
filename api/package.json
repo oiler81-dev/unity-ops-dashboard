@@ -1,6 +1,7 @@
 {
   "name": "unitymsk-dashboard-api",
   "version": "1.0.0",
+  "private": true,
   "description": "API for the UnityMSK Dashboard",
   "main": "index.js",
   "scripts": {
@@ -9,10 +10,8 @@
   },
   "dependencies": {
     "@azure/data-tables": "^13.2.2",
-    "xlsx": "^0.18.5",
-    "shared": "file:./shared"
+    "xlsx": "^0.18.5"
   },
-  "devDependencies": {},
   "engines": {
     "node": "18.x"
   }
