@@ -67,7 +67,7 @@ function weekEndingFromMonthAndWeek(monthLabel, weekNumber) {
   if (!monthNum || !Number.isFinite(wk) || wk < 1) return "";
 
   const firstOfMonth = new Date(Date.UTC(WORKBOOK_YEAR, monthNum - 1, 1));
-  const firstDayDow = firstOfMonth.getUTCDay(); // 0 = Sunday
+  const firstDayDow = firstOfMonth.getUTCDay();
   const offsetToFirstSunday = (7 - firstDayDow) % 7;
 
   const firstSunday = new Date(firstOfMonth);
@@ -81,7 +81,6 @@ function weekEndingFromMonthAndWeek(monthLabel, weekNumber) {
 
 function toNumber(value) {
   if (value === null || value === undefined || value === "") return null;
-
   if (typeof value === "number" && Number.isFinite(value)) return value;
 
   const parsed = Number(String(value).replace(/,/g, "").trim());
@@ -101,7 +100,9 @@ function sheetRows(ws) {
 }
 
 function rowHasAnyData(row) {
-  return Array.isArray(row) && row.some((v) => v !== null && v !== undefined && String(v).trim() !== "");
+  return Array.isArray(row) && row.some(
+    (v) => v !== null && v !== undefined && String(v).trim() !== ""
+  );
 }
 
 async function upsertRegionRecord(table, entity, weekEnding, values, source = "workbook-import") {
@@ -361,7 +362,8 @@ module.exports = async function (context, req) {
     if (!fileBase64) {
       context.res = {
         status: 400,
-        body: { error: "Missing fileBase64." }
+        headers: { "Content-Type": "application/json" },
+        body: { ok: false, error: "Missing fileBase64." }
       };
       return;
     }
@@ -416,9 +418,11 @@ module.exports = async function (context, req) {
     context.log.error("import-excel failed", error);
     context.res = {
       status: 500,
+      headers: { "Content-Type": "application/json" },
       body: {
+        ok: false,
         error: "Workbook import failed.",
-        details: error.message
+        details: error && error.message ? error.message : String(error)
       }
     };
   }
