@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UnityMSK Admin Import</title>
+  <style>
+    :root{
+      --bg:#061628;
+      --bg2:#08284a;
+      --panel:#163453;
+      --panel2:#1d4267;
+      --text:#f5f7fb;
+      --muted:#9fb2c6;
+      --line:rgba(255,255,255,.10);
+      --gold:#f5c518;
+      --goldText:#0d2035;
+      --btn:#284b70;
+      --danger:#c95b5b;
+      --success:#58b87a;
+      --radius:18px;
+    }
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top center, rgba(255,255,255,.08), transparent 28%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+      min-height:100vh;
+    }
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:16px;
+      padding:18px 28px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      background:rgba(4,20,38,.45);
+      backdrop-filter: blur(6px);
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      text-decoration:none;
+      color:var(--text);
+      font-weight:700;
+    }
+
+    .brand img{
+      height:28px;
+      width:auto;
+      display:block;
+    }
+
+    .topbar-actions{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    .pill{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.05);
+      color:var(--text);
+      text-decoration:none;
+      border-radius:999px;
+      padding:10px 16px;
+      font-weight:700;
+      font-size:14px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .page{
+      max-width:1100px;
+      margin:0 auto;
+      padding:32px 20px 48px;
+    }
+
+    .hero{
+      text-align:center;
+      margin:18px 0 28px;
+    }
+
+    .hero .kicker{
+      color:var(--gold);
+      text-transform:uppercase;
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.12em;
+      margin-bottom:8px;
+    }
+
+    .hero h1{
+      margin:0 0 10px;
+      font-size:54px;
+      font-weight:300;
+      line-height:1.02;
+    }
+
+    .hero p{
+      max-width:760px;
+      margin:0 auto;
+      color:var(--muted);
+      line-height:1.6;
+      font-size:16px;
+    }
+
+    .layout{
+      display:grid;
+      grid-template-columns: 280px 1fr;
+      gap:22px;
+      align-items:start;
+    }
+
+    .sidebar,
+    .panel{
+      background:rgba(22,52,83,.92);
+      border:1px solid var(--line);
+      border-radius:22px;
+      box-shadow:0 12px 30px rgba(0,0,0,.18);
+    }
+
+    .sidebar{
+      padding:18px;
+    }
+
+    .sidebar .label{
+      color:var(--gold);
+      text-transform:uppercase;
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.08em;
+      margin-bottom:10px;
+    }
+
+    .sidebar .title{
+      font-size:34px;
+      font-weight:800;
+      margin-bottom:20px;
+    }
+
+    .nav{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .nav a{
+      text-decoration:none;
+      color:var(--text);
+      background:rgba(255,255,255,.03);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:13px 14px;
+      font-weight:700;
+      font-size:15px;
+    }
+
+    .nav a.active{
+      outline:1px solid rgba(245,197,24,.5);
+      box-shadow: inset 0 0 0 1px rgba(245,197,24,.35);
+    }
+
+    .meta{
+      margin-top:22px;
+      padding-top:18px;
+      border-top:1px solid rgba(255,255,255,.08);
+    }
+
+    .meta-block + .meta-block{
+      margin-top:14px;
+    }
+
+    .meta-label{
+      color:var(--muted);
+      text-transform:uppercase;
+      font-size:11px;
+      font-weight:700;
+      margin-bottom:4px;
+    }
+
+    .meta-value{
+      font-weight:700;
+      font-size:15px;
+    }
+
+    .panel{
+      padding:20px;
+    }
+
+    .panel-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+      margin-bottom:18px;
+      flex-wrap:wrap;
+    }
+
+    .panel-header h2{
+      margin:0 0 8px;
+      font-size:34px;
+    }
+
+    .panel-header p{
+      margin:0;
+      color:var(--muted);
+      line-height:1.5;
+      max-width:720px;
+    }
+
+    .status-card{
+      min-width:220px;
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+    }
+
+    .status-label{
+      color:var(--muted);
+      text-transform:uppercase;
+      font-size:11px;
+      font-weight:700;
+      margin-bottom:4px;
+    }
+
+    .status-value{
+      font-size:16px;
+      font-weight:800;
+      margin-bottom:10px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap:16px;
+      margin:18px 0 20px;
+    }
+
+    .card{
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:16px;
+    }
+
+    .card .card-label{
+      color:var(--muted);
+      text-transform:uppercase;
+      font-size:11px;
+      font-weight:700;
+      margin-bottom:8px;
+    }
+
+    .card .card-value{
+      font-size:18px;
+      font-weight:800;
+      word-break:break-word;
+    }
+
+    .upload{
+      margin-top:14px;
+      background:rgba(255,255,255,.03);
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:18px;
+    }
+
+    .upload label{
+      display:block;
+      font-size:12px;
+      text-transform:uppercase;
+      color:var(--muted);
+      font-weight:700;
+      margin-bottom:10px;
+    }
+
+    .file-input{
+      width:100%;
+      padding:14px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:var(--panel2);
+      color:var(--text);
+    }
+
+    .actions{
+      display:flex;
+      gap:12px;
+      margin-top:16px;
+      flex-wrap:wrap;
+    }
+
+    button{
+      border:none;
+      border-radius:999px;
+      padding:12px 18px;
+      font-weight:800;
+      cursor:pointer;
+      font-size:14px;
+    }
+
+    .btn-primary{
+      background:var(--gold);
+      color:var(--goldText);
+    }
+
+    .btn-secondary{
+      background:var(--btn);
+      color:var(--text);
+      border:1px solid var(--line);
+    }
+
+    .log{
+      margin-top:20px;
+      background:rgba(0,0,0,.18);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:16px;
+      min-height:220px;
+      white-space:pre-wrap;
+      line-height:1.55;
+      overflow:auto;
+    }
+
+    .ok{ color: var(--success); }
+    .bad{ color: var(--danger); }
+
+    .small{
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.55;
+      margin-top:14px;
+    }
+
+    @media (max-width: 900px){
+      .layout{
+        grid-template-columns: 1fr;
+      }
+
+      .hero h1{
+        font-size:42px;
+      }
+
+      .grid{
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/" class="brand">
+      <img src="/assets/unitymsk-logo.png" alt="UnityMSK" onerror="this.style.display='none';" />
+      <span>UnityMSK</span>
+    </a>
+
+    <div class="topbar-actions">
+      <a class="pill" href="/">Back to Dashboard</a>
+      <a class="pill" href="/.auth/logout">Sign Out</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      <div class="kicker">UnityMSK</div>
+      <h1>Admin Import</h1>
+      <p>
+        Upload the locked dashboard workbook and import the historical weekly data into Azure Table Storage.
+      </p>
+    </section>
+
+    <section class="layout">
+      <aside class="sidebar">
+        <div class="label">Navigation</div>
+        <div class="title">Import</div>
+
+        <nav class="nav">
+          <a href="/" >Executive Summary</a>
+          <a href="/admin-import.html" class="active">Admin Import</a>
+        </nav>
+
+        <div class="meta">
+          <div class="meta-block">
+            <div class="meta-label">Signed In As</div>
+            <div id="userText" class="meta-value">Checking...</div>
+          </div>
+
+          <div class="meta-block">
+            <div class="meta-label">Role</div>
+            <div id="roleText" class="meta-value">Checking...</div>
+          </div>
+
+          <div class="meta-block">
+            <div class="meta-label">Access</div>
+            <div id="accessText" class="meta-value">Checking...</div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Workbook Import</h2>
+            <p>
+              This uploads the Excel workbook to the import API and backfills weekly region and shared-page data.
+            </p>
+          </div>
+
+          <div class="status-card">
+            <div class="status-label">Status</div>
+            <div id="statusValue" class="status-value">Idle</div>
+
+            <div class="status-label">Last Result</div>
+            <div id="resultSummary" class="status-value">None yet</div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <div class="card-label">Expected File</div>
+            <div class="card-value">Unity operational dashboard workbook (.xlsx)</div>
+          </div>
+
+          <div class="card">
+            <div class="card-label">Import Endpoint</div>
+            <div class="card-value">/api/import-excel</div>
+          </div>
+        </div>
+
+        <div class="upload">
+          <label for="excelFile">Workbook File</label>
+          <input id="excelFile" class="file-input" type="file" accept=".xlsx,.xlsm,.xls" />
+
+          <div class="actions">
+            <button id="importBtn" class="btn-primary" type="button">Import Workbook</button>
+            <button id="testAuthBtn" class="btn-secondary" type="button">Recheck Access</button>
+          </div>
+
+          <div class="small">
+            Use the same locked workbook you uploaded earlier. This page is intended for admins only.
+          </div>
+        </div>
+
+        <div id="logBox" class="log">Waiting for file.</div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    function setLog(message) {
+      document.getElementById("logBox").textContent = message;
+    }
+
+    function setStatus(value) {
+      document.getElementById("statusValue").textContent = value;
+    }
+
+    function setResultSummary(value) {
+      document.getElementById("resultSummary").textContent = value;
+    }
+
+    async function safeGet(url) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) return null;
+        return await response.json();
+      } catch {
+        return null;
+      }
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",")[1] : result;
+          resolve(base64);
+        };
+
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function checkAccess() {
+      setStatus("Checking");
+      const me = await safeGet("/api/me");
+
+      if (!me || !me.authenticated) {
+        document.getElementById("userText").textContent = "Not signed in";
+        document.getElementById("roleText").textContent = "guest";
+        document.getElementById("accessText").textContent = "Denied";
+        setStatus("Blocked");
+        setResultSummary("Not signed in");
+        setLog("You are not signed in.");
+        return { allowed: false };
+      }
+
+      document.getElementById("userText").textContent = me.userDetails || "Unknown";
+      document.getElementById("roleText").textContent = me.isAdmin ? "admin" : "user";
+      document.getElementById("accessText").textContent = me.isAdmin ? "Allowed" : "Denied";
+
+      if (!me.isAdmin) {
+        setStatus("Blocked");
+        setResultSummary("Admin required");
+        setLog(JSON.stringify(me, null, 2));
+        return { allowed: false, me };
+      }
+
+      setStatus("Ready");
+      setResultSummary("Awaiting file");
+      setLog(JSON.stringify(me, null, 2));
+      return { allowed: true, me };
+    }
+
+    async function importWorkbook() {
+      const auth = await checkAccess();
+      if (!auth.allowed) return;
+
+      const fileInput = document.getElementById("excelFile");
+      const file = fileInput.files && fileInput.files[0];
+
+      if (!file) {
+        setStatus("Blocked");
+        setResultSummary("No file selected");
+        setLog("Choose a workbook file first.");
+        return;
+      }
+
+      setStatus("Uploading");
+      setResultSummary(file.name);
+      setLog("Reading workbook file...");
+
+      try {
+        const fileBase64 = await fileToBase64(file);
+
+        setStatus("Importing");
+        setLog("Uploading workbook and calling /api/import-excel ...");
+
+        const response = await fetch("/api/import-excel", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ fileBase64 })
+        });
+
+        const result = await response.json().catch(() => ({
+          ok: false,
+          error: "Unable to read JSON response from import endpoint."
+        }));
+
+        if (!response.ok) {
+          setStatus("Failed");
+          setResultSummary("Import failed");
+          setLog(JSON.stringify(result, null, 2));
+          return;
+        }
+
+        setStatus("Complete");
+        setResultSummary("Import completed");
+        setLog(JSON.stringify(result, null, 2));
+      } catch (error) {
+        setStatus("Failed");
+        setResultSummary("Unexpected error");
+        setLog(error && error.message ? error.message : String(error));
+      }
+    }
+
+    document.getElementById("importBtn").addEventListener("click", importWorkbook);
+    document.getElementById("testAuthBtn").addEventListener("click", checkAccess);
+
+    checkAccess();
+  </script>
+</body>
+</html>
