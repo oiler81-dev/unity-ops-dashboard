@@ -152,7 +152,7 @@
       border:1px solid rgba(255,255,255,.10);
       border-radius:16px;
       padding:16px;
-      min-height:220px;
+      min-height:260px;
       white-space:pre-wrap;
       line-height:1.55;
       overflow:auto;
@@ -371,21 +371,36 @@
           body: JSON.stringify({ fileBase64 })
         });
 
-        const result = await response.json().catch(() => ({
-          ok: false,
-          error: "Unable to read JSON response from import endpoint."
-        }));
+        const rawText = await response.text();
+
+        let parsed = null;
+        try {
+          parsed = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          parsed = null;
+        }
 
         if (!response.ok) {
           setStatus("Failed");
           setResultSummary("Import failed");
-          setLog(JSON.stringify(result, null, 2));
+          setLog(
+            parsed
+              ? JSON.stringify(parsed, null, 2)
+              : `HTTP ${response.status} ${response.statusText}\n\n${rawText || "(empty response body)"}`
+          );
+          return;
+        }
+
+        if (!parsed) {
+          setStatus("Failed");
+          setResultSummary("Non-JSON success response");
+          setLog(`Import endpoint returned non-JSON content:\n\n${rawText || "(empty response body)"}`);
           return;
         }
 
         setStatus("Complete");
         setResultSummary("Import completed");
-        setLog(JSON.stringify(result, null, 2));
+        setLog(JSON.stringify(parsed, null, 2));
       } catch (error) {
         setStatus("Failed");
         setResultSummary("Unexpected error");
