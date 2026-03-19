@@ -102,6 +102,22 @@ function normalizeApiMe(result) {
   };
 }
 
+function normalizeAuthMe(result) {
+  const principal = result?.clientPrincipal;
+  if (!principal || !principal.userId) return null;
+
+  const roles = unique(principal.userRoles || []);
+  const admin = roles.includes("admin");
+
+  return {
+    authenticated: true,
+    userDetails: principal.userDetails || principal.userId || "",
+    roles,
+    entity: admin ? "Admin" : "",
+    isAdmin: admin
+  };
+}
+
 function parseJsonSafely(value, fallback = {}) {
   if (!value) return fallback;
   if (typeof value === "object") return value;
@@ -172,7 +188,23 @@ function normalizeSharedValues(result) {
 async function resolveAuth() {
   setLoadingHeader();
 
-  const me = normalizeApiMe(await safeApiGet("/api/me", null));
+  let me = null;
+
+  try {
+    const apiMe = await safeApiGet("/api/me", null);
+    me = normalizeApiMe(apiMe);
+  } catch {
+    me = null;
+  }
+
+  if (!me) {
+    try {
+      const authMe = await safeApiGet("/.auth/me", null);
+      me = normalizeAuthMe(authMe);
+    } catch {
+      me = null;
+    }
+  }
 
   if (!me || !me.authenticated) {
     state.authenticated = false;
@@ -198,6 +230,14 @@ async function resolveAuth() {
 function syncAuthUi() {
   const signInEl = getSignInEl();
   const signOutEl = getSignOutEl();
+
+  if (signInEl) {
+    signInEl.setAttribute("href", "/.auth/login/aad");
+  }
+
+  if (signOutEl) {
+    signOutEl.setAttribute("href", "/.auth/logout");
+  }
 
   if (state.authenticated) {
     setSignedInUserText(state.userDetails);
@@ -236,7 +276,12 @@ function initWeekSelector() {
     .map((w) => `<option value="${w}">${formatDate(w)}</option>`)
     .join("");
 
-  select.value = state.weekEnding;
+  if (weeks.includes(state.weekEnding)) {
+    select.value = state.weekEnding;
+  } else if (weeks.length) {
+    select.value = weeks[0];
+    state.weekEnding = weeks[0];
+  }
 
   select.addEventListener("change", async () => {
     state.weekEnding = select.value;
@@ -527,7 +572,8 @@ async function loadDashboard() {
     { kpis: [] }
   );
 
-  renderKpiCards(Array.isArray(result.kpis) ? result.kpis : []);
+  const kpis = Array.isArray(result?.kpis) ? result.kpis : [];
+  renderKpiCards(kpis);
   setStatusPanelText("Executive dashboard loaded.");
 }
 
