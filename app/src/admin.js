@@ -1,338 +1,261 @@
-import { ENTITIES, KPI_METRICS } from "./definitions.js";
+const ADMIN_EMAILS = ["nperez@unitymsk.com", "tessa.kelley@spineone.com"];
 
-export function renderAdminEditorShell() {
-  return `
-    <div class="admin-editor-wrap">
-      <div class="admin-editor-tabs">
-        <button class="admin-editor-tab active" data-admin-tab="targets">Targets</button>
-        <button class="admin-editor-tab" data-admin-tab="thresholds">Thresholds</button>
-        <button class="admin-editor-tab" data-admin-tab="holidays">Holidays</button>
-        <button class="admin-editor-tab" data-admin-tab="budget">Budget</button>
-        <button class="admin-editor-tab" data-admin-tab="submissions">Submissions</button>
-        <button class="admin-editor-tab" data-admin-tab="audit">Audit</button>
-        <button class="admin-editor-tab" data-admin-tab="import">Import</button>
-      </div>
+const state = {
+  authenticated: false,
+  userDetails: "",
+  role: "guest",
+  entity: "None",
+  isAdmin: false
+};
 
-      <div class="admin-filter-bar">
-        <div class="field" id="adminEntityFilterWrap">
-          <label for="adminEntityFilter">Entity</label>
-          <select id="adminEntityFilter">
-            ${ENTITIES.map(entity => `<option value="${entity}">${entity}</option>`).join("")}
-          </select>
-        </div>
+const $ = (id) => document.getElementById(id);
 
-        <div class="field hidden" id="adminYearFilterWrap">
-          <label for="adminYearFilter">Year</label>
-          <input id="adminYearFilter" type="number" min="2024" max="2035" value="${new Date().getFullYear()}" />
-        </div>
-
-        <div class="field hidden" id="adminAuditEntityFilterWrap">
-          <label for="adminAuditEntityFilter">Audit Entity</label>
-          <select id="adminAuditEntityFilter">
-            <option value="">All</option>
-            <option value="LAOSS">LAOSS</option>
-            <option value="NES">NES</option>
-            <option value="SpineOne">SpineOne</option>
-            <option value="MRO">MRO</option>
-            <option value="PT">PT</option>
-            <option value="CXNS">CXNS</option>
-            <option value="Capacity">Capacity</option>
-            <option value="Productivity Builder">Productivity Builder</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="adminEditorContent"></div>
-    </div>
-  `;
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
-export function renderTargetsEditor(entity, rows = []) {
-  const rowMap = new Map(rows.map((r) => [r.metricKey, r]));
-  return `
-    <div class="section-head">
-      <h3>${entity} Targets</h3>
-      <p class="section-copy">Manage KPI targets for dashboard cards and variance logic.</p>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Metric</th><th>Label</th><th>Target Value</th></tr></thead>
-        <tbody>
-          ${KPI_METRICS.map((metric) => {
-            const row = rowMap.get(metric.key) || {};
-            return `
-              <tr>
-                <td>${metric.key}</td>
-                <td><input class="admin-input" data-admin-kind="target" data-metric-key="${metric.key}" data-field="label" value="${escapeAttr(row.label ?? metric.label)}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="target" data-metric-key="${metric.key}" data-field="targetValue" value="${escapeAttr(row.targetValue ?? "")}" /></td>
-              </tr>
-            `;
-          }).join("")}
-        </tbody>
-      </table>
-    </div>
-    <div class="admin-save-row"><button id="saveTargetsBtn" class="btn btn-primary">Save Targets</button></div>
-  `;
+function emailIsAdmin(value) {
+  return ADMIN_EMAILS.includes(normalizeEmail(value));
 }
 
-export function renderThresholdsEditor(entity, rows = []) {
-  const rowMap = new Map(rows.map((r) => [r.metricKey, r]));
-  return `
-    <div class="section-head">
-      <h3>${entity} Thresholds</h3>
-      <p class="section-copy">Manage KPI red/yellow/green logic by entity and metric.</p>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Metric</th><th>Type</th><th>Green Min</th><th>Yellow Min</th><th>Green Max</th><th>Yellow Max</th></tr></thead>
-        <tbody>
-          ${KPI_METRICS.map((metric) => {
-            const row = rowMap.get(metric.key) || {};
-            return `
-              <tr>
-                <td>${metric.key}</td>
-                <td>
-                  <select class="admin-input" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="comparisonType">
-                    <option value="higher_better" ${row.comparisonType === "higher_better" ? "selected" : ""}>higher_better</option>
-                    <option value="lower_better" ${row.comparisonType === "lower_better" ? "selected" : ""}>lower_better</option>
-                  </select>
-                </td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="greenMin" value="${escapeAttr(row.greenMin ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="yellowMin" value="${escapeAttr(row.yellowMin ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="greenMax" value="${escapeAttr(row.greenMax ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="threshold" data-metric-key="${metric.key}" data-field="yellowMax" value="${escapeAttr(row.yellowMax ?? "")}" /></td>
-              </tr>
-            `;
-          }).join("")}
-        </tbody>
-      </table>
-    </div>
-    <div class="admin-save-row"><button id="saveThresholdsBtn" class="btn btn-primary">Save Thresholds</button></div>
-  `;
-}
-
-export function renderHolidaysEditor(year, rows = []) {
-  const normalized = [...rows].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-  return `
-    <div class="section-head">
-      <h3>${year} Holidays</h3>
-      <p class="section-copy">Manage holiday dates used for working-day and planning logic.</p>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Date</th><th>Holiday Name</th></tr></thead>
-        <tbody id="holidayRows">
-          ${normalized.map((row, index) => `
-            <tr>
-              <td><input class="admin-input" type="date" data-admin-kind="holiday" data-row-index="${index}" data-field="date" value="${escapeAttr(row.date ?? "")}" /></td>
-              <td><input class="admin-input" data-admin-kind="holiday" data-row-index="${index}" data-field="holidayName" value="${escapeAttr(row.holidayName ?? "")}" /></td>
-            </tr>
-          `).join("")}
-          ${renderEmptyHolidayRows(normalized.length, 8)}
-        </tbody>
-      </table>
-    </div>
-    <div class="admin-save-row"><button id="saveHolidaysBtn" class="btn btn-primary">Save Holidays</button></div>
-  `;
-}
-
-export function renderBudgetEditor(entity, rows = []) {
-  const rowMap = new Map(rows.map((r) => [r.monthKey, r]));
-  const months = ["01","02","03","04","05","06","07","08","09","10","11","12"];
-  return `
-    <div class="section-head">
-      <h3>${entity} Budget</h3>
-      <p class="section-copy">Manage monthly budget reference values for visits and revenue.</p>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Month</th><th>Budget Visits</th><th>Budget Revenue</th></tr></thead>
-        <tbody>
-          ${months.map((month) => {
-            const row = rowMap.get(month) || {};
-            return `
-              <tr>
-                <td>${month}</td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="budget" data-month-key="${month}" data-field="budgetVisits" value="${escapeAttr(row.budgetVisits ?? "")}" /></td>
-                <td><input class="admin-input" type="number" step="0.01" data-admin-kind="budget" data-month-key="${month}" data-field="budgetRevenue" value="${escapeAttr(row.budgetRevenue ?? "")}" /></td>
-              </tr>
-            `;
-          }).join("")}
-        </tbody>
-      </table>
-    </div>
-    <div class="admin-save-row"><button id="saveBudgetBtn" class="btn btn-primary">Save Budget</button></div>
-  `;
-}
-
-export function renderSubmissionTracker(data) {
-  return `
-    <div class="section-head">
-      <h3>Submission Tracking</h3>
-      <p class="section-copy">Accountability view for status, updates, missing submissions, and approval workflow.</p>
-    </div>
-    <div class="summary-mini-grid">
-      <div class="summary-mini-card"><span class="summary-mini-label">Total Entities</span><strong class="summary-mini-value">${data.summary?.totalEntities ?? 0}</strong></div>
-      <div class="summary-mini-card"><span class="summary-mini-label">Submitted</span><strong class="summary-mini-value">${data.summary?.submittedCount ?? 0}</strong></div>
-      <div class="summary-mini-card"><span class="summary-mini-label">Missing</span><strong class="summary-mini-value">${data.summary?.missingCount ?? 0}</strong></div>
-      <div class="summary-mini-card"><span class="summary-mini-label">Week Ending</span><strong class="summary-mini-value">${escapeHtml(data.weekEnding || "")}</strong></div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Entity</th><th>Status</th><th>Updated By</th><th>Updated At</th><th>Submitted By</th><th>Submitted At</th><th>Approved By</th><th>Approved At</th><th>Inputs</th><th>Narrative</th><th>Action</th></tr></thead>
-        <tbody>
-          ${(data.rows || []).map((row) => `
-            <tr>
-              <td>${escapeHtml(row.entity)}</td>
-              <td>${escapeHtml(row.status)}</td>
-              <td>${escapeHtml(row.updatedBy || "—")}</td>
-              <td>${escapeHtml(row.updatedAt || "—")}</td>
-              <td>${escapeHtml(row.submittedBy || "—")}</td>
-              <td>${escapeHtml(row.submittedAt || "—")}</td>
-              <td>${escapeHtml(row.approvedBy || "—")}</td>
-              <td>${escapeHtml(row.approvedAt || "—")}</td>
-              <td>${escapeHtml(String(row.inputCount ?? 0))}</td>
-              <td>${row.hasNarrative ? "Yes" : "No"}</td>
-              <td>
-                ${row.status === "Submitted"
-                  ? `<button class="btn btn-secondary approve-week-btn" data-entity="${escapeAttr(row.entity)}" data-week-ending="${escapeAttr(row.weekEnding)}">Approve</button>`
-                  : row.status === "Approved"
-                    ? `<span class="pill">Approved</span>`
-                    : `<span class="pill">—</span>`}
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
-    <div class="note-panel" style="margin-top:18px;">
-      <h4>Missing Entities</h4>
-      <p>${escapeHtml((data.summary?.missingEntities || []).join(", ") || "None")}</p>
-    </div>
-  `;
-}
-
-export function renderAuditViewer(data) {
-  return `
-    <div class="section-head">
-      <h3>Audit Log</h3>
-      <p class="section-copy">Recent changes for the selected week and entity scope.</p>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Entity</th><th>Section</th><th>Metric</th><th>Old Value</th><th>New Value</th><th>Changed By</th><th>Changed At</th><th>Type</th></tr></thead>
-        <tbody>
-          ${(data.rows || []).map((row) => `
-            <tr>
-              <td>${escapeHtml(row.entity || "—")}</td>
-              <td>${escapeHtml(row.section || "—")}</td>
-              <td>${escapeHtml(row.metricKey || "—")}</td>
-              <td>${escapeHtml(String(row.oldValue ?? "—"))}</td>
-              <td>${escapeHtml(String(row.newValue ?? "—"))}</td>
-              <td>${escapeHtml(row.changedBy || "—")}</td>
-              <td>${escapeHtml(row.changedAt || "—")}</td>
-              <td>${escapeHtml(row.changeType || "—")}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
-export function renderImportTool(lastResult = null) {
-  return `
-    <div class="section-head">
-      <h3>Workbook Import</h3>
-      <p class="section-copy">Admin-only workbook import for historical dashboard seeding.</p>
-    </div>
-    <div class="note-panel">
-      <h4>Import Scope</h4>
-      <p>This version imports regional weekly data plus PT and CXNS shared-page data.</p>
-    </div>
-    <div class="field" style="margin-top:18px;">
-      <label for="workbookUploadInput">Select Excel Workbook</label>
-      <input id="workbookUploadInput" type="file" accept=".xlsx,.xlsm,.xls" />
-    </div>
-    <div class="admin-save-row" style="justify-content:flex-start; margin-top:18px;">
-      <button id="runWorkbookImportBtn" class="btn btn-primary">Run Import</button>
-    </div>
-    ${lastResult ? `
-      <div class="note-panel" style="margin-top:18px;">
-        <h4>Last Import Result</h4>
-        <p><strong>File:</strong> ${escapeHtml(lastResult.fileName || "—")}</p>
-        <p><strong>Weekly Inputs Upserted:</strong> ${escapeHtml(String(lastResult.weeklyInputCount ?? 0))}</p>
-        <p><strong>Submission Rows Upserted:</strong> ${escapeHtml(String(lastResult.submissionCount ?? 0))}</p>
-        <p><strong>Touched Weeks:</strong> ${escapeHtml(String(lastResult.touchedWeekCount ?? 0))}</p>
-        <p><strong>Message:</strong> ${escapeHtml(lastResult.message || "Completed")}</p>
-      </div>
-    ` : ""}
-  `;
-}
-
-export function collectAdminRows(kind) {
-  if (kind === "holiday") {
-    const map = new Map();
-    document.querySelectorAll(`.admin-input[data-admin-kind="holiday"]`).forEach((el) => {
-      const rowIndex = el.dataset.rowIndex;
-      const field = el.dataset.field;
-      if (!map.has(rowIndex)) map.set(rowIndex, {});
-      const row = map.get(rowIndex);
-      row[field] = el.value === "" ? null : el.value;
+async function safeGetJson(url, fallback = null) {
+  try {
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: { Accept: "application/json" }
     });
-    return Array.from(map.values()).filter((row) => row.date || row.holidayName);
+
+    if (!res.ok) return fallback;
+    return await res.json();
+  } catch {
+    return fallback;
+  }
+}
+
+function unique(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
+}
+
+function normalizeApiMe(result) {
+  if (!result || !result.authenticated) return null;
+
+  const userDetails = result.userDetails || "";
+  const roles = unique(result.roles);
+  const apiSaysAdmin =
+    !!result.isAdmin ||
+    roles.some((r) => String(r || "").toLowerCase() === "admin");
+  const forcedAdmin = emailIsAdmin(userDetails);
+
+  return {
+    authenticated: true,
+    userDetails,
+    roles,
+    isAdmin: apiSaysAdmin || forcedAdmin,
+    entity: forcedAdmin ? "Admin" : (result.entity || "")
+  };
+}
+
+function normalizeAuthMe(result) {
+  const principal = result?.clientPrincipal;
+  if (!principal || !principal.userId) return null;
+
+  const userDetails = principal.userDetails || principal.userId || "";
+  const roles = unique(principal.userRoles || []);
+  const roleAdmin = roles.some((r) => String(r || "").toLowerCase() === "admin");
+  const forcedAdmin = emailIsAdmin(userDetails);
+
+  return {
+    authenticated: true,
+    userDetails,
+    roles,
+    isAdmin: roleAdmin || forcedAdmin,
+    entity: forcedAdmin ? "Admin" : ""
+  };
+}
+
+function setText(id, value) {
+  const el = $(id);
+  if (el) el.textContent = value;
+}
+
+function setStatusBadge(text) {
+  const el = $("statusBadge");
+  if (el) el.textContent = text;
+}
+
+function setAccessText(text) {
+  setText("accessText", text);
+}
+
+function setSignedInText(text) {
+  setText("signedInAsText", text);
+}
+
+function setRoleText(text) {
+  setText("roleText", text);
+}
+
+function setResultText(text) {
+  setText("lastResultText", text);
+}
+
+function setLogText(text) {
+  const el = $("importLog");
+  if (el) el.textContent = text;
+}
+
+function updateUi() {
+  setSignedInText(state.authenticated ? state.userDetails : "Not signed in");
+  setRoleText(state.role);
+  setAccessText(state.isAdmin ? "Allowed" : "Denied");
+  setStatusBadge(state.isAdmin ? "Ready" : "Blocked");
+
+  const importBtn = $("importButton");
+  const recheckBtn = $("recheckAccessButton");
+  const fileInput = $("workbookFile");
+
+  if (importBtn) importBtn.disabled = !state.isAdmin;
+  if (fileInput) fileInput.disabled = !state.isAdmin;
+  if (recheckBtn) recheckBtn.disabled = false;
+
+  if (!state.authenticated) {
+    setResultText("Not signed in");
+    setLogText("You are not signed in.");
+    return;
   }
 
-  if (kind === "budget") {
-    const map = new Map();
-    document.querySelectorAll(`.admin-input[data-admin-kind="budget"]`).forEach((el) => {
-      const monthKey = el.dataset.monthKey;
-      const field = el.dataset.field;
-      if (!map.has(monthKey)) map.set(monthKey, { monthKey });
-      const row = map.get(monthKey);
-      row[field] = el.value === "" ? null : el.value;
-    });
-    return Array.from(map.values());
+  if (!state.isAdmin) {
+    setResultText("Signed in but not admin");
+    setLogText(
+      `Signed in as ${state.userDetails}, but this page is restricted to admins.`
+    );
+    return;
   }
 
-  const map = new Map();
-  document.querySelectorAll(`.admin-input[data-admin-kind="${kind}"]`).forEach((el) => {
-    const metricKey = el.dataset.metricKey;
-    const field = el.dataset.field;
-    if (!map.has(metricKey)) map.set(metricKey, { metricKey });
-    const row = map.get(metricKey);
-    row[field] = el.value === "" ? null : el.value;
+  setResultText("Ready");
+  setLogText(
+    `Signed in as ${state.userDetails}. Admin access confirmed. You can import the workbook.`
+  );
+}
+
+async function resolveAuth() {
+  let me = normalizeApiMe(await safeGetJson("/api/me", null));
+
+  if (!me) {
+    me = normalizeAuthMe(await safeGetJson("/.auth/me", null));
+  }
+
+  if (!me || !me.authenticated) {
+    state.authenticated = false;
+    state.userDetails = "";
+    state.role = "guest";
+    state.entity = "None";
+    state.isAdmin = false;
+    updateUi();
+    return;
+  }
+
+  state.authenticated = true;
+  state.userDetails = me.userDetails || "Unknown User";
+  state.isAdmin = !!me.isAdmin;
+  state.role = state.isAdmin ? "admin" : "user";
+  state.entity = state.isAdmin ? "Admin" : (me.entity || "LAOSS");
+
+  updateUi();
+}
+
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve(base64);
+    };
+
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
-  return Array.from(map.values());
 }
 
-function renderEmptyHolidayRows(existingCount, totalRows) {
-  const rowsNeeded = Math.max(totalRows - existingCount, 0);
-  return Array.from({ length: rowsNeeded }).map((_, i) => {
-    const rowIndex = existingCount + i;
-    return `
-      <tr>
-        <td><input class="admin-input" type="date" data-admin-kind="holiday" data-row-index="${rowIndex}" data-field="date" value="" /></td>
-        <td><input class="admin-input" data-admin-kind="holiday" data-row-index="${rowIndex}" data-field="holidayName" value="" /></td>
-      </tr>
-    `;
-  }).join("");
+async function importWorkbook() {
+  if (!state.isAdmin) {
+    setLogText("Access denied. You must be an admin to import the workbook.");
+    return;
+  }
+
+  const input = $("workbookFile");
+  const file = input?.files?.[0];
+
+  if (!file) {
+    setLogText("Choose the workbook file first.");
+    return;
+  }
+
+  setStatusBadge("Importing");
+  setResultText("Uploading workbook...");
+  setLogText(`Reading ${file.name}...`);
+
+  try {
+    const fileBase64 = await fileToBase64(file);
+
+    setLogText("Uploading workbook to /api/import-excel ...");
+
+    const res = await fetch("/api/import-excel", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ fileBase64 })
+    });
+
+    const result = await res.json().catch(() => ({}));
+
+    if (!res.ok || result?.ok === false) {
+      setStatusBadge("Blocked");
+      setResultText("Import failed");
+      setLogText(
+        `Import failed.\n\n${JSON.stringify(result, null, 2)}`
+      );
+      return;
+    }
+
+    setStatusBadge("Ready");
+    setResultText("Import completed");
+    setLogText(
+      `Workbook import completed successfully.\n\n${JSON.stringify(result, null, 2)}`
+    );
+  } catch (error) {
+    setStatusBadge("Blocked");
+    setResultText("Import failed");
+    setLogText(`Import failed.\n\n${error?.message || String(error)}`);
+  }
 }
 
-function escapeAttr(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+function initButtons() {
+  const importBtn = $("importButton");
+  const recheckBtn = $("recheckAccessButton");
+
+  if (importBtn) {
+    importBtn.addEventListener("click", async () => {
+      await importWorkbook();
+    });
+  }
+
+  if (recheckBtn) {
+    recheckBtn.addEventListener("click", async () => {
+      setResultText("Checking...");
+      setLogText("Rechecking access...");
+      await resolveAuth();
+    });
+  }
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+async function init() {
+  initButtons();
+  await resolveAuth();
 }
+
+document.addEventListener("DOMContentLoaded", init);
