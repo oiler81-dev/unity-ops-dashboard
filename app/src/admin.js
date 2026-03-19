@@ -154,6 +154,22 @@ async function fileToBase64(file) {
   });
 }
 
+async function readResponseBody(res) {
+  const text = await res.text();
+
+  try {
+    return {
+      parsed: JSON.parse(text),
+      raw: text
+    };
+  } catch {
+    return {
+      parsed: null,
+      raw: text
+    };
+  }
+}
+
 async function importWorkbook() {
   if (!state.isAdmin) {
     setText("importLog", "Access denied. You must be an admin to import the workbook.");
@@ -170,36 +186,63 @@ async function importWorkbook() {
 
   setStatusBadge("Importing");
   setText("lastResultText", "Uploading workbook...");
-  setText("importLog", `Reading ${file.name}...`);
+  setText("importLog", `Reading ${file.name} (${Math.round(file.size / 1024)} KB)...`);
 
   try {
     const fileBase64 = await fileToBase64(file);
+
+    setText(
+      "importLog",
+      `Reading ${file.name} (${Math.round(file.size / 1024)} KB)...\nUploading workbook to /api/import-excel ...`
+    );
 
     const res = await fetch("/api/import-excel", {
       method: "POST",
       credentials: "include",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*"
       },
-      body: JSON.stringify({ fileBase64 })
+      body: JSON.stringify({ fileBase64, fileName: file.name })
     });
 
-    const result = await res.json().catch(() => ({}));
+    const { parsed, raw } = await readResponseBody(res);
 
-    if (!res.ok || result?.ok === false) {
+    if (!res.ok) {
+      setStatusBadge("Import failed");
+      setText("lastResultText", `HTTP ${res.status}`);
+
+      setText(
+        "importLog",
+        [
+          `Import failed.`,
+          `Status: ${res.status} ${res.statusText}`,
+          "",
+          parsed ? JSON.stringify(parsed, null, 2) : (raw || "No response body returned.")
+        ].join("\n")
+      );
+      return;
+    }
+
+    if (parsed && parsed.ok === false) {
       setStatusBadge("Import failed");
       setText("lastResultText", "Import failed");
-      setText("importLog", `Import failed.\n\n${JSON.stringify(result, null, 2)}`);
+      setText("importLog", JSON.stringify(parsed, null, 2));
       return;
     }
 
     setStatusBadge("Ready");
     setText("lastResultText", "Import completed");
-    setText("importLog", `Workbook import completed successfully.\n\n${JSON.stringify(result, null, 2)}`);
+    setText(
+      "importLog",
+      parsed
+        ? `Workbook import completed successfully.\n\n${JSON.stringify(parsed, null, 2)}`
+        : `Workbook import completed, but the response was not JSON.\n\n${raw || "(empty response)"}`
+    );
   } catch (error) {
     setStatusBadge("Import failed");
     setText("lastResultText", "Import failed");
-    setText("importLog", `Import failed.\n\n${error?.message || String(error)}`);
+    setText("importLog", `Import failed.\n\n${error?.stack || error?.message || String(error)}`);
   }
 }
 
