@@ -11,7 +11,7 @@ import {
 
 const REGION_KEYS = ["LAOSS", "NES", "SpineOne", "MRO"];
 const SHARED_KEYS = ["PT", "CXNS", "Capacity", "Productivity Builder"];
-const ADMIN_EMAILS = ["nperez@unitymsk.com"];
+const ADMIN_EMAILS = ["nperez@unitymsk.com", "tessa.kelley@spineone.com"];
 
 const state = {
   authenticated: false,
