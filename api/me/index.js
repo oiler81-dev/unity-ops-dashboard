@@ -84,18 +84,6 @@ function findEntityFromRoles(roles) {
   return "";
 }
 
-function buildDebug(principal, roles, emails, isAdmin, entity) {
-  return {
-    userDetails: principal?.userDetails || "",
-    userId: principal?.userId || "",
-    identityProvider: principal?.identityProvider || "",
-    roles,
-    emails,
-    isAdmin,
-    entity
-  };
-}
-
 module.exports = async function (context, req) {
   try {
     const headers = req.headers || {};
@@ -147,8 +135,7 @@ module.exports = async function (context, req) {
         identityProvider: principal.identityProvider || "",
         roles,
         entity,
-        isAdmin,
-        debug: buildDebug(principal, roles, emails, isAdmin, entity)
+        isAdmin
       }
     };
   } catch (error) {
