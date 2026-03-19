@@ -11,6 +11,7 @@ import {
 
 const REGION_KEYS = ["LAOSS", "NES", "SpineOne", "MRO"];
 const SHARED_KEYS = ["PT", "CXNS", "Capacity", "Productivity Builder"];
+const ADMIN_EMAILS = ["nperez@unitymsk.com"];
 
 const state = {
   authenticated: false,
@@ -45,6 +46,15 @@ function currentWeekEnding() {
 
 function isAdmin() {
   return state.isAdmin === true || state.role === "admin";
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function emailIsAdmin(value) {
+  const email = normalizeEmail(value);
+  return ADMIN_EMAILS.includes(email);
 }
 
 function getSignInEl() {
@@ -104,12 +114,17 @@ function parseJsonSafely(value, fallback = {}) {
 function normalizeApiMe(result) {
   if (!result || !result.authenticated) return null;
 
+  const userDetails = result.userDetails || "";
+  const roles = unique(result.roles);
+  const apiSaysAdmin = !!result.isAdmin || roles.some((r) => String(r || "").toLowerCase() === "admin");
+  const forcedAdmin = emailIsAdmin(userDetails);
+
   return {
-    authenticated: !!result.authenticated,
-    userDetails: result.userDetails || "",
-    roles: unique(result.roles),
-    entity: result.entity || "",
-    isAdmin: !!result.isAdmin
+    authenticated: true,
+    userDetails,
+    roles,
+    entity: forcedAdmin ? "Admin" : (result.entity || ""),
+    isAdmin: apiSaysAdmin || forcedAdmin
   };
 }
 
@@ -117,15 +132,17 @@ function normalizeAuthMe(result) {
   const principal = result?.clientPrincipal;
   if (!principal || !principal.userId) return null;
 
+  const userDetails = principal.userDetails || principal.userId || "";
   const roles = unique(principal.userRoles || []);
-  const isAdmin = roles.some((role) => String(role || "").toLowerCase() === "admin");
+  const roleAdmin = roles.some((r) => String(r || "").toLowerCase() === "admin");
+  const forcedAdmin = emailIsAdmin(userDetails);
 
   return {
     authenticated: true,
-    userDetails: principal.userDetails || principal.userId || "",
+    userDetails,
     roles,
-    entity: isAdmin ? "Admin" : "",
-    isAdmin
+    entity: forcedAdmin ? "Admin" : "",
+    isAdmin: roleAdmin || forcedAdmin
   };
 }
 
@@ -311,15 +328,18 @@ function activateNav(link) {
 }
 
 function formatWhole(value) {
-  return Math.round(Number(value || 0)).toLocaleString();
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? Math.round(n).toLocaleString() : "0";
 }
 
 function formatDecimal(value, digits = 1) {
-  return Number(value || 0).toFixed(digits);
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n.toFixed(digits) : Number(0).toFixed(digits);
 }
 
 function formatPercent(value, digits = 1) {
-  return `${Number(value || 0).toFixed(digits)}%`;
+  const n = Number(value || 0);
+  return `${Number.isFinite(n) ? n.toFixed(digits) : Number(0).toFixed(digits)}%`;
 }
 
 function badgeFromStatus(status) {
