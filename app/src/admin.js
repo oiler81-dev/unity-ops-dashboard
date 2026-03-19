@@ -36,6 +36,24 @@ function unique(values) {
   return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
 }
 
+function normalizeAuthMe(result) {
+  const principal = result?.clientPrincipal;
+  if (!principal || !principal.userId) return null;
+
+  const userDetails = principal.userDetails || principal.userId || "";
+  const roles = unique(principal.userRoles || []);
+  const roleAdmin = roles.some((r) => String(r || "").toLowerCase() === "admin");
+  const forcedAdmin = emailIsAdmin(userDetails);
+
+  return {
+    authenticated: true,
+    userDetails,
+    roles,
+    isAdmin: roleAdmin || forcedAdmin,
+    entity: forcedAdmin ? "Admin" : ""
+  };
+}
+
 function normalizeApiMe(result) {
   if (!result || !result.authenticated) return null;
 
@@ -55,24 +73,6 @@ function normalizeApiMe(result) {
   };
 }
 
-function normalizeAuthMe(result) {
-  const principal = result?.clientPrincipal;
-  if (!principal || !principal.userId) return null;
-
-  const userDetails = principal.userDetails || principal.userId || "";
-  const roles = unique(principal.userRoles || []);
-  const roleAdmin = roles.some((r) => String(r || "").toLowerCase() === "admin");
-  const forcedAdmin = emailIsAdmin(userDetails);
-
-  return {
-    authenticated: true,
-    userDetails,
-    roles,
-    isAdmin: roleAdmin || forcedAdmin,
-    entity: forcedAdmin ? "Admin" : ""
-  };
-}
-
 function setText(id, value) {
   const el = $(id);
   if (el) el.textContent = value;
@@ -83,66 +83,41 @@ function setStatusBadge(text) {
   if (el) el.textContent = text;
 }
 
-function setAccessText(text) {
-  setText("accessText", text);
-}
-
-function setSignedInText(text) {
-  setText("signedInAsText", text);
-}
-
-function setRoleText(text) {
-  setText("roleText", text);
-}
-
-function setResultText(text) {
-  setText("lastResultText", text);
-}
-
-function setLogText(text) {
-  const el = $("importLog");
-  if (el) el.textContent = text;
-}
-
 function updateUi() {
-  setSignedInText(state.authenticated ? state.userDetails : "Not signed in");
-  setRoleText(state.role);
-  setAccessText(state.isAdmin ? "Allowed" : "Denied");
-  setStatusBadge(state.isAdmin ? "Ready" : "Blocked");
+  setText("signedInAsText", state.authenticated ? state.userDetails : "Not signed in");
+  setText("roleText", state.role);
+  setText("accessText", state.isAdmin ? "Allowed" : "Denied");
 
   const importBtn = $("importButton");
-  const recheckBtn = $("recheckAccessButton");
   const fileInput = $("workbookFile");
 
   if (importBtn) importBtn.disabled = !state.isAdmin;
   if (fileInput) fileInput.disabled = !state.isAdmin;
-  if (recheckBtn) recheckBtn.disabled = false;
 
   if (!state.authenticated) {
-    setResultText("Not signed in");
-    setLogText("You are not signed in.");
+    setStatusBadge("Not signed in");
+    setText("lastResultText", "Authentication required");
+    setText("importLog", "You are not signed in.");
     return;
   }
 
   if (!state.isAdmin) {
-    setResultText("Signed in but not admin");
-    setLogText(
-      `Signed in as ${state.userDetails}, but this page is restricted to admins.`
-    );
+    setStatusBadge("Authenticated");
+    setText("lastResultText", "Signed in but not admin");
+    setText("importLog", `Signed in as ${state.userDetails}, but this page is restricted to admins.`);
     return;
   }
 
-  setResultText("Ready");
-  setLogText(
-    `Signed in as ${state.userDetails}. Admin access confirmed. You can import the workbook.`
-  );
+  setStatusBadge("Ready");
+  setText("lastResultText", "Admin access confirmed");
+  setText("importLog", `Signed in as ${state.userDetails}. Admin access confirmed. You can import the workbook.`);
 }
 
 async function resolveAuth() {
-  let me = normalizeApiMe(await safeGetJson("/api/me", null));
+  let me = normalizeAuthMe(await safeGetJson("/.auth/me", null));
 
   if (!me) {
-    me = normalizeAuthMe(await safeGetJson("/.auth/me", null));
+    me = normalizeApiMe(await safeGetJson("/api/me", null));
   }
 
   if (!me || !me.authenticated) {
@@ -181,7 +156,7 @@ async function fileToBase64(file) {
 
 async function importWorkbook() {
   if (!state.isAdmin) {
-    setLogText("Access denied. You must be an admin to import the workbook.");
+    setText("importLog", "Access denied. You must be an admin to import the workbook.");
     return;
   }
 
@@ -189,18 +164,16 @@ async function importWorkbook() {
   const file = input?.files?.[0];
 
   if (!file) {
-    setLogText("Choose the workbook file first.");
+    setText("importLog", "Choose the workbook file first.");
     return;
   }
 
   setStatusBadge("Importing");
-  setResultText("Uploading workbook...");
-  setLogText(`Reading ${file.name}...`);
+  setText("lastResultText", "Uploading workbook...");
+  setText("importLog", `Reading ${file.name}...`);
 
   try {
     const fileBase64 = await fileToBase64(file);
-
-    setLogText("Uploading workbook to /api/import-excel ...");
 
     const res = await fetch("/api/import-excel", {
       method: "POST",
@@ -214,23 +187,19 @@ async function importWorkbook() {
     const result = await res.json().catch(() => ({}));
 
     if (!res.ok || result?.ok === false) {
-      setStatusBadge("Blocked");
-      setResultText("Import failed");
-      setLogText(
-        `Import failed.\n\n${JSON.stringify(result, null, 2)}`
-      );
+      setStatusBadge("Import failed");
+      setText("lastResultText", "Import failed");
+      setText("importLog", `Import failed.\n\n${JSON.stringify(result, null, 2)}`);
       return;
     }
 
     setStatusBadge("Ready");
-    setResultText("Import completed");
-    setLogText(
-      `Workbook import completed successfully.\n\n${JSON.stringify(result, null, 2)}`
-    );
+    setText("lastResultText", "Import completed");
+    setText("importLog", `Workbook import completed successfully.\n\n${JSON.stringify(result, null, 2)}`);
   } catch (error) {
-    setStatusBadge("Blocked");
-    setResultText("Import failed");
-    setLogText(`Import failed.\n\n${error?.message || String(error)}`);
+    setStatusBadge("Import failed");
+    setText("lastResultText", "Import failed");
+    setText("importLog", `Import failed.\n\n${error?.message || String(error)}`);
   }
 }
 
@@ -246,8 +215,8 @@ function initButtons() {
 
   if (recheckBtn) {
     recheckBtn.addEventListener("click", async () => {
-      setResultText("Checking...");
-      setLogText("Rechecking access...");
+      setText("lastResultText", "Checking...");
+      setText("importLog", "Rechecking access...");
       await resolveAuth();
     });
   }
