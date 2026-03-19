@@ -542,12 +542,12 @@ async function loadRegionPage(entity) {
   setStatusPanelText(`Loading ${entity} weekly data...`);
 
   const currentResponse = await safeApiGet(
-    `/api/region-weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
+    `/api/regionweekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
     {}
   );
 
   const previousResponse = await safeApiGet(
-    `/api/region-weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(previousWeek)}`,
+    `/api/regionweekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(previousWeek)}`,
     {}
   );
 
