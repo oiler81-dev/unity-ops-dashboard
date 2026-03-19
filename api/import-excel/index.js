@@ -55,30 +55,6 @@ function normalizeMonthLabel(value) {
   });
 }
 
-function monthNumberFromLabel(value) {
-  const raw = String(value || "").trim().toLowerCase();
-  return MONTH_MAP[raw] || null;
-}
-
-function weekEndingFromMonthAndWeek(monthLabel, weekNumber) {
-  const monthNum = monthNumberFromLabel(monthLabel);
-  const wk = Number(weekNumber);
-
-  if (!monthNum || !Number.isFinite(wk) || wk < 1) return "";
-
-  const firstOfMonth = new Date(Date.UTC(WORKBOOK_YEAR, monthNum - 1, 1));
-  const firstDayDow = firstOfMonth.getUTCDay();
-  const offsetToFirstSunday = (7 - firstDayDow) % 7;
-
-  const firstSunday = new Date(firstOfMonth);
-  firstSunday.setUTCDate(firstOfMonth.getUTCDate() + offsetToFirstSunday);
-
-  const weekEnding = new Date(firstSunday);
-  weekEnding.setUTCDate(firstSunday.getUTCDate() + (wk - 1) * 7);
-
-  return weekEnding.toISOString().split("T")[0];
-}
-
 function toNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -103,6 +79,28 @@ function rowHasAnyData(row) {
   return Array.isArray(row) && row.some(
     (v) => v !== null && v !== undefined && String(v).trim() !== ""
   );
+}
+
+function getFirstSundayOfYear(year) {
+  const firstDay = new Date(Date.UTC(year, 0, 1));
+  const firstDayDow = firstDay.getUTCDay();
+  const offsetToFirstSunday = (7 - firstDayDow) % 7;
+
+  const firstSunday = new Date(firstDay);
+  firstSunday.setUTCDate(firstDay.getUTCDate() + offsetToFirstSunday);
+  return firstSunday;
+}
+
+function weekEndingFromWorkbookWeek(weekNumber) {
+  const wk = Number(weekNumber);
+
+  if (!Number.isFinite(wk) || wk < 1) return "";
+
+  const firstSunday = getFirstSundayOfYear(WORKBOOK_YEAR);
+  const weekEnding = new Date(firstSunday);
+  weekEnding.setUTCDate(firstSunday.getUTCDate() + (wk - 1) * 7);
+
+  return weekEnding.toISOString().split("T")[0];
 }
 
 async function upsertRegionRecord(table, entity, weekEnding, values, source = "workbook-import") {
@@ -169,14 +167,14 @@ async function importRegionSheet(regionTable, ws, sheetName) {
     const cashActual = sheetName === "Denver" ? toNumber(row[17]) : toNumber(row[16]);
     const monthTag = sheetName === "Denver" ? safeText(row[18]) : safeText(row[17]);
 
-    if (!weekNumber || !monthTag) {
-      skipped.push({ row: r + 1, reason: "Missing week number or month tag" });
+    if (!weekNumber) {
+      skipped.push({ row: r + 1, reason: "Missing week number" });
       continue;
     }
 
-    const weekEnding = weekEndingFromMonthAndWeek(monthTag, weekNumber);
+    const weekEnding = weekEndingFromWorkbookWeek(weekNumber);
     if (!weekEnding) {
-      skipped.push({ row: r + 1, reason: `Could not derive week ending from month "${monthTag}" and week "${weekNumber}"` });
+      skipped.push({ row: r + 1, reason: `Could not derive week ending from week "${weekNumber}"` });
       continue;
     }
 
@@ -248,9 +246,9 @@ async function importPtSheet(sharedTable, ws) {
       const reschedules = toNumber(row[block.rescheduleCol]);
       const units = toNumber(row[block.unitsCol]);
 
-      if (!weekNumber || !monthTag) continue;
+      if (!weekNumber) continue;
 
-      const weekEnding = weekEndingFromMonthAndWeek(monthTag, weekNumber);
+      const weekEnding = weekEndingFromWorkbookWeek(weekNumber);
       if (!weekEnding) continue;
 
       const current = weeklyTotals.get(weekEnding) || {
@@ -309,9 +307,9 @@ async function importCxnsSheet(sharedTable, ws) {
       const noShows = toNumber(row[block.noShowCol]);
       const reschedules = toNumber(row[block.rescheduleCol]);
 
-      if (!weekNumber || !monthTag) continue;
+      if (!weekNumber) continue;
 
-      const weekEnding = weekEndingFromMonthAndWeek(monthTag, weekNumber);
+      const weekEnding = weekEndingFromWorkbookWeek(weekNumber);
       if (!weekEnding) continue;
 
       const current = weeklyTotals.get(weekEnding) || {
