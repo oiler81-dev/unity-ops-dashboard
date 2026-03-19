@@ -90,6 +90,17 @@ function unique(values) {
   return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
 }
 
+function parseJsonSafely(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function normalizeApiMe(result) {
   if (!result || !result.authenticated) return null;
 
@@ -107,26 +118,15 @@ function normalizeAuthMe(result) {
   if (!principal || !principal.userId) return null;
 
   const roles = unique(principal.userRoles || []);
-  const admin = roles.includes("admin");
+  const isAdmin = roles.some((role) => String(role || "").toLowerCase() === "admin");
 
   return {
     authenticated: true,
     userDetails: principal.userDetails || principal.userId || "",
     roles,
-    entity: admin ? "Admin" : "",
-    isAdmin: admin
+    entity: isAdmin ? "Admin" : "",
+    isAdmin
   };
-}
-
-function parseJsonSafely(value, fallback = {}) {
-  if (!value) return fallback;
-  if (typeof value === "object") return value;
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
 }
 
 function normalizeRegionValues(result) {
@@ -191,16 +191,14 @@ async function resolveAuth() {
   let me = null;
 
   try {
-    const apiMe = await safeApiGet("/api/me", null);
-    me = normalizeApiMe(apiMe);
+    me = normalizeApiMe(await safeApiGet("/api/me", null));
   } catch {
     me = null;
   }
 
   if (!me) {
     try {
-      const authMe = await safeApiGet("/.auth/me", null);
-      me = normalizeAuthMe(authMe);
+      me = normalizeAuthMe(await safeApiGet("/.auth/me", null));
     } catch {
       me = null;
     }
@@ -231,13 +229,8 @@ function syncAuthUi() {
   const signInEl = getSignInEl();
   const signOutEl = getSignOutEl();
 
-  if (signInEl) {
-    signInEl.setAttribute("href", "/.auth/login/aad");
-  }
-
-  if (signOutEl) {
-    signOutEl.setAttribute("href", "/.auth/logout");
-  }
+  if (signInEl) signInEl.setAttribute("href", "/.auth/login/aad");
+  if (signOutEl) signOutEl.setAttribute("href", "/.auth/logout");
 
   if (state.authenticated) {
     setSignedInUserText(state.userDetails);
