@@ -6,412 +6,487 @@
   <title>UnityMSK Admin Import</title>
   <link rel="stylesheet" href="./src/main.css" />
   <style>
-    .import-page-wrap{
-      max-width:1200px;
-      margin:0 auto;
-      padding:32px 20px 48px;
+    :root {
+      --bg-1: #021325;
+      --bg-2: #03213f;
+      --panel: rgba(24, 58, 92, 0.94);
+      --panel-2: rgba(36, 74, 111, 0.9);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #ffffff;
+      --muted: rgba(255, 255, 255, 0.72);
+      --muted-2: rgba(255, 255, 255, 0.52);
+      --accent: #f2be1a;
+      --accent-2: #ffd34d;
+      --button-dark: #476789;
+      --button-dark-2: #5d7da0;
+      --shadow: 0 18px 36px rgba(0, 0, 0, 0.25);
+      --radius-xl: 22px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
     }
-    .import-layout{
-      display:grid;
-      grid-template-columns:280px 1fr;
-      gap:22px;
-      align-items:start;
+
+    * {
+      box-sizing: border-box;
     }
-    .import-sidebar,
-    .import-panel{
-      background:rgba(22,52,83,.92);
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:22px;
-      box-shadow:0 12px 30px rgba(0,0,0,.18);
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top center, rgba(255,255,255,0.06), transparent 26%),
+        linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 100%);
     }
-    .import-sidebar{ padding:18px; }
-    .import-panel{ padding:20px; }
-    .import-nav{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
+
+    body {
+      min-height: 100vh;
     }
-    .import-nav a{
-      text-decoration:none;
-      color:#fff;
-      background:rgba(255,255,255,.03);
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:14px;
-      padding:13px 14px;
-      font-weight:700;
-      font-size:15px;
+
+    a {
+      color: inherit;
+      text-decoration: none;
     }
-    .import-nav a.active{
-      outline:1px solid rgba(245,197,24,.5);
-      box-shadow: inset 0 0 0 1px rgba(245,197,24,.35);
+
+    .page-wrap {
+      min-height: 100vh;
     }
-    .import-meta{
-      margin-top:22px;
-      padding-top:18px;
-      border-top:1px solid rgba(255,255,255,.08);
+
+    .topbar {
+      width: 100%;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(2, 16, 31, 0.45);
+      backdrop-filter: blur(8px);
     }
-    .import-meta-block + .import-meta-block{ margin-top:14px; }
-    .import-meta-label{
-      color:#9fb2c6;
-      text-transform:uppercase;
-      font-size:11px;
-      font-weight:700;
-      margin-bottom:4px;
+
+    .topbar-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 14px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
     }
-    .import-meta-value{
-      font-weight:700;
-      font-size:15px;
-      color:#fff;
-      word-break:break-word;
+
+    .topbar-left,
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
     }
-    .import-panel-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:16px;
-      margin-bottom:18px;
-      flex-wrap:wrap;
+
+    .topbar-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     }
-    .import-status-card{
-      min-width:220px;
-      background:rgba(255,255,255,.04);
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:16px;
-      padding:14px;
+
+    .topbar-link:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.18);
+      transform: translateY(-1px);
     }
-    .import-status-label{
-      color:#9fb2c6;
-      text-transform:uppercase;
-      font-size:11px;
-      font-weight:700;
-      margin-bottom:4px;
+
+    .topbar-link.signout {
+      background: rgba(255,255,255,0.02);
     }
-    .import-status-value{
-      font-size:16px;
-      font-weight:800;
-      margin-bottom:10px;
-      color:#fff;
+
+    .hero {
+      padding: 26px 20px 20px;
     }
-    .import-grid{
-      display:grid;
-      grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:16px;
-      margin:18px 0 20px;
+
+    .hero-inner {
+      max-width: 760px;
+      margin: 0 auto;
+      text-align: left;
     }
-    .import-card{
-      background:rgba(255,255,255,.04);
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:16px;
-      padding:16px;
+
+    .hero-kicker {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
     }
-    .import-card-label{
-      color:#9fb2c6;
-      text-transform:uppercase;
-      font-size:11px;
-      font-weight:700;
-      margin-bottom:8px;
+
+    .hero-title {
+      margin: 0;
+      font-size: clamp(46px, 6vw, 70px);
+      line-height: 0.96;
+      font-weight: 300;
+      letter-spacing: -0.03em;
     }
-    .import-card-value{
-      font-size:18px;
-      font-weight:800;
-      word-break:break-word;
-      color:#fff;
+
+    .hero-copy {
+      margin: 14px 0 0;
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1.5;
+      text-align: center;
     }
-    .upload-box{
-      margin-top:14px;
-      background:rgba(255,255,255,.03);
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:18px;
-      padding:18px;
+
+    .shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 20px 34px;
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+      justify-content: center;
     }
-    .upload-box label{
-      display:block;
-      font-size:12px;
-      text-transform:uppercase;
-      color:#9fb2c6;
-      font-weight:700;
-      margin-bottom:10px;
+
+    .sidebar,
+    .main {
+      border-radius: var(--radius-xl);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
     }
-    .file-input{
-      width:100%;
-      padding:14px;
-      border-radius:14px;
-      border:1px solid rgba(255,255,255,.10);
-      background:#25496e;
-      color:#fff;
+
+    .sidebar {
+      padding: 14px;
     }
-    .import-actions{
-      display:flex;
-      gap:12px;
-      margin-top:16px;
-      flex-wrap:wrap;
+
+    .sidebar-section-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 2px;
     }
-    .import-log{
-      margin-top:20px;
-      background:rgba(0,0,0,.18);
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:16px;
-      padding:16px;
-      min-height:260px;
-      white-space:pre-wrap;
-      line-height:1.55;
-      overflow:auto;
-      color:#fff;
+
+    .sidebar-title {
+      font-size: 24px;
+      line-height: 1.1;
+      margin-bottom: 14px;
     }
-    .small-note{
-      font-size:13px;
-      color:#9fb2c6;
-      line-height:1.55;
-      margin-top:14px;
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 14px;
     }
-    @media (max-width: 900px){
-      .import-layout{ grid-template-columns:1fr; }
-      .import-grid{ grid-template-columns:1fr; }
+
+    .nav-link {
+      display: block;
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .nav-link:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.18);
+    }
+
+    .nav-link.active {
+      border-color: rgba(242, 190, 26, 0.7);
+      box-shadow: inset 0 0 0 1px rgba(242, 190, 26, 0.25);
+    }
+
+    .sidebar-meta {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .meta-block {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .meta-label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted-2);
+      font-weight: 800;
+    }
+
+    .meta-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .main {
+      padding: 18px;
+      max-width: 780px;
+      width: 100%;
+    }
+
+    .main-title {
+      margin: 0 0 12px;
+      font-size: 40px;
+      font-weight: 800;
+      line-height: 1.08;
+    }
+
+    .main-copy {
+      margin: 0 0 18px;
+      font-size: 16px;
+      line-height: 1.5;
+      color: #fff;
+    }
+
+    .status-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .card {
+      border-radius: var(--radius-lg);
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      padding: 16px;
+    }
+
+    .card-label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted-2);
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .card-value {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .upload-card {
+      margin-bottom: 14px;
+    }
+
+    .file-input-wrap {
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      padding: 12px;
+    }
+
+    .file-input-wrap input[type="file"] {
+      width: 100%;
+      color: #fff;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      margin-bottom: 12px;
+    }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      min-height: 46px;
+      padding: 0 20px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, var(--accent-2) 0%, var(--accent) 100%);
+      color: #0c1b2a;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(180deg, var(--button-dark-2) 0%, var(--button-dark) 100%);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .helper-text {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .log-box {
+      min-height: 170px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(11, 37, 63, 0.65);
+      padding: 16px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .main {
+        max-width: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar-inner {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .topbar-left,
+      .topbar-right {
+        justify-content: flex-start;
+      }
+
+      .status-row {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-inner {
+        text-align: left;
+      }
+
+      .hero-copy {
+        text-align: left;
+      }
     }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-left">
-      <a href="./index.html" class="brand-link" aria-label="UnityMSK Dashboard Home">
-        <img src="./assets/unitymsk-logo.png" alt="UnityMSK" class="brand-logo" onerror="this.style.display='none';" />
-      </a>
-    </div>
-
-    <div class="topbar-right">
-      <a class="topbar-btn topbar-btn-secondary" href="./index.html">Back to Dashboard</a>
-      <a class="topbar-btn topbar-btn-secondary" href="/.auth/logout">Sign Out</a>
-    </div>
-  </header>
-
-  <main class="import-page-wrap">
-    <section class="hero">
-      <div class="hero-inner">
-        <div class="hero-kicker">UnityMSK</div>
-        <h1 class="hero-title">Admin Import</h1>
-        <p class="hero-copy">
-          Upload the locked dashboard workbook and import the historical weekly data into Azure Table Storage.
-        </p>
+  <div class="page-wrap">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <a href="./index.html" class="topbar-link">Back to Dashboard</a>
+        </div>
+        <div class="topbar-right">
+          <a href="/.auth/logout" class="topbar-link signout">Sign Out</a>
+        </div>
       </div>
-    </section>
+    </header>
 
-    <section class="import-layout">
-      <aside class="import-sidebar">
-        <div class="sidebar-section-label">Navigation</div>
-        <div class="sidebar-title">Import</div>
-
-        <nav class="import-nav">
-          <a href="./index.html">Executive Summary</a>
-          <a href="./admin-import.html" class="active">Admin Import</a>
-        </nav>
-
-        <div class="import-meta">
-          <div class="import-meta-block">
-            <div class="import-meta-label">Signed In As</div>
-            <div id="userText" class="import-meta-value">Checking...</div>
-          </div>
-
-          <div class="import-meta-block">
-            <div class="import-meta-label">Role</div>
-            <div id="roleText" class="import-meta-value">Checking...</div>
-          </div>
-
-          <div class="import-meta-block">
-            <div class="import-meta-label">Access</div>
-            <div id="accessText" class="import-meta-value">Checking...</div>
-          </div>
+    <main>
+      <section class="hero">
+        <div class="hero-inner">
+          <div class="hero-kicker">UnityMSK</div>
+          <h1 class="hero-title">Admin Import</h1>
+          <p class="hero-copy">
+            Upload the locked dashboard workbook and import the historical weekly data into Azure Table Storage.
+          </p>
         </div>
-      </aside>
-
-      <section class="import-panel">
-        <div class="import-panel-header">
-          <div>
-            <h2 class="dashboard-title">Workbook Import</h2>
-            <p class="dashboard-subtitle">
-              This uploads the Excel workbook to the import API and backfills weekly region and shared-page data.
-            </p>
-          </div>
-
-          <div class="import-status-card">
-            <div class="import-status-label">Status</div>
-            <div id="statusValue" class="import-status-value">Idle</div>
-
-            <div class="import-status-label">Last Result</div>
-            <div id="resultSummary" class="import-status-value">None yet</div>
-          </div>
-        </div>
-
-        <div class="import-grid">
-          <div class="import-card">
-            <div class="import-card-label">Expected File</div>
-            <div class="import-card-value">Unity operational dashboard workbook (.xlsx)</div>
-          </div>
-
-          <div class="import-card">
-            <div class="import-card-label">Import Endpoint</div>
-            <div class="import-card-value">/api/import-excel</div>
-          </div>
-        </div>
-
-        <div class="upload-box">
-          <label for="excelFile">Workbook File</label>
-          <input id="excelFile" class="file-input" type="file" accept=".xlsx,.xlsm,.xls" />
-
-          <div class="import-actions">
-            <button id="importBtn" class="btn btn-primary btn-small" type="button">Import Workbook</button>
-            <button id="testAuthBtn" class="btn btn-secondary btn-small" type="button">Recheck Access</button>
-          </div>
-
-          <div class="small-note">
-            Use the same locked workbook you uploaded earlier. This page is intended for admins only.
-          </div>
-        </div>
-
-        <div id="logBox" class="import-log">Waiting for file.</div>
       </section>
-    </section>
-  </main>
 
-  <script>
-    function setLog(message) {
-      document.getElementById("logBox").textContent = message;
-    }
+      <section class="shell">
+        <aside class="sidebar">
+          <div class="sidebar-section-label">Navigation</div>
+          <div class="sidebar-title">Import</div>
 
-    function setStatus(value) {
-      document.getElementById("statusValue").textContent = value;
-    }
+          <nav class="sidebar-nav">
+            <a class="nav-link" href="./index.html">Executive Summary</a>
+            <a class="nav-link active" href="./admin-import.html">Admin Import</a>
+          </nav>
 
-    function setResultSummary(value) {
-      document.getElementById("resultSummary").textContent = value;
-    }
+          <div class="sidebar-meta">
+            <div class="meta-block">
+              <div class="meta-label">Signed in as</div>
+              <div id="signedInAsText" class="meta-value">Loading...</div>
+            </div>
 
-    async function safeGet(url) {
-      try {
-        const response = await fetch(url, { cache: "no-store" });
-        if (!response.ok) return null;
-        return await response.json();
-      } catch {
-        return null;
-      }
-    }
+            <div class="meta-block">
+              <div class="meta-label">Role</div>
+              <div id="roleText" class="meta-value">Loading...</div>
+            </div>
 
-    function fileToBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = String(reader.result || "");
-          const base64 = result.includes(",") ? result.split(",")[1] : result;
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
+            <div class="meta-block">
+              <div class="meta-label">Access</div>
+              <div id="accessText" class="meta-value">Checking...</div>
+            </div>
+          </div>
+        </aside>
 
-    async function checkAccess() {
-      setStatus("Checking");
-      const me = await safeGet("/api/me");
+        <section class="main">
+          <h2 class="main-title">Workbook Import</h2>
+          <p class="main-copy">
+            This uploads the Excel workbook to the import API and backfills weekly region and shared-page data.
+          </p>
 
-      if (!me || !me.authenticated) {
-        document.getElementById("userText").textContent = "Not signed in";
-        document.getElementById("roleText").textContent = "guest";
-        document.getElementById("accessText").textContent = "Denied";
-        setStatus("Blocked");
-        setResultSummary("Not signed in");
-        setLog("You are not signed in.");
-        return { allowed: false };
-      }
+          <div class="status-row">
+            <div class="card">
+              <div class="card-label">Status</div>
+              <div id="statusBadge" class="card-value">Checking...</div>
 
-      document.getElementById("userText").textContent = me.userDetails || "Unknown";
-      document.getElementById("roleText").textContent = me.isAdmin ? "admin" : "user";
-      document.getElementById("accessText").textContent = me.isAdmin ? "Allowed" : "Denied";
+              <div class="card-label" style="margin-top: 14px;">Last Result</div>
+              <div id="lastResultText" class="card-value">Waiting...</div>
+            </div>
 
-      if (!me.isAdmin) {
-        setStatus("Blocked");
-        setResultSummary("Admin required");
-        setLog(JSON.stringify(me, null, 2));
-        return { allowed: false, me };
-      }
+            <div class="card">
+              <div class="card-label">Expected File</div>
+              <div class="card-value">Unity operational dashboard workbook (.xlsx)</div>
 
-      setStatus("Ready");
-      setResultSummary("Awaiting file");
-      setLog(JSON.stringify(me, null, 2));
-      return { allowed: true, me };
-    }
+              <div class="card-label" style="margin-top: 14px;">Import Endpoint</div>
+              <div class="card-value">/api/import-excel</div>
+            </div>
+          </div>
 
-    async function importWorkbook() {
-      const auth = await checkAccess();
-      if (!auth.allowed) return;
+          <div class="card upload-card">
+            <div class="card-label">Workbook File</div>
 
-      const fileInput = document.getElementById("excelFile");
-      const file = fileInput.files && fileInput.files[0];
+            <div class="file-input-wrap">
+              <input id="workbookFile" type="file" accept=".xlsx,.xlsm,.xls" />
+            </div>
 
-      if (!file) {
-        setStatus("Blocked");
-        setResultSummary("No file selected");
-        setLog("Choose a workbook file first.");
-        return;
-      }
+            <div class="button-row">
+              <button id="importButton" class="btn btn-primary" type="button">Import Workbook</button>
+              <button id="recheckAccessButton" class="btn btn-secondary" type="button">Recheck Access</button>
+            </div>
 
-      setStatus("Uploading");
-      setResultSummary(file.name);
-      setLog("Reading workbook file...");
+            <div class="helper-text">
+              Use the same locked workbook you uploaded earlier. This page is intended for admins only.
+            </div>
+          </div>
 
-      try {
-        const fileBase64 = await fileToBase64(file);
+          <div id="importLog" class="log-box">Checking authentication...</div>
+        </section>
+      </section>
+    </main>
+  </div>
 
-        setStatus("Importing");
-        setLog("Uploading workbook and calling /api/import-excel ...");
-
-        const response = await fetch("/api/import-excel", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ fileBase64 })
-        });
-
-        const rawText = await response.text();
-
-        let parsed = null;
-        try {
-          parsed = rawText ? JSON.parse(rawText) : null;
-        } catch {
-          parsed = null;
-        }
-
-        if (!response.ok) {
-          setStatus("Failed");
-          setResultSummary("Import failed");
-          setLog(
-            parsed
-              ? JSON.stringify(parsed, null, 2)
-              : `HTTP ${response.status} ${response.statusText}\n\n${rawText || "(empty response body)"}`
-          );
-          return;
-        }
-
-        if (!parsed) {
-          setStatus("Failed");
-          setResultSummary("Non-JSON success response");
-          setLog(`Import endpoint returned non-JSON content:\n\n${rawText || "(empty response body)"}`);
-          return;
-        }
-
-        setStatus("Complete");
-        setResultSummary("Import completed");
-        setLog(JSON.stringify(parsed, null, 2));
-      } catch (error) {
-        setStatus("Failed");
-        setResultSummary("Unexpected error");
-        setLog(error && error.message ? error.message : String(error));
-      }
-    }
-
-    document.getElementById("importBtn").addEventListener("click", importWorkbook);
-    document.getElementById("testAuthBtn").addEventListener("click", checkAccess);
-
-    checkAccess();
-  </script>
+  <script type="module" src="./src/admin.js"></script>
 </body>
 </html>
