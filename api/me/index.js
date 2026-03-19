@@ -1,107 +1,110 @@
+function decodeClientPrincipal(encoded) {
+  if (!encoded) return null;
+
+  try {
+    const json = Buffer.from(encoded, "base64").toString("utf8");
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function unique(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
+}
+
+function normalizeEntity(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  const normalized = raw.toUpperCase();
+
+  if (normalized === "LAOSS") return "LAOSS";
+  if (normalized === "NES") return "NES";
+  if (normalized === "SPINEONE") return "SpineOne";
+  if (normalized === "MRO") return "MRO";
+
+  return raw;
+}
+
+function findEntityFromRoles(roles) {
+  const normalizedRoles = roles.map((r) => String(r || "").trim());
+
+  if (normalizedRoles.includes("LAOSS")) return "LAOSS";
+  if (normalizedRoles.includes("NES")) return "NES";
+  if (normalizedRoles.includes("SpineOne")) return "SpineOne";
+  if (normalizedRoles.includes("MRO")) return "MRO";
+
+  const upperRoles = normalizedRoles.map((r) => r.toUpperCase());
+
+  if (upperRoles.includes("LAOSS")) return "LAOSS";
+  if (upperRoles.includes("NES")) return "NES";
+  if (upperRoles.includes("SPINEONE")) return "SpineOne";
+  if (upperRoles.includes("MRO")) return "MRO";
+
+  return "";
+}
+
 module.exports = async function (context, req) {
   try {
     const headers = req.headers || {};
+    const clientPrincipalHeader =
+      headers["x-ms-client-principal"] ||
+      headers["X-MS-CLIENT-PRINCIPAL"];
 
-    function getHeader(name) {
-      return (
-        headers[name] ||
-        headers[name.toLowerCase()] ||
-        headers[name.toUpperCase()] ||
-        ""
-      );
+    const principal = decodeClientPrincipal(clientPrincipalHeader);
+
+    if (!principal || !principal.userId) {
+      context.res = {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        body: {
+          authenticated: false,
+          userDetails: "",
+          roles: ["anonymous"],
+          entity: "",
+          isAdmin: false
+        }
+      };
+      return;
     }
 
-    function parseClientPrincipal() {
-      const encoded = getHeader("x-ms-client-principal");
+    const roles = unique(principal.userRoles || []);
+    const isAdmin = roles.some((role) => String(role || "").toLowerCase() === "admin");
 
-      if (!encoded) return null;
+    let entity = "";
 
-      try {
-        const json = Buffer.from(encoded, "base64").toString("utf8");
-        return JSON.parse(json);
-      } catch (err) {
-        context.log.warn("Unable to parse x-ms-client-principal", err.message);
-        return null;
-      }
+    if (isAdmin) {
+      entity = "Admin";
+    } else {
+      entity = findEntityFromRoles(roles);
+      entity = normalizeEntity(entity);
     }
-
-    function unique(values) {
-      return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
-    }
-
-    function normalizeEmail(value) {
-      return String(value || "").trim().toLowerCase();
-    }
-
-    function getAdminEmails() {
-      const raw =
-        process.env.ADMIN_EMAILS ||
-        process.env.ADMIN_USERS ||
-        "nperez@unitymsk.com";
-
-      return raw
-        .split(",")
-        .map((v) => normalizeEmail(v))
-        .filter(Boolean);
-    }
-
-    const principal = parseClientPrincipal();
-
-    const userDetails =
-      principal?.userDetails ||
-      getHeader("x-ms-client-principal-name") ||
-      "";
-
-    const rolesFromPrincipal = unique(principal?.userRoles || []);
-    const rolesNormalized = rolesFromPrincipal.map((r) => String(r).toLowerCase());
-
-    const email = normalizeEmail(userDetails);
-    const adminEmails = getAdminEmails();
-
-    const isAdmin =
-      rolesNormalized.includes("admin") ||
-      adminEmails.includes(email);
-
-    const roles = unique([
-      ...rolesFromPrincipal,
-      ...(isAdmin ? ["admin"] : []),
-      ...(userDetails ? ["authenticated"] : [])
-    ]);
-
-    const authenticated = !!userDetails;
 
     context.res = {
       status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store"
-      },
+      headers: { "Content-Type": "application/json" },
       body: {
-        authenticated,
-        userDetails: userDetails || "",
-        userId: principal?.userId || "",
-        identityProvider: principal?.identityProvider || "",
+        authenticated: true,
+        userId: principal.userId || "",
+        userDetails: principal.userDetails || principal.userId || "",
+        identityProvider: principal.identityProvider || "",
         roles,
-        entity: isAdmin ? "Admin" : null,
+        entity,
         isAdmin
       }
     };
   } catch (error) {
-    context.log.error("api/me failed", error);
+    context.log.error("me failed", error);
 
     context.res = {
       status: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store"
-      },
+      headers: { "Content-Type": "application/json" },
       body: {
         authenticated: false,
-        userDetails: "",
-        roles: ["anonymous"],
-        entity: null,
-        isAdmin: false,
-        error: "Failed to resolve user"
+        error: "Failed to resolve current user.",
+        details: error && error.message ? error.message : String(error)
       }
     };
   }
