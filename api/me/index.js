@@ -37,7 +37,7 @@ function getConfiguredAdminEmails() {
   const raw =
     process.env.ADMIN_EMAILS ||
     process.env.ADMIN_USERS ||
-    "nperez@unitymsk.com";
+    "nperez@unitymsk.com,tessa.kelley@spineone.com";
 
   return raw
     .split(",")
