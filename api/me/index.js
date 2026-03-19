@@ -45,7 +45,7 @@ function getConfiguredAdminEmails() {
     .filter(Boolean);
 }
 
-function getUserEmails(principal) {
+function getUserEmails(principal, headers) {
   const emails = [];
 
   if (principal?.userDetails) emails.push(principal.userDetails);
@@ -63,6 +63,17 @@ function getUserEmails(principal) {
     ) {
       emails.push(claim.val);
     }
+  }
+
+  const headerCandidates = [
+    headers["x-ms-client-principal-name"],
+    headers["X-MS-CLIENT-PRINCIPAL-NAME"],
+    headers["x-ms-client-principal-idp"],
+    headers["X-MS-CLIENT-PRINCIPAL-IDP"]
+  ];
+
+  for (const value of headerCandidates) {
+    if (value) emails.push(value);
   }
 
   return unique(emails.map(normalizeEmail).filter(Boolean));
@@ -84,9 +95,29 @@ function findEntityFromRoles(roles) {
   return "";
 }
 
+function buildDebug(headers, principal, roles, emails, isAdmin, entity) {
+  return {
+    hasClientPrincipalHeader: !!(
+      headers["x-ms-client-principal"] || headers["X-MS-CLIENT-PRINCIPAL"]
+    ),
+    hasPrincipalNameHeader: !!(
+      headers["x-ms-client-principal-name"] || headers["X-MS-CLIENT-PRINCIPAL-NAME"]
+    ),
+    principalResolved: !!principal,
+    userId: principal?.userId || "",
+    userDetails: principal?.userDetails || "",
+    identityProvider: principal?.identityProvider || "",
+    roles,
+    emails,
+    isAdmin,
+    entity
+  };
+}
+
 module.exports = async function (context, req) {
   try {
     const headers = req.headers || {};
+
     const clientPrincipalHeader =
       headers["x-ms-client-principal"] ||
       headers["X-MS-CLIENT-PRINCIPAL"];
@@ -102,14 +133,15 @@ module.exports = async function (context, req) {
           userDetails: "",
           roles: ["anonymous"],
           entity: "",
-          isAdmin: false
+          isAdmin: false,
+          debug: buildDebug(headers, principal, [], [], false, "")
         }
       };
       return;
     }
 
     const roles = unique(principal.userRoles || []);
-    const emails = getUserEmails(principal);
+    const emails = getUserEmails(principal, headers);
     const configuredAdminEmails = getConfiguredAdminEmails();
 
     const emailMatchedAdmin = emails.some((email) =>
@@ -135,7 +167,8 @@ module.exports = async function (context, req) {
         identityProvider: principal.identityProvider || "",
         roles,
         entity,
-        isAdmin
+        isAdmin,
+        debug: buildDebug(headers, principal, roles, emails, isAdmin, entity)
       }
     };
   } catch (error) {
