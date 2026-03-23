@@ -1,35 +1,55 @@
+const XLSX = require("xlsx");
+
 module.exports = async function (context, req) {
   try {
-    context.log("import-excel invoked", {
-      method: req && req.method ? req.method : "",
-      url: req && req.url ? req.url : ""
-    });
+    context.log("IMPORT STARTED");
 
-    context.res = {
+    if (!req.body || !req.body.fileBase64) {
+      return (context.res = {
+        status: 400,
+        body: { ok: false, error: "Missing fileBase64" }
+      });
+    }
+
+    const buffer = Buffer.from(req.body.fileBase64, "base64");
+
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+
+    const sheetNames = workbook.SheetNames;
+
+    context.log("Sheets found:", sheetNames);
+
+    let totalRows = 0;
+
+    const parsedData = {};
+
+    for (const sheetName of sheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+      parsedData[sheetName] = json;
+      totalRows += json.length;
+    }
+
+    return (context.res = {
       status: 200,
-      headers: {
-        "Content-Type": "application/json"
-      },
       body: {
         ok: true,
-        message: "import-excel route is alive",
-        method: req && req.method ? req.method : "",
-        time: new Date().toISOString()
+        message: "Workbook parsed successfully",
+        sheets: sheetNames,
+        totalRows
       }
-    };
+    });
   } catch (error) {
-    context.log.error("import-excel test function failed", error);
+    context.log.error("IMPORT FAILED", error);
 
-    context.res = {
+    return (context.res = {
       status: 500,
-      headers: {
-        "Content-Type": "application/json"
-      },
       body: {
         ok: false,
-        error: "import-excel test function failed",
-        details: error && error.message ? error.message : String(error)
+        error: "Import failed",
+        details: error.message
       }
-    };
+    });
   }
 };
