@@ -48,6 +48,17 @@ function getDefaultWeekEnding() {
   return date.toISOString().slice(0, 10);
 }
 
+function setStatus(message, isError = false) {
+  const el = document.getElementById("statusMessage");
+  el.textContent = message;
+  el.style.color = isError ? "#ff8a8a" : "#7CFC98";
+}
+
+function setDebug(data) {
+  const el = document.getElementById("debugOutput");
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
 function renderUser(userData) {
   document.getElementById("userInfo").innerText =
     `${userData.user.userDetails} (${userData.access.role})`;
@@ -113,11 +124,14 @@ async function loadWeek(userData) {
   const weekEnding = document.getElementById("weekEnding").value;
   const entity = resolveEntity(userData);
 
+  setStatus("Loading week...");
   const result = await apiGet(
     `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
   );
 
   setFormValues(result.data || {});
+  setStatus(`Loaded ${entity} for ${weekEnding}`);
+  setDebug(result);
 }
 
 async function saveWeek(userData) {
@@ -130,8 +144,13 @@ async function saveWeek(userData) {
     data: getFormValues()
   };
 
+  setStatus("Saving...");
+  setDebug(payload);
+
   const result = await apiPost("/api/weekly-save", payload);
-  alert(result.message || "Saved");
+
+  setStatus(result.message || "Saved successfully");
+  setDebug(result);
 
   await loadWeek(userData);
 }
@@ -152,7 +171,8 @@ async function saveWeek(userData) {
       try {
         await loadWeek(userData);
       } catch (error) {
-        alert(error.message || "Failed to load week");
+        setStatus(error.message || "Failed to load week", true);
+        setDebug(String(error));
         console.error(error);
       }
     });
@@ -161,12 +181,14 @@ async function saveWeek(userData) {
       try {
         await saveWeek(userData);
       } catch (error) {
-        alert(error.message || "Failed to save");
+        setStatus(error.message || "Failed to save", true);
+        setDebug(String(error));
         console.error(error);
       }
     });
   } catch (error) {
-    alert(error.message || "Failed to load app");
+    setStatus(error.message || "Failed to load app", true);
+    setDebug(String(error));
     console.error(error);
   }
 })();
