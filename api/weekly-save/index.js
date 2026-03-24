@@ -1,7 +1,7 @@
 const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess, canAccessEntity } = require("../shared/permissions");
 const { ok, badRequest, forbidden, serverError } = require("../shared/response");
-const { getTableClient } = require("../shared/table");
+const { ensureTable } = require("../shared/table");
 const { WEEKLY_TABLE } = require("../shared/constants");
 
 module.exports = async function (context, req) {
@@ -25,7 +25,7 @@ module.exports = async function (context, req) {
       return forbidden("You cannot edit this entity");
     }
 
-    const client = getTableClient(WEEKLY_TABLE);
+    const client = await ensureTable(WEEKLY_TABLE);
 
     const entityRecord = {
       partitionKey: entity,
@@ -46,6 +46,6 @@ module.exports = async function (context, req) {
     });
   } catch (error) {
     context.log.error("weekly-save failed", error);
-    return serverError(error);
+    return serverError(error, "Failed to save weekly data");
   }
 };
