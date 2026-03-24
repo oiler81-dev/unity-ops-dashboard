@@ -1,10 +1,16 @@
 const { TableClient } = require("@azure/data-tables");
 
 function getConnectionString() {
-  const value = process.env.AZURE_TABLES_CONNECTION_STRING;
+  const value =
+    process.env.AZURE_TABLES_CONNECTION_STRING ||
+    process.env.AZURE_STORAGE_CONNECTION_STRING;
+
   if (!value) {
-    throw new Error("Missing AZURE_TABLES_CONNECTION_STRING");
+    throw new Error(
+      "Missing AZURE_TABLES_CONNECTION_STRING or AZURE_STORAGE_CONNECTION_STRING"
+    );
   }
+
   return value;
 }
 
