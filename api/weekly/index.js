@@ -1,7 +1,7 @@
 const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess, canAccessEntity } = require("../shared/permissions");
 const { ok, badRequest, forbidden, serverError } = require("../shared/response");
-const { getTableClient } = require("../shared/table");
+const { ensureTable } = require("../shared/table");
 const { WEEKLY_TABLE, KPI_FIELDS } = require("../shared/constants");
 
 module.exports = async function (context, req) {
@@ -28,14 +28,14 @@ module.exports = async function (context, req) {
       return forbidden("You cannot view this entity");
     }
 
-    const client = getTableClient(WEEKLY_TABLE);
+    const client = await ensureTable(WEEKLY_TABLE);
 
     let record = null;
 
     try {
       record = await client.getEntity(entity, weekEnding);
     } catch (error) {
-      if (error && error.statusCode !== 404) {
+      if (error?.statusCode !== 404) {
         throw error;
       }
     }
