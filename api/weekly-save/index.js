@@ -2,7 +2,7 @@ const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess, canAccessEntity } = require("../shared/permissions");
 const { ok, badRequest, forbidden, serverError } = require("../shared/response");
 const { ensureTable } = require("../shared/table");
-const { WEEKLY_TABLE } = require("../shared/constants");
+const { WEEKLY_TABLE, KPI_FIELDS } = require("../shared/constants");
 
 module.exports = async function (context, req) {
   try {
@@ -27,10 +27,19 @@ module.exports = async function (context, req) {
 
     const client = await ensureTable(WEEKLY_TABLE);
 
+    const sanitizedData = {};
+    for (const field of KPI_FIELDS) {
+      const raw = data[field.key];
+      sanitizedData[field.key] =
+        raw === null || raw === undefined || raw === ""
+          ? null
+          : Number(raw);
+    }
+
     const entityRecord = {
       partitionKey: entity,
       rowKey: weekEnding,
-      ...data,
+      ...sanitizedData,
       status: "draft",
       updatedBy: access.email,
       updatedAt: new Date().toISOString()
@@ -42,7 +51,8 @@ module.exports = async function (context, req) {
       ok: true,
       message: "Saved successfully",
       entity,
-      weekEnding
+      weekEnding,
+      data: sanitizedData
     });
   } catch (error) {
     context.log.error("weekly-save failed", error);
