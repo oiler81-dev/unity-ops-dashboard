@@ -109,12 +109,12 @@ function setFormValues(data) {
 
 function getFormValues() {
   return {
-    visitVolume: Number(document.getElementById("visitVolume").value || 0),
-    callVolume: Number(document.getElementById("callVolume").value || 0),
-    newPatients: Number(document.getElementById("newPatients").value || 0),
-    noShowRate: Number(document.getElementById("noShowRate").value || 0),
-    cancellationRate: Number(document.getElementById("cancellationRate").value || 0),
-    abandonedCallRate: Number(document.getElementById("abandonedCallRate").value || 0)
+    visitVolume: document.getElementById("visitVolume").value,
+    callVolume: document.getElementById("callVolume").value,
+    newPatients: document.getElementById("newPatients").value,
+    noShowRate: document.getElementById("noShowRate").value,
+    cancellationRate: document.getElementById("cancellationRate").value,
+    abandonedCallRate: document.getElementById("abandonedCallRate").value
   };
 }
 
