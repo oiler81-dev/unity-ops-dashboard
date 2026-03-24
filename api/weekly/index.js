@@ -13,19 +13,15 @@ module.exports = async function (context, req) {
       return forbidden();
     }
 
-    const weekEnding = req.query.weekEnding;
-    let entity = req.query.entity;
+    const weekEnding = req.query && req.query.weekEnding ? req.query.weekEnding : null;
+    let entity = req.query && req.query.entity ? req.query.entity : null;
 
     if (!weekEnding) {
       return badRequest("Missing weekEnding");
     }
 
     if (!entity) {
-      entity = access.isAdmin ? null : access.entity;
-    }
-
-    if (!entity) {
-      return badRequest("Missing entity");
+      entity = access.isAdmin ? "LAOSS" : access.entity;
     }
 
     if (!canAccessEntity(access, entity)) {
@@ -39,7 +35,7 @@ module.exports = async function (context, req) {
     try {
       record = await client.getEntity(entity, weekEnding);
     } catch (error) {
-      if (error?.statusCode !== 404) {
+      if (error && error.statusCode !== 404) {
         throw error;
       }
     }
@@ -77,6 +73,6 @@ module.exports = async function (context, req) {
     });
   } catch (error) {
     context.log.error("weekly failed", error);
-    return serverError(error);
+    return serverError(error, "Failed to load weekly data");
   }
 };
