@@ -1,26 +1,42 @@
-async function apiGet(url) {
-  const res = await fetch(url);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.error || "Request failed");
+async function parseApiResponse(res) {
+  const text = await res.text();
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (error) {
+    throw new Error(`Non-JSON response from ${res.url}: ${text || "[empty response]"}`);
   }
+
+  if (!res.ok) {
+    throw new Error(data?.error || data?.details || `Request failed with status ${res.status}`);
+  }
+
   return data;
+}
+
+async function apiGet(url) {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "application/json"
+    }
+  });
+
+  return parseApiResponse(res);
 }
 
 async function apiPost(url, payload) {
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "Accept": "application/json"
     },
     body: JSON.stringify(payload)
   });
 
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.error || "Request failed");
-  }
-  return data;
+  return parseApiResponse(res);
 }
 
 function getDefaultWeekEnding() {
@@ -89,20 +105,24 @@ function getFormValues() {
   };
 }
 
+function resolveEntity(userData) {
+  return userData.access.entity === "admin" ? "LAOSS" : userData.access.entity;
+}
+
 async function loadWeek(userData) {
   const weekEnding = document.getElementById("weekEnding").value;
-  const entity = userData.access.entity === "admin" ? "LAOSS" : userData.access.entity;
+  const entity = resolveEntity(userData);
 
   const result = await apiGet(
     `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
   );
 
-  setFormValues(result.data);
+  setFormValues(result.data || {});
 }
 
 async function saveWeek(userData) {
   const weekEnding = document.getElementById("weekEnding").value;
-  const entity = userData.access.entity === "admin" ? "LAOSS" : userData.access.entity;
+  const entity = resolveEntity(userData);
 
   const payload = {
     weekEnding,
@@ -111,7 +131,7 @@ async function saveWeek(userData) {
   };
 
   const result = await apiPost("/api/weekly-save", payload);
-  alert(result.message);
+  alert(result.message || "Saved");
 
   await loadWeek(userData);
 }
@@ -129,11 +149,21 @@ async function saveWeek(userData) {
     await loadWeek(userData);
 
     weekInput.addEventListener("change", async () => {
-      await loadWeek(userData);
+      try {
+        await loadWeek(userData);
+      } catch (error) {
+        alert(error.message || "Failed to load week");
+        console.error(error);
+      }
     });
 
     document.getElementById("saveBtn").addEventListener("click", async () => {
-      await saveWeek(userData);
+      try {
+        await saveWeek(userData);
+      } catch (error) {
+        alert(error.message || "Failed to save");
+        console.error(error);
+      }
     });
   } catch (error) {
     alert(error.message || "Failed to load app");
