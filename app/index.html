@@ -4,9 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>UnityMSK Ops Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <h1>UnityMSK Ops Dashboard</h1>
-  <p>Rebuild in progress.</p>
+  <div id="app">
+    <header>
+      <h1>UnityMSK Ops Dashboard</h1>
+      <div id="userInfo"></div>
+    </header>
+
+    <main>
+      <section>
+        <label>Week Ending</label>
+        <input type="date" id="weekEnding" />
+      </section>
+
+      <section id="kpiForm"></section>
+
+      <button id="saveBtn">Save</button>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
 </body>
 </html>
