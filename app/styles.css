@@ -1,0 +1,25 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #0b1e2d;
+  color: white;
+  margin: 0;
+  padding: 20px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+input {
+  padding: 6px;
+  margin: 5px 0;
+}
+
+button {
+  padding: 10px 20px;
+  background: #ffc107;
+  border: none;
+  cursor: pointer;
+}
