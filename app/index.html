@@ -15,19 +15,22 @@
 
     <main>
       <section style="margin-bottom: 20px;">
-        <label for="weekEnding" style="display:block;margin-bottom:6px;">Week Ending</label>
+        <label>Entity</label>
+        <select id="entitySelect"></select>
+      </section>
+
+      <section style="margin-bottom: 20px;">
+        <label>Week Ending</label>
         <input type="date" id="weekEnding" />
       </section>
 
       <section id="kpiForm"></section>
 
-      <div style="margin-top: 20px;">
-        <button id="saveBtn" type="button">Save</button>
-      </div>
+      <button id="saveBtn">Save</button>
 
       <div id="statusMessage" style="margin-top:16px;font-weight:bold;"></div>
 
-      <pre id="debugOutput" style="margin-top:16px; white-space:pre-wrap; background:#0f2a3d; padding:12px; border:1px solid #274761;"></pre>
+      <pre id="debugOutput" style="margin-top:16px; white-space:pre-wrap; background:#0f2a3d; padding:12px;"></pre>
     </main>
   </div>
 
