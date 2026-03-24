@@ -1,7 +1,9 @@
 {
-  "name": "unity-ops-dashboard-root",
+  "name": "unity-ops-dashboard",
+  "version": "2.0.0",
   "private": true,
-  "engines": {
-    "node": "18.x"
+  "description": "UnityMSK Operations Dashboard",
+  "scripts": {
+    "start": "echo \"Deploy through Azure Static Web Apps\""
   }
 }
