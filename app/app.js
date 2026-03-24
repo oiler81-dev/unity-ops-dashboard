@@ -1,64 +1,45 @@
+const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
+
 async function parseApiResponse(res) {
   const text = await res.text();
   let data = null;
 
   try {
     data = text ? JSON.parse(text) : null;
-  } catch (error) {
-    throw new Error(`Non-JSON response from ${res.url}: ${text || "[empty response]"}`);
+  } catch {
+    throw new Error(text || "Invalid response");
   }
 
   if (!res.ok) {
-    throw new Error(data?.details || data?.error || `Request failed with status ${res.status}`);
+    throw new Error(data?.details || data?.error || "Request failed");
   }
 
   return data;
 }
 
 async function apiGet(url) {
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Accept": "application/json"
-    }
-  });
-
+  const res = await fetch(url);
   return parseApiResponse(res);
 }
 
 async function apiPost(url, payload) {
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
-
   return parseApiResponse(res);
 }
 
-function getDefaultWeekEnding() {
-  const today = new Date();
-  const date = new Date(today);
-  const day = date.getDay();
-  const diffToFriday = (5 - day + 7) % 7;
-  date.setDate(date.getDate() + diffToFriday);
-  return date.toISOString().slice(0, 10);
-}
-
-function setStatus(message, isError = false) {
+function setStatus(msg, isError = false) {
   const el = document.getElementById("statusMessage");
-  if (!el) return;
-  el.textContent = message;
+  el.textContent = msg;
   el.style.color = isError ? "#ff8a8a" : "#7CFC98";
 }
 
 function setDebug(data) {
-  const el = document.getElementById("debugOutput");
-  if (!el) return;
-  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+  document.getElementById("debugOutput").textContent =
+    typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
 function renderUser(userData) {
@@ -66,32 +47,34 @@ function renderUser(userData) {
     `${userData.user.userDetails} (${userData.access.role})`;
 }
 
-function renderForm() {
-  const fields = [
-    { key: "visitVolume", label: "Visit Volume" },
-    { key: "callVolume", label: "Call Volume" },
-    { key: "newPatients", label: "New Patients" },
-    { key: "noShowRate", label: "No Show Rate" },
-    { key: "cancellationRate", label: "Cancellation Rate" },
-    { key: "abandonedCallRate", label: "Abandoned Call Rate" }
-  ];
+function setupEntityDropdown(userData) {
+  const select = document.getElementById("entitySelect");
 
-  const container = document.getElementById("kpiForm");
-  container.innerHTML = "";
+  select.innerHTML = "";
 
-  fields.forEach((field) => {
-    const div = document.createElement("div");
-    div.style.marginBottom = "12px";
-    div.innerHTML = `
-      <label for="${field.key}" style="display:block;margin-bottom:4px;">${field.label}</label>
-      <input type="number" id="${field.key}" step="any" />
-    `;
-    container.appendChild(div);
-  });
+  if (userData.access.isAdmin) {
+    ENTITIES.forEach((e) => {
+      const opt = document.createElement("option");
+      opt.value = e;
+      opt.textContent = e;
+      select.appendChild(opt);
+    });
+  } else {
+    const opt = document.createElement("option");
+    opt.value = userData.access.entity;
+    opt.textContent = userData.access.entity;
+    select.appendChild(opt);
+
+    select.disabled = true;
+  }
 }
 
-function setFormValues(data) {
-  const keys = [
+function getSelectedEntity() {
+  return document.getElementById("entitySelect").value;
+}
+
+function renderForm() {
+  const fields = [
     "visitVolume",
     "callVolume",
     "newPatients",
@@ -100,10 +83,23 @@ function setFormValues(data) {
     "abandonedCallRate"
   ];
 
-  keys.forEach((key) => {
-    const input = document.getElementById(key);
-    if (!input) return;
-    input.value = data && data[key] != null ? data[key] : "";
+  const container = document.getElementById("kpiForm");
+  container.innerHTML = "";
+
+  fields.forEach((key) => {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <label>${key}</label>
+      <input type="number" id="${key}" />
+    `;
+    container.appendChild(div);
+  });
+}
+
+function setFormValues(data) {
+  Object.keys(data).forEach((key) => {
+    const el = document.getElementById(key);
+    if (el) el.value = data[key] ?? "";
   });
 }
 
@@ -118,79 +114,61 @@ function getFormValues() {
   };
 }
 
-function resolveEntity(userData) {
-  return userData.access.entity === "admin" ? "LAOSS" : userData.access.entity;
+function getDefaultWeekEnding() {
+  const d = new Date();
+  const diff = (5 - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10);
 }
 
-async function loadWeek(userData) {
+async function loadWeek() {
   const weekEnding = document.getElementById("weekEnding").value;
-  const entity = resolveEntity(userData);
+  const entity = getSelectedEntity();
 
-  setStatus("Loading week...");
-  const result = await apiGet(
-    `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
-  );
+  setStatus("Loading...");
+  const res = await apiGet(`/api/weekly?weekEnding=${weekEnding}&entity=${entity}`);
 
-  setFormValues(result.data || {});
-  setStatus(`Loaded ${entity} for ${weekEnding}`);
-  setDebug(result);
+  setFormValues(res.data);
+  setStatus(`Loaded ${entity}`);
+  setDebug(res);
 }
 
-async function saveWeek(userData) {
-  const weekEnding = document.getElementById("weekEnding").value;
-  const entity = resolveEntity(userData);
-
+async function saveWeek() {
   const payload = {
-    weekEnding,
-    entity,
+    weekEnding: document.getElementById("weekEnding").value,
+    entity: getSelectedEntity(),
     data: getFormValues()
   };
 
   setStatus("Saving...");
   setDebug(payload);
 
-  const result = await apiPost("/api/weekly-save", payload);
+  const res = await apiPost("/api/weekly-save", payload);
 
-  setStatus(result.message || "Saved successfully");
-  setDebug(result);
+  setStatus("Saved");
+  setDebug(res);
 
-  await loadWeek(userData);
+  await loadWeek();
 }
 
 (async function init() {
   try {
-    const userData = await apiGet("/api/me");
+    const user = await apiGet("/api/me");
 
-    renderUser(userData);
+    renderUser(user);
+    setupEntityDropdown(user);
     renderForm();
 
     const weekInput = document.getElementById("weekEnding");
     weekInput.value = getDefaultWeekEnding();
 
-    await loadWeek(userData);
+    document.getElementById("entitySelect").addEventListener("change", loadWeek);
+    weekInput.addEventListener("change", loadWeek);
+    document.getElementById("saveBtn").addEventListener("click", saveWeek);
 
-    weekInput.addEventListener("change", async () => {
-      try {
-        await loadWeek(userData);
-      } catch (error) {
-        setStatus(error.message || "Failed to load week", true);
-        setDebug(String(error));
-        console.error(error);
-      }
-    });
-
-    document.getElementById("saveBtn").addEventListener("click", async () => {
-      try {
-        await saveWeek(userData);
-      } catch (error) {
-        setStatus(error.message || "Failed to save", true);
-        setDebug(String(error));
-        console.error(error);
-      }
-    });
-  } catch (error) {
-    setStatus(error.message || "Failed to load app", true);
-    setDebug(String(error));
-    console.error(error);
+    await loadWeek();
+  } catch (e) {
+    setStatus(e.message, true);
+    setDebug(e);
   }
 })();
