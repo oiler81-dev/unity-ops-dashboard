@@ -9,7 +9,7 @@ async function parseApiResponse(res) {
   }
 
   if (!res.ok) {
-    throw new Error(data?.error || data?.details || `Request failed with status ${res.status}`);
+    throw new Error(data?.details || data?.error || `Request failed with status ${res.status}`);
   }
 
   return data;
@@ -50,12 +50,14 @@ function getDefaultWeekEnding() {
 
 function setStatus(message, isError = false) {
   const el = document.getElementById("statusMessage");
+  if (!el) return;
   el.textContent = message;
   el.style.color = isError ? "#ff8a8a" : "#7CFC98";
 }
 
 function setDebug(data) {
   const el = document.getElementById("debugOutput");
+  if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
