@@ -21,28 +21,22 @@ module.exports = async function (context, req) {
 
     const { weekEnding, entity, data } = body;
 
-    // enforce permissions
     if (!canAccessEntity(access, entity)) {
       return forbidden("You cannot edit this entity");
     }
 
     const client = getTableClient(WEEKLY_TABLE);
 
-    const partitionKey = entity;
-    const rowKey = weekEnding;
-
-    const entityData = {
-      partitionKey,
-      rowKey,
-
+    const entityRecord = {
+      partitionKey: entity,
+      rowKey: weekEnding,
       ...data,
-
       status: "draft",
       updatedBy: access.email,
       updatedAt: new Date().toISOString()
     };
 
-    await client.upsertEntity(entityData, "Replace");
+    await client.upsertEntity(entityRecord, "Replace");
 
     return ok({
       ok: true,
@@ -50,7 +44,6 @@ module.exports = async function (context, req) {
       entity,
       weekEnding
     });
-
   } catch (error) {
     context.log.error("weekly-save failed", error);
     return serverError(error);
