@@ -12,6 +12,21 @@ function getTableClient(tableName) {
   return TableClient.fromConnectionString(getConnectionString(), tableName);
 }
 
+async function ensureTable(tableName) {
+  const client = getTableClient(tableName);
+
+  try {
+    await client.createTable();
+  } catch (error) {
+    if (error?.statusCode !== 409) {
+      throw error;
+    }
+  }
+
+  return client;
+}
+
 module.exports = {
-  getTableClient
+  getTableClient,
+  ensureTable
 };
