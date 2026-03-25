@@ -1,5 +1,5 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const { resolveAccess, canAccessEntity } = require("../shared/permissions");
 const { ok, badRequest, forbidden, serverError } = require("../shared/response");
 const { ensureTable } = require("../shared/table");
 const { WEEKLY_TABLE } = require("../shared/constants");
@@ -9,12 +9,16 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access.isAdmin) return forbidden("Admin only");
+    if (!access.allowed) return forbidden();
 
     const { weekEnding, entity } = req.body || {};
 
     if (!weekEnding || !entity) {
       return badRequest("Missing fields");
+    }
+
+    if (!canAccessEntity(access, entity)) {
+      return forbidden("Cannot submit for this entity");
     }
 
     const client = await ensureTable(WEEKLY_TABLE);
@@ -23,18 +27,18 @@ module.exports = async function (context, req) {
     try {
       record = await client.getEntity(entity, weekEnding);
     } catch {
-      return badRequest("No data found");
+      return badRequest("No data found to submit");
     }
 
-    record.status = "approved";
-    record.approvedBy = access.email;
-    record.approvedAt = new Date().toISOString();
+    record.status = "submitted";
+    record.submittedBy = access.email;
+    record.submittedAt = new Date().toISOString();
 
     await client.upsertEntity(record, "Replace");
 
     return ok({
       ok: true,
-      message: "Approved successfully"
+      message: "Submitted successfully"
     });
 
   } catch (error) {
