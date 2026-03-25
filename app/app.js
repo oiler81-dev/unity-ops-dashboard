@@ -27,7 +27,6 @@ async function apiGet(url) {
       "Accept": "application/json"
     }
   });
-
   return parseApiResponse(res);
 }
 
@@ -40,7 +39,6 @@ async function apiPost(url, payload) {
     },
     body: JSON.stringify(payload)
   });
-
   return parseApiResponse(res);
 }
 
@@ -53,6 +51,12 @@ function setStatus(message, isError = false) {
 
 function setDebug(data) {
   const el = document.getElementById("debugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function setExecutiveDebug(data) {
+  const el = document.getElementById("executiveDebugOutput");
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
@@ -108,9 +112,8 @@ function renderForm() {
 
   fields.forEach((field) => {
     const div = document.createElement("div");
-    div.style.marginBottom = "12px";
     div.innerHTML = `
-      <label for="${field.key}" style="display:block;margin-bottom:4px;">${field.label}</label>
+      <label for="${field.key}">${field.label}</label>
       <input type="number" id="${field.key}" step="any" />
     `;
     container.appendChild(div);
@@ -228,6 +231,91 @@ async function approveWeek() {
   await loadWeek();
 }
 
+function showEntryView() {
+  document.getElementById("entryView").style.display = "";
+  document.getElementById("executiveView").style.display = "none";
+}
+
+function showExecutiveView() {
+  document.getElementById("entryView").style.display = "none";
+  document.getElementById("executiveView").style.display = "";
+}
+
+function renderExecutiveCards(summary) {
+  const cards = document.getElementById("executiveCards");
+  cards.innerHTML = "";
+
+  const cardData = [
+    { label: "Approved Regions", value: summary.entityCount || 0 },
+    { label: "Visit Volume", value: summary.totals?.visitVolume || 0 },
+    { label: "Call Volume", value: summary.totals?.callVolume || 0 },
+    { label: "New Patients", value: summary.totals?.newPatients || 0 }
+  ];
+
+  cardData.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "summaryCard";
+    div.innerHTML = `
+      <h3>${item.label}</h3>
+      <div class="value">${item.value}</div>
+    `;
+    cards.appendChild(div);
+  });
+}
+
+function renderExecutiveRegions(summary) {
+  const container = document.getElementById("executiveRegions");
+
+  if (!summary.regions || !summary.regions.length) {
+    container.innerHTML = "<p>No approved regions found for this week.</p>";
+    return;
+  }
+
+  const rows = summary.regions.map((region) => `
+    <tr>
+      <td>${region.entity}</td>
+      <td>${region.visitVolume}</td>
+      <td>${region.callVolume}</td>
+      <td>${region.newPatients}</td>
+      <td>${region.noShowRate}</td>
+      <td>${region.cancellationRate}</td>
+      <td>${region.abandonedCallRate}</td>
+      <td>${region.status}</td>
+    </tr>
+  `).join("");
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Visit Volume</th>
+          <th>Call Volume</th>
+          <th>New Patients</th>
+          <th>No Show Rate</th>
+          <th>Cancellation Rate</th>
+          <th>Abandoned Call Rate</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadExecutiveSummary() {
+  const weekEnding = document.getElementById("executiveWeekEnding").value;
+  const result = await apiGet(
+    `/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`
+  );
+
+  renderExecutiveCards(result);
+  renderExecutiveRegions(result);
+  setExecutiveDebug(result);
+}
+
 (async function init() {
   try {
     currentUser = await apiGet("/api/me");
@@ -237,7 +325,11 @@ async function approveWeek() {
     renderForm();
 
     const weekInput = document.getElementById("weekEnding");
-    weekInput.value = getDefaultWeekEnding();
+    const executiveWeekInput = document.getElementById("executiveWeekEnding");
+
+    const defaultWeek = getDefaultWeekEnding();
+    weekInput.value = defaultWeek;
+    executiveWeekInput.value = defaultWeek;
 
     document.getElementById("entitySelect").addEventListener("change", async () => {
       try {
@@ -245,7 +337,6 @@ async function approveWeek() {
       } catch (error) {
         setStatus(error.message || "Failed to load week", true);
         setDebug(String(error));
-        console.error(error);
       }
     });
 
@@ -255,7 +346,6 @@ async function approveWeek() {
       } catch (error) {
         setStatus(error.message || "Failed to load week", true);
         setDebug(String(error));
-        console.error(error);
       }
     });
 
@@ -265,7 +355,6 @@ async function approveWeek() {
       } catch (error) {
         setStatus(error.message || "Failed to save", true);
         setDebug(String(error));
-        console.error(error);
       }
     });
 
@@ -275,7 +364,6 @@ async function approveWeek() {
       } catch (error) {
         setStatus(error.message || "Failed to submit", true);
         setDebug(String(error));
-        console.error(error);
       }
     });
 
@@ -285,14 +373,31 @@ async function approveWeek() {
       } catch (error) {
         setStatus(error.message || "Failed to approve", true);
         setDebug(String(error));
-        console.error(error);
+      }
+    });
+
+    document.getElementById("navEntryBtn").addEventListener("click", showEntryView);
+    document.getElementById("navExecutiveBtn").addEventListener("click", async () => {
+      showExecutiveView();
+      try {
+        await loadExecutiveSummary();
+      } catch (error) {
+        setExecutiveDebug(String(error));
+      }
+    });
+
+    document.getElementById("loadExecutiveBtn").addEventListener("click", async () => {
+      try {
+        await loadExecutiveSummary();
+      } catch (error) {
+        setExecutiveDebug(String(error));
       }
     });
 
     await loadWeek();
+    await loadExecutiveSummary();
   } catch (error) {
     setStatus(error.message || "Failed to load app", true);
     setDebug(String(error));
-    console.error(error);
   }
 })();
