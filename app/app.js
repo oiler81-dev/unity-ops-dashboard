@@ -132,6 +132,18 @@ function setDashboardDebug(data) {
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
+function setDashboardRangeSummary(text) {
+  const el = document.getElementById("dashboardRangeSummary");
+  if (el) el.textContent = text;
+}
+
+function setDashboardBenchmarkBanner(text = "", show = false) {
+  const el = document.getElementById("dashboardBenchmarkBanner");
+  if (!el) return;
+  el.style.display = show ? "" : "none";
+  el.textContent = text;
+}
+
 function getDefaultWeekEnding() {
   const d = new Date();
   const diff = (5 - d.getDay() + 7) % 7;
@@ -139,9 +151,9 @@ function getDefaultWeekEnding() {
   return d.toISOString().slice(0, 10);
 }
 
-function getDateWeeksAgo(weeksAgo) {
-  const d = new Date();
-  d.setDate(d.getDate() - weeksAgo * 7);
+function getDateWeeksAgo(weeksAgo, fromDate = null) {
+  const d = fromDate ? new Date(`${fromDate}T12:00:00Z`) : new Date();
+  d.setUTCDate(d.getUTCDate() - weeksAgo * 7);
   return d.toISOString().slice(0, 10);
 }
 
@@ -155,6 +167,10 @@ function normalizeNumber(value) {
   if (value === null || value === undefined || value === "") return 0;
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function formatPercent(value, digits = 1) {
+  return `${normalizeNumber(value).toFixed(digits)}%`;
 }
 
 function renderUser(userData) {
@@ -670,73 +686,9 @@ async function loadTrends() {
   setTrendsDebug(result);
 }
 
-function renderDashboardCards(current, previous) {
-  const container = document.getElementById("dashboardCards");
-  container.innerHTML = "";
-
-  const prevTotals = previous?.totals || {};
-  const currentRegions = current?.regions || [];
-  const avg = (key) => {
-    if (!currentRegions.length) return 0;
-    return (
-      currentRegions.reduce((sum, r) => sum + normalizeNumber(r[key]), 0) /
-      currentRegions.length
-    );
-  };
-
-  const currentCards = [
-    {
-      label: "Approved Regions",
-      value: current?.entityCount || 0,
-      sub: `${(previous?.entityCount || 0) > 0 ? `Prev ${previous.entityCount}` : "Prev 0"}`
-    },
-    {
-      label: "Visit Volume",
-      value: current?.totals?.visitVolume || 0,
-      sub: formatDeltaOnly(current?.totals?.visitVolume || 0, prevTotals.visitVolume || 0)
-    },
-    {
-      label: "Call Volume",
-      value: current?.totals?.callVolume || 0,
-      sub: formatDeltaOnly(current?.totals?.callVolume || 0, prevTotals.callVolume || 0)
-    },
-    {
-      label: "New Patients",
-      value: current?.totals?.newPatients || 0,
-      sub: formatDeltaOnly(current?.totals?.newPatients || 0, prevTotals.newPatients || 0)
-    },
-    {
-      label: "Avg No Show %",
-      value: `${avg("noShowRate").toFixed(1)}%`,
-      sub: "Across approved entities"
-    },
-    {
-      label: "Avg Cancel %",
-      value: `${avg("cancellationRate").toFixed(1)}%`,
-      sub: "Across approved entities"
-    },
-    {
-      label: "Avg Abandoned %",
-      value: `${avg("abandonedCallRate").toFixed(1)}%`,
-      sub: "Across approved entities"
-    }
-  ];
-
-  currentCards.forEach((item) => {
-    const div = document.createElement("div");
-    div.className = "summaryCard";
-    div.innerHTML = `
-      <h3>${item.label}</h3>
-      <div class="value">${item.value}</div>
-      <div class="metaText">${item.sub || ""}</div>
-    `;
-    container.appendChild(div);
-  });
-}
-
 function formatDeltaOnly(current, prior) {
   const diff = normalizeNumber(current) - normalizeNumber(prior);
-  return `${diff >= 0 ? "+" : ""}${diff} vs prior week`;
+  return `${diff >= 0 ? "+" : ""}${diff} vs comparison`;
 }
 
 function getEntityMap(summary) {
@@ -762,19 +714,377 @@ function varianceClass(pct) {
   return "varianceNeutral";
 }
 
-function formatVarianceText(actual) {
-  const n = normalizeNumber(actual);
-  return `${n}`;
+function pctChange(current, comparison) {
+  const c = normalizeNumber(current);
+  const p = normalizeNumber(comparison);
+  if (!p) return null;
+  return ((c - p) / p) * 100;
 }
 
-function renderDashboardEntities(current, previous) {
+function summarizeDateRange(weeks, periodType, anchorWeek, compareAgainst, entityScope, customStart, customEnd) {
+  const primary = weeks.primaryWeeks.length
+    ? `${weeks.primaryWeeks[0]} to ${weeks.primaryWeeks[weeks.primaryWeeks.length - 1]}`
+    : "No primary weeks";
+
+  const comparison = weeks.comparisonWeeks.length
+    ? `${weeks.comparisonWeeks[0]} to ${weeks.comparisonWeeks[weeks.comparisonWeeks.length - 1]}`
+    : "No comparison weeks";
+
+  const periodLabelMap = {
+    currentWeek: "Current Week",
+    lastWeek: "Last Week",
+    mtd: "Month to Date",
+    lastMonth: "Last Month",
+    rolling4: "Rolling 4 Weeks",
+    custom: "Custom Range"
+  };
+
+  const compareLabelMap = {
+    priorPeriod: "Prior Period",
+    target: "Target",
+    budget: "Budget",
+    forecast: "Forecast"
+  };
+
+  if (periodType === "custom") {
+    return `Viewing ${periodLabelMap[periodType]} (${customStart} to ${customEnd}) for ${entityScope === "ALL" ? "all entities" : entityScope}. Compare: ${compareLabelMap[compareAgainst]}. Primary weeks: ${primary}. Comparison weeks: ${comparison}.`;
+  }
+
+  return `Viewing ${periodLabelMap[periodType]} anchored to ${anchorWeek} for ${entityScope === "ALL" ? "all entities" : entityScope}. Compare: ${compareLabelMap[compareAgainst]}. Primary weeks: ${primary}. Comparison weeks: ${comparison}.`;
+}
+
+function getFridayOnOrBefore(dateInput) {
+  const d = new Date(`${dateInput}T12:00:00Z`);
+  while (d.getUTCDay() !== 5) {
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+function getFridayOnOrAfter(dateInput) {
+  const d = new Date(`${dateInput}T12:00:00Z`);
+  while (d.getUTCDay() !== 5) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+function buildFridayRange(startIso, endIso) {
+  const start = getFridayOnOrAfter(startIso);
+  const end = getFridayOnOrBefore(endIso);
+
+  const startDate = new Date(`${start}T12:00:00Z`);
+  const endDate = new Date(`${end}T12:00:00Z`);
+
+  if (startDate > endDate) return [];
+
+  const out = [];
+  const d = new Date(startDate);
+  while (d <= endDate) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 7);
+  }
+  return out;
+}
+
+function getMonthStart(isoDate) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  d.setUTCDate(1);
+  return d.toISOString().slice(0, 10);
+}
+
+function getMonthEnd(isoDate) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1, 0);
+  return d.toISOString().slice(0, 10);
+}
+
+function shiftDateDays(isoDate, days) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function getDashboardSelections() {
+  return {
+    periodType: document.getElementById("dashboardPeriodType").value,
+    compareAgainst: document.getElementById("dashboardCompareAgainst").value,
+    entityScope: document.getElementById("dashboardEntityScope").value,
+    anchorWeek: document.getElementById("dashboardWeekEnding").value,
+    customStart: document.getElementById("dashboardCustomStart").value,
+    customEnd: document.getElementById("dashboardCustomEnd").value
+  };
+}
+
+function syncDashboardPeriodUi() {
+  const periodType = document.getElementById("dashboardPeriodType").value;
+  const isCustom = periodType === "custom";
+
+  document.getElementById("dashboardCustomStartWrap").style.display = isCustom ? "" : "none";
+  document.getElementById("dashboardCustomEndWrap").style.display = isCustom ? "" : "none";
+  document.getElementById("dashboardWeekWrap").style.display = isCustom ? "none" : "";
+}
+
+function buildDashboardWeekSets({ periodType, anchorWeek, customStart, customEnd }) {
+  const anchor = anchorWeek || getDefaultWeekEnding();
+
+  if (periodType === "currentWeek") {
+    return {
+      primaryWeeks: [anchor],
+      comparisonWeeks: [getPreviousWeekEnding(anchor)]
+    };
+  }
+
+  if (periodType === "lastWeek") {
+    const primary = getPreviousWeekEnding(anchor);
+    return {
+      primaryWeeks: [primary],
+      comparisonWeeks: [getPreviousWeekEnding(primary)]
+    };
+  }
+
+  if (periodType === "rolling4") {
+    const primaryWeeks = [
+      shiftDateDays(anchor, -21),
+      shiftDateDays(anchor, -14),
+      shiftDateDays(anchor, -7),
+      anchor
+    ];
+    const comparisonWeeks = primaryWeeks.map((w) => shiftDateDays(w, -28));
+    return { primaryWeeks, comparisonWeeks };
+  }
+
+  if (periodType === "mtd") {
+    const monthStart = getMonthStart(anchor);
+    const primaryWeeks = buildFridayRange(monthStart, anchor);
+    const prevMonthDate = shiftDateDays(monthStart, -1);
+    const prevMonthStart = getMonthStart(prevMonthDate);
+    const prevRangeWeeks = buildFridayRange(prevMonthStart, prevMonthDate);
+    const comparisonWeeks = prevRangeWeeks.slice(0, primaryWeeks.length);
+    return { primaryWeeks, comparisonWeeks };
+  }
+
+  if (periodType === "lastMonth") {
+    const priorMonthRef = shiftDateDays(getMonthStart(anchor), -1);
+    const primaryStart = getMonthStart(priorMonthRef);
+    const primaryEnd = getMonthEnd(priorMonthRef);
+    const primaryWeeks = buildFridayRange(primaryStart, primaryEnd);
+
+    const comparisonMonthRef = shiftDateDays(primaryStart, -1);
+    const comparisonStart = getMonthStart(comparisonMonthRef);
+    const comparisonEnd = getMonthEnd(comparisonMonthRef);
+    const comparisonWeeks = buildFridayRange(comparisonStart, comparisonEnd);
+
+    return { primaryWeeks, comparisonWeeks };
+  }
+
+  if (periodType === "custom") {
+    if (!customStart || !customEnd) {
+      return { primaryWeeks: [], comparisonWeeks: [] };
+    }
+
+    const primaryWeeks = buildFridayRange(customStart, customEnd);
+    const start = new Date(`${customStart}T12:00:00Z`);
+    const end = new Date(`${customEnd}T12:00:00Z`);
+    const spanDays = Math.round((end - start) / 86400000) + 1;
+
+    const comparisonStart = shiftDateDays(customStart, -spanDays);
+    const comparisonEnd = shiftDateDays(customEnd, -spanDays);
+    const comparisonWeeks = buildFridayRange(comparisonStart, comparisonEnd);
+
+    return { primaryWeeks, comparisonWeeks };
+  }
+
+  return {
+    primaryWeeks: [anchor],
+    comparisonWeeks: [getPreviousWeekEnding(anchor)]
+  };
+}
+
+async function fetchExecutiveSummaryByWeek(weekEnding) {
+  return apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
+}
+
+function aggregateExecutiveSummaries(summaries, entityScope) {
+  const entityMap = new Map();
+
+  summaries.forEach((summary) => {
+    (summary.regions || []).forEach((region) => {
+      if (entityScope !== "ALL" && region.entity !== entityScope) return;
+
+      if (!entityMap.has(region.entity)) {
+        entityMap.set(region.entity, {
+          entity: region.entity,
+          weekEnding: summary.weekEnding,
+          status: "approved",
+          visitVolume: 0,
+          callVolume: 0,
+          newPatients: 0,
+          noShowRateTotal: 0,
+          cancellationRateTotal: 0,
+          abandonedCallRateTotal: 0,
+          weekCount: 0
+        });
+      }
+
+      const row = entityMap.get(region.entity);
+      row.visitVolume += normalizeNumber(region.visitVolume);
+      row.callVolume += normalizeNumber(region.callVolume);
+      row.newPatients += normalizeNumber(region.newPatients);
+      row.noShowRateTotal += normalizeNumber(region.noShowRate);
+      row.cancellationRateTotal += normalizeNumber(region.cancellationRate);
+      row.abandonedCallRateTotal += normalizeNumber(region.abandonedCallRate);
+      row.weekCount += 1;
+    });
+  });
+
+  const regions = Array.from(entityMap.values()).map((row) => ({
+    entity: row.entity,
+    status: "approved",
+    visitVolume: row.visitVolume,
+    callVolume: row.callVolume,
+    newPatients: row.newPatients,
+    noShowRate: row.weekCount ? row.noShowRateTotal / row.weekCount : 0,
+    cancellationRate: row.weekCount ? row.cancellationRateTotal / row.weekCount : 0,
+    abandonedCallRate: row.weekCount ? row.abandonedCallRateTotal / row.weekCount : 0
+  }));
+
+  const totals = {
+    visitVolume: regions.reduce((sum, r) => sum + normalizeNumber(r.visitVolume), 0),
+    callVolume: regions.reduce((sum, r) => sum + normalizeNumber(r.callVolume), 0),
+    newPatients: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatients), 0)
+  };
+
+  return {
+    entityCount: regions.length,
+    totals,
+    regions
+  };
+}
+
+async function loadDashboardDataForWeeks(weeks, entityScope) {
+  const validWeeks = (weeks || []).filter(Boolean);
+  if (!validWeeks.length) {
+    return {
+      entityCount: 0,
+      totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
+      regions: []
+    };
+  }
+
+  const summaries = await Promise.all(validWeeks.map((week) => fetchExecutiveSummaryByWeek(week)));
+  return aggregateExecutiveSummaries(summaries, entityScope);
+}
+
+function renderDashboardCards(current, comparison, compareAgainst) {
+  const container = document.getElementById("dashboardCards");
+  container.innerHTML = "";
+
+  const compareLabelMap = {
+    priorPeriod: "vs prior period",
+    target: "vs target",
+    budget: "vs budget",
+    forecast: "vs forecast"
+  };
+
+  const labelSuffix = compareLabelMap[compareAgainst] || "vs comparison";
+
+  const currentRegions = current?.regions || [];
+  const avg = (key) => {
+    if (!currentRegions.length) return 0;
+    return (
+      currentRegions.reduce((sum, r) => sum + normalizeNumber(r[key]), 0) /
+      currentRegions.length
+    );
+  };
+
+  const cardData = [
+    {
+      label: "Approved Regions",
+      value: current?.entityCount || 0,
+      sub: `Prev ${comparison?.entityCount || 0}`
+    },
+    {
+      label: "Visit Volume",
+      value: current?.totals?.visitVolume || 0,
+      sub: formatDeltaOnly(current?.totals?.visitVolume || 0, comparison?.totals?.visitVolume || 0, labelSuffix)
+    },
+    {
+      label: "Call Volume",
+      value: current?.totals?.callVolume || 0,
+      sub: formatDeltaOnly(current?.totals?.callVolume || 0, comparison?.totals?.callVolume || 0, labelSuffix)
+    },
+    {
+      label: "New Patients",
+      value: current?.totals?.newPatients || 0,
+      sub: formatDeltaOnly(current?.totals?.newPatients || 0, comparison?.totals?.newPatients || 0, labelSuffix)
+    },
+    {
+      label: "Avg No Show %",
+      value: `${avg("noShowRate").toFixed(1)}%`,
+      sub: "Across approved entities"
+    },
+    {
+      label: "Avg Cancel %",
+      value: `${avg("cancellationRate").toFixed(1)}%`,
+      sub: "Across approved entities"
+    },
+    {
+      label: "Avg Abandoned %",
+      value: `${avg("abandonedCallRate").toFixed(1)}%`,
+      sub: "Across approved entities"
+    }
+  ];
+
+  cardData.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "summaryCard";
+    div.innerHTML = `
+      <h3>${item.label}</h3>
+      <div class="value">${item.value}</div>
+      <div class="metaText">${item.sub || ""}</div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function formatDeltaOnly(current, comparison, label = "vs comparison") {
+  const diff = normalizeNumber(current) - normalizeNumber(comparison);
+  return `${diff >= 0 ? "+" : ""}${diff} ${label}`;
+}
+
+function getEntityMap(summary) {
+  const map = {};
+  (summary?.regions || []).forEach((r) => {
+    map[r.entity] = r;
+  });
+  return map;
+}
+
+function statusClass(status) {
+  const s = String(status || "missing").toLowerCase();
+  if (s === "approved") return "dashboardStatus-approved";
+  if (s === "submitted") return "dashboardStatus-submitted";
+  if (s === "draft") return "dashboardStatus-draft";
+  return "dashboardStatus-missing";
+}
+
+function varianceClass(pct) {
+  if (pct === null || pct === undefined || pct === "") return "varianceNeutral";
+  if (Number(pct) > 0) return "variancePos";
+  if (Number(pct) < 0) return "varianceNeg";
+  return "varianceNeutral";
+}
+
+function renderDashboardEntities(current, comparison, compareAgainst, entityScope) {
   const container = document.getElementById("dashboardEntities");
   container.innerHTML = "";
 
   const currentMap = getEntityMap(current);
-  const previousMap = getEntityMap(previous);
+  const comparisonMap = getEntityMap(comparison);
+  const entitiesToShow = entityScope === "ALL" ? ENTITIES : [entityScope];
 
-  ENTITIES.forEach((entity) => {
+  entitiesToShow.forEach((entity) => {
     const row = currentMap[entity] || {
       entity,
       visitVolume: 0,
@@ -786,13 +1096,17 @@ function renderDashboardEntities(current, previous) {
       status: "missing"
     };
 
-    const prior = previousMap[entity] || {
+    const prior = comparisonMap[entity] || {
       visitVolume: 0,
       callVolume: 0,
       newPatients: 0
     };
 
     const brand = getBranding(entity);
+
+    const visitPct = pctChange(row.visitVolume, prior.visitVolume);
+    const callPct = pctChange(row.callVolume, prior.callVolume);
+    const npPct = pctChange(row.newPatients, prior.newPatients);
 
     const card = document.createElement("div");
     card.className = "dashboardEntityCard";
@@ -837,31 +1151,31 @@ function renderDashboardEntities(current, previous) {
 
         <div class="dashboardMetricRow">
           <span>No Show</span>
-          <span class="metricValue">${normalizeNumber(row.noShowRate)}%</span>
+          <span class="metricValue">${normalizeNumber(row.noShowRate).toFixed(1)}%</span>
         </div>
 
         <div class="dashboardMetricRow">
           <span>Cancel</span>
-          <span class="metricValue">${normalizeNumber(row.cancellationRate)}%</span>
+          <span class="metricValue">${normalizeNumber(row.cancellationRate).toFixed(1)}%</span>
         </div>
 
         <div class="dashboardMetricRow">
           <span>Abandoned</span>
-          <span class="metricValue">${normalizeNumber(row.abandonedCallRate)}%</span>
+          <span class="metricValue">${normalizeNumber(row.abandonedCallRate).toFixed(1)}%</span>
         </div>
 
         <div class="dashboardVarianceRow">
           <div class="varianceChip" style="border-color:${brand.accentBorder}; background:${brand.accentSoft};">
-            <span class="chipLabel">Visit Target</span>
-            <span class="chipValue ${varianceClass(null)}">${formatVarianceText(row.visitVolume)}</span>
+            <span class="chipLabel">Visits ${compareAgainst === "priorPeriod" ? "vs Prior" : "Target Pending"}</span>
+            <span class="chipValue ${varianceClass(visitPct)}">${compareAgainst === "priorPeriod" ? (visitPct === null ? "n/a" : `${visitPct >= 0 ? "+" : ""}${visitPct.toFixed(1)}%`) : normalizeNumber(row.visitVolume)}</span>
           </div>
           <div class="varianceChip" style="border-color:${brand.accentBorder}; background:${brand.accentSoft};">
-            <span class="chipLabel">Call Target</span>
-            <span class="chipValue ${varianceClass(null)}">${formatVarianceText(row.callVolume)}</span>
+            <span class="chipLabel">Calls ${compareAgainst === "priorPeriod" ? "vs Prior" : "Target Pending"}</span>
+            <span class="chipValue ${varianceClass(callPct)}">${compareAgainst === "priorPeriod" ? (callPct === null ? "n/a" : `${callPct >= 0 ? "+" : ""}${callPct.toFixed(1)}%`) : normalizeNumber(row.callVolume)}</span>
           </div>
           <div class="varianceChip" style="border-color:${brand.accentBorder}; background:${brand.accentSoft};">
-            <span class="chipLabel">NP Target</span>
-            <span class="chipValue ${varianceClass(null)}">${formatVarianceText(row.newPatients)}</span>
+            <span class="chipLabel">NP ${compareAgainst === "priorPeriod" ? "vs Prior" : "Target Pending"}</span>
+            <span class="chipValue ${varianceClass(npPct)}">${compareAgainst === "priorPeriod" ? (npPct === null ? "n/a" : `${npPct >= 0 ? "+" : ""}${npPct.toFixed(1)}%`) : normalizeNumber(row.newPatients)}</span>
           </div>
         </div>
       </div>
@@ -870,19 +1184,20 @@ function renderDashboardEntities(current, previous) {
   });
 }
 
-function buildDashboardAlerts(current, previous) {
+function buildDashboardAlerts(current, comparison, entityScope) {
   const alerts = [];
   const currentMap = getEntityMap(current);
-  const previousMap = getEntityMap(previous);
+  const previousMap = getEntityMap(comparison);
+  const entitiesToShow = entityScope === "ALL" ? ENTITIES : [entityScope];
 
-  ENTITIES.forEach((entity) => {
+  entitiesToShow.forEach((entity) => {
     const row = currentMap[entity];
     const prior = previousMap[entity] || {};
 
     if (!row) {
       alerts.push({
         severity: "yellow",
-        text: `${entity} has no approved record for this week.`
+        text: `${entity} has no approved record in the selected period.`
       });
       return;
     }
@@ -890,28 +1205,28 @@ function buildDashboardAlerts(current, previous) {
     if (String(row.status || "").toLowerCase() !== "approved") {
       alerts.push({
         severity: "yellow",
-        text: `${entity} is not approved for this week.`
+        text: `${entity} is not approved in the selected period.`
       });
     }
 
     if (normalizeNumber(row.noShowRate) >= 6) {
       alerts.push({
         severity: "red",
-        text: `${entity} no show rate is elevated at ${row.noShowRate}%.`
+        text: `${entity} no show rate is elevated at ${normalizeNumber(row.noShowRate).toFixed(1)}%.`
       });
     }
 
     if (normalizeNumber(row.cancellationRate) >= 8) {
       alerts.push({
         severity: "red",
-        text: `${entity} cancellation rate is elevated at ${row.cancellationRate}%.`
+        text: `${entity} cancellation rate is elevated at ${normalizeNumber(row.cancellationRate).toFixed(1)}%.`
       });
     }
 
     if (normalizeNumber(row.abandonedCallRate) >= 10) {
       alerts.push({
         severity: "red",
-        text: `${entity} abandoned call rate is elevated at ${row.abandonedCallRate}%.`
+        text: `${entity} abandoned call rate is elevated at ${normalizeNumber(row.abandonedCallRate).toFixed(1)}%.`
       });
     }
 
@@ -919,7 +1234,7 @@ function buildDashboardAlerts(current, previous) {
     if (visitDrop < -100) {
       alerts.push({
         severity: "yellow",
-        text: `${entity} visit volume is down ${Math.abs(visitDrop)} vs prior week.`
+        text: `${entity} visit volume is down ${Math.abs(visitDrop)} vs comparison period.`
       });
     }
   });
@@ -927,16 +1242,16 @@ function buildDashboardAlerts(current, previous) {
   if (!alerts.length) {
     alerts.push({
       severity: "green",
-      text: "No major operational alerts for this week."
+      text: "No major operational alerts for the selected period."
     });
   }
 
   return alerts;
 }
 
-function renderDashboardAlerts(current, previous) {
+function renderDashboardAlerts(current, comparison, entityScope) {
   const container = document.getElementById("dashboardAlerts");
-  const alerts = buildDashboardAlerts(current, previous);
+  const alerts = buildDashboardAlerts(current, comparison, entityScope);
 
   container.innerHTML = alerts
     .map(
@@ -949,12 +1264,12 @@ function renderDashboardAlerts(current, previous) {
     .join("");
 }
 
-function renderDashboardSnapshot(current) {
+function renderDashboardSnapshot(current, entityScope) {
   const container = document.getElementById("dashboardSnapshot");
-  const regions = current?.regions || [];
+  const regions = (current?.regions || []).filter((r) => entityScope === "ALL" || r.entity === entityScope);
 
   if (!regions.length) {
-    container.innerHTML = `<div class="dashboardEmpty">No approved entities found for this week.</div>`;
+    container.innerHTML = `<div class="dashboardEmpty">No approved entities found for the selected period.</div>`;
     return;
   }
 
@@ -966,9 +1281,9 @@ function renderDashboardSnapshot(current) {
         <td>${normalizeNumber(r.visitVolume)}</td>
         <td>${normalizeNumber(r.callVolume)}</td>
         <td>${normalizeNumber(r.newPatients)}</td>
-        <td>${normalizeNumber(r.noShowRate)}%</td>
-        <td>${normalizeNumber(r.cancellationRate)}%</td>
-        <td>${normalizeNumber(r.abandonedCallRate)}%</td>
+        <td>${normalizeNumber(r.noShowRate).toFixed(1)}%</td>
+        <td>${normalizeNumber(r.cancellationRate).toFixed(1)}%</td>
+        <td>${normalizeNumber(r.abandonedCallRate).toFixed(1)}%</td>
         <td>${r.status}</td>
       </tr>
     `
@@ -995,19 +1310,46 @@ function renderDashboardSnapshot(current) {
 }
 
 async function loadDashboardLanding() {
-  const weekEnding = document.getElementById("dashboardWeekEnding").value;
-  const previousWeekEnding = getPreviousWeekEnding(weekEnding);
+  const selections = getDashboardSelections();
+  const weekSets = buildDashboardWeekSets(selections);
 
-  const current = await apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
-  const previous = await apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(previousWeekEnding)}`);
+  const current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, selections.entityScope);
+  const comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, selections.entityScope);
 
-  renderDashboardCards(current, previous);
-  renderDashboardEntities(current, previous);
-  renderDashboardAlerts(current, previous);
-  renderDashboardSnapshot(current);
+  const compareBannerTextMap = {
+    target: "Target comparison is staged but not wired yet. The dashboard is currently showing actuals while keeping the slicer structure in place.",
+    budget: "Budget comparison is staged but not wired yet. The dashboard is currently showing actuals while keeping the slicer structure in place.",
+    forecast: "Forecast comparison is staged but not wired yet. The dashboard is currently showing actuals while keeping the slicer structure in place."
+  };
+
+  if (["target", "budget", "forecast"].includes(selections.compareAgainst)) {
+    setDashboardBenchmarkBanner(compareBannerTextMap[selections.compareAgainst], true);
+  } else {
+    setDashboardBenchmarkBanner("", false);
+  }
+
+  setDashboardRangeSummary(
+    summarizeDateRange(
+      weekSets,
+      selections.periodType,
+      selections.anchorWeek,
+      selections.compareAgainst,
+      selections.entityScope,
+      selections.customStart,
+      selections.customEnd
+    )
+  );
+
+  renderDashboardCards(current, comparison, selections.compareAgainst);
+  renderDashboardEntities(current, comparison, selections.compareAgainst, selections.entityScope);
+  renderDashboardAlerts(current, comparison, selections.entityScope);
+  renderDashboardSnapshot(current, selections.entityScope);
+
   setDashboardDebug({
-    currentWeek: current,
-    previousWeek: previous
+    selections,
+    weekSets,
+    currentPeriod: current,
+    comparisonPeriod: comparison
   });
 }
 
@@ -1064,12 +1406,16 @@ async function runImport() {
 
     const defaultWeek = getDefaultWeekEnding();
     document.getElementById("dashboardWeekEnding").value = defaultWeek;
+    document.getElementById("dashboardCustomEnd").value = defaultWeek;
+    document.getElementById("dashboardCustomStart").value = getDateWeeksAgo(8, defaultWeek);
+
     document.getElementById("weekEnding").value = defaultWeek;
     document.getElementById("executiveWeekEnding").value = defaultWeek;
     document.getElementById("trendsStartDate").value = getDateWeeksAgo(12);
     document.getElementById("trendsEndDate").value = defaultWeek;
 
     syncTrendsRangeUi();
+    syncDashboardPeriodUi();
     renderContextBrand("entryContextBrand", getSelectedEntity());
     renderContextBrand("trendsContextBrand", getSelectedTrendsEntity());
 
@@ -1155,6 +1501,61 @@ async function runImport() {
         await loadDashboardLanding();
       } catch (e) {
         setDashboardDebug(String(e));
+      }
+    });
+
+    document.getElementById("dashboardPeriodType").addEventListener("change", async () => {
+      syncDashboardPeriodUi();
+      try {
+        await loadDashboardLanding();
+      } catch (e) {
+        setDashboardDebug(String(e));
+      }
+    });
+
+    document.getElementById("dashboardCompareAgainst").addEventListener("change", async () => {
+      try {
+        await loadDashboardLanding();
+      } catch (e) {
+        setDashboardDebug(String(e));
+      }
+    });
+
+    document.getElementById("dashboardEntityScope").addEventListener("change", async () => {
+      try {
+        await loadDashboardLanding();
+      } catch (e) {
+        setDashboardDebug(String(e));
+      }
+    });
+
+    document.getElementById("dashboardWeekEnding").addEventListener("change", async () => {
+      if (document.getElementById("dashboardPeriodType").value !== "custom") {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      }
+    });
+
+    document.getElementById("dashboardCustomStart").addEventListener("change", async () => {
+      if (document.getElementById("dashboardPeriodType").value === "custom") {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      }
+    });
+
+    document.getElementById("dashboardCustomEnd").addEventListener("change", async () => {
+      if (document.getElementById("dashboardPeriodType").value === "custom") {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
       }
     });
 
