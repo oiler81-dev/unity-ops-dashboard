@@ -25,12 +25,15 @@ function safeText(value) {
 
 function toNumber(value) {
   if (value == null || value === "") return null;
+
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
 
   const text = String(value).replace(/,/g, "").trim();
-  if (!text || text === "#N/A" || text === "#VALUE!") return null;
+  if (!text || text === "#N/A" || text === "#VALUE!" || text === "#DIV/0!") {
+    return null;
+  }
 
   const n = Number(text);
   return Number.isFinite(n) ? n : null;
@@ -40,10 +43,6 @@ function percentToDisplay(value) {
   const n = toNumber(value);
   if (n == null) return null;
   return n <= 1 ? Number((n * 100).toFixed(2)) : Number(n.toFixed(2));
-}
-
-function hasMeaningfulValue(value) {
-  return value !== null && value !== undefined && value !== "";
 }
 
 function sumNumbers(values) {
@@ -67,6 +66,13 @@ function weekEndingFromWeekNumber(weekNumber) {
   const d = firstFridayOfYear(WORKBOOK_YEAR);
   d.setUTCDate(d.getUTCDate() + (n - 1) * 7);
   return d.toISOString().slice(0, 10);
+}
+
+function hasPositiveNumber(...values) {
+  return values.some((value) => {
+    const n = toNumber(value);
+    return n != null && n > 0;
+  });
 }
 
 async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) {
@@ -125,7 +131,7 @@ function buildRegionValues(sheetName, row) {
   const daysInPeriod = toNumber(row[1]);
   const monthTag = safeText(sheetName === "Denver" ? row[18] : row[17]);
 
-  if (!weekNumber || !monthTag) return null;
+  if (!weekNumber) return null;
 
   const weekEnding = weekEndingFromWeekNumber(weekNumber);
   if (!weekEnding) return null;
@@ -144,9 +150,13 @@ function buildRegionValues(sheetName, row) {
     );
   }
 
+  const totalCalls = toNumber(sheetName === "Denver" ? row[9] : row[8]);
+  const abandonedCalls = toNumber(sheetName === "Denver" ? row[10] : row[9]);
+  const cashActual = toNumber(sheetName === "Denver" ? row[17] : row[16]);
+
   const values = {
     weekNumber,
-    monthTag,
+    monthTag: monthTag || null,
     daysInPeriod,
     totalVisits,
     visitsPerDay: toNumber(row[3]),
@@ -154,8 +164,8 @@ function buildRegionValues(sheetName, row) {
     npActual,
     establishedActual,
     surgeryActual,
-    totalCalls: toNumber(sheetName === "Denver" ? row[9] : row[8]),
-    abandonedCalls: toNumber(sheetName === "Denver" ? row[10] : row[9]),
+    totalCalls,
+    abandonedCalls,
     abandonmentRate: percentToDisplay(sheetName === "Denver" ? row[11] : row[10]),
     npToEstablishedConversion: percentToDisplay(
       sheetName === "Denver" ? row[12] : row[11]
@@ -163,13 +173,30 @@ function buildRegionValues(sheetName, row) {
     npToSurgeryConversion: percentToDisplay(
       sheetName === "Denver" ? row[13] : row[12]
     ),
-    cashActual: toNumber(sheetName === "Denver" ? row[17] : row[16])
+    cashActual
   };
 
   if (sheetName === "Denver") {
     values.imagingActual = imagingActual;
     values.piNp = toNumber(row[19]);
     values.piCashCollection = toNumber(row[20]);
+  }
+
+  const hasRealData = hasPositiveNumber(
+    totalVisits,
+    npActual,
+    establishedActual,
+    surgeryActual,
+    imagingActual,
+    totalCalls,
+    abandonedCalls,
+    cashActual
+  );
+
+  const hasUsableDays = daysInPeriod != null && daysInPeriod > 0;
+
+  if (!hasRealData || !hasUsableDays) {
+    return null;
   }
 
   return { weekNumber, weekEnding, values };
@@ -190,14 +217,6 @@ async function importRegionSheet(regionTable, ws, sheetName) {
     const row = rows[r] || [];
     const parsed = buildRegionValues(sheetName, row);
     if (!parsed) continue;
-
-    const hasCoreData =
-      hasMeaningfulValue(parsed.values.totalVisits) ||
-      hasMeaningfulValue(parsed.values.npActual) ||
-      hasMeaningfulValue(parsed.values.totalCalls) ||
-      hasMeaningfulValue(parsed.values.cashActual);
-
-    if (!hasCoreData) continue;
 
     await upsertRegionRecord(regionTable, entity, parsed.weekEnding, parsed.values, {
       importSourceSheet: sheetName,
@@ -226,7 +245,7 @@ function buildWorkingDaysMapFromRegionSheets(workbook) {
       const daysInPeriod = toNumber(row[1]);
       const weekEnding = weekEndingFromWeekNumber(weekNumber);
 
-      if (!weekEnding || daysInPeriod == null) continue;
+      if (!weekEnding || daysInPeriod == null || daysInPeriod <= 0) continue;
 
       if (!map[weekEnding] || daysInPeriod > map[weekEnding]) {
         map[weekEnding] = daysInPeriod;
@@ -249,7 +268,7 @@ async function importPtSheet(sharedTable, ws, workingDaysMap) {
     const monthTag = safeText(row[1]);
     const weekEnding = weekEndingFromWeekNumber(weekNumber);
 
-    if (!weekNumber || !monthTag || !weekEnding) continue;
+    if (!weekNumber || !weekEnding) continue;
 
     const chicagoScheduled = toNumber(row[2]);
     const chicagoCancels = toNumber(row[3]);
@@ -257,12 +276,16 @@ async function importPtSheet(sharedTable, ws, workingDaysMap) {
     const chicagoReschedules = toNumber(row[5]);
     const chicagoUnits = toNumber(row[6]);
 
+    const denverWeek = toNumber(row[10]);
+    const denverMonthTag = safeText(row[11]);
     const denverScheduled = toNumber(row[12]);
     const denverCancels = toNumber(row[13]);
     const denverNoShows = toNumber(row[14]);
     const denverReschedules = toNumber(row[15]);
     const denverUnits = toNumber(row[16]);
 
+    const portlandWeek = toNumber(row[20]);
+    const portlandMonthTag = safeText(row[21]);
     const portlandScheduled = toNumber(row[22]);
     const portlandCancels = toNumber(row[23]);
     const portlandNoShows = toNumber(row[24]);
@@ -299,19 +322,26 @@ async function importPtSheet(sharedTable, ws, workingDaysMap) {
       portlandUnits
     ]);
 
-    const hasData =
-      hasMeaningfulValue(ptScheduledVisits) ||
-      hasMeaningfulValue(ptCancellations) ||
-      hasMeaningfulValue(ptNoShows) ||
-      hasMeaningfulValue(ptReschedules) ||
-      hasMeaningfulValue(totalUnitsBilled);
+    const hasRealData = hasPositiveNumber(
+      ptScheduledVisits,
+      ptCancellations,
+      ptNoShows,
+      ptReschedules,
+      totalUnitsBilled
+    );
 
-    if (!hasData) continue;
+    const alignedMonthTag = monthTag && monthTag === denverMonthTag && monthTag === portlandMonthTag;
+    const alignedWeek = weekNumber && weekNumber === denverWeek && weekNumber === portlandWeek;
+    const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
+
+    if (!hasRealData || !alignedMonthTag || !alignedWeek || !hasWorkingDays) {
+      continue;
+    }
 
     const values = {
       weekNumber,
       monthTag,
-      workingDaysInWeek: workingDaysMap[weekEnding] ?? 5,
+      workingDaysInWeek: workingDaysMap[weekEnding],
       ptScheduledVisits,
       ptCancellations,
       ptNoShows,
@@ -332,7 +362,7 @@ async function importPtSheet(sharedTable, ws, workingDaysMap) {
   return { imported, weeks };
 }
 
-async function importCxnsSheet(sharedTable, ws) {
+async function importCxnsSheet(sharedTable, ws, workingDaysMap) {
   const rows = sheetRows(ws);
   let imported = 0;
   const weeks = [];
@@ -344,23 +374,29 @@ async function importCxnsSheet(sharedTable, ws) {
     const monthTag = safeText(row[1]);
     const weekEnding = weekEndingFromWeekNumber(weekNumber);
 
-    if (!weekNumber || !monthTag || !weekEnding) continue;
+    if (!weekNumber || !weekEnding) continue;
 
     const chicagoScheduled = toNumber(row[2]);
     const chicagoCancels = toNumber(row[3]);
     const chicagoNoShows = toNumber(row[4]);
     const chicagoReschedules = toNumber(row[5]);
 
+    const denverWeek = toNumber(row[8]);
+    const denverMonthTag = safeText(row[9]);
     const denverScheduled = toNumber(row[10]);
     const denverCancels = toNumber(row[11]);
     const denverNoShows = toNumber(row[12]);
     const denverReschedules = toNumber(row[13]);
 
+    const portlandWeek = toNumber(row[16]);
+    const portlandMonthTag = safeText(row[17]);
     const portlandScheduled = toNumber(row[18]);
     const portlandCancels = toNumber(row[19]);
     const portlandNoShows = toNumber(row[20]);
     const portlandReschedules = toNumber(row[21]);
 
+    const laWeek = toNumber(row[24]);
+    const laMonthTag = safeText(row[25]);
     const laScheduled = toNumber(row[26]);
     const laCancels = toNumber(row[27]);
     const laNoShows = toNumber(row[28]);
@@ -394,13 +430,30 @@ async function importCxnsSheet(sharedTable, ws) {
       laReschedules
     ]);
 
-    const hasData =
-      hasMeaningfulValue(scheduledAppts) ||
-      hasMeaningfulValue(cancellations) ||
-      hasMeaningfulValue(noShows) ||
-      hasMeaningfulValue(reschedules);
+    const hasRealData = hasPositiveNumber(
+      scheduledAppts,
+      cancellations,
+      noShows,
+      reschedules
+    );
 
-    if (!hasData) continue;
+    const alignedMonthTag =
+      monthTag &&
+      monthTag === denverMonthTag &&
+      monthTag === portlandMonthTag &&
+      monthTag === laMonthTag;
+
+    const alignedWeek =
+      weekNumber &&
+      weekNumber === denverWeek &&
+      weekNumber === portlandWeek &&
+      weekNumber === laWeek;
+
+    const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
+
+    if (!hasRealData || !alignedMonthTag || !alignedWeek || !hasWorkingDays) {
+      continue;
+    }
 
     const values = {
       weekNumber,
@@ -424,6 +477,37 @@ async function importCxnsSheet(sharedTable, ws) {
   return { imported, weeks };
 }
 
+function excelDateToIso(value) {
+  if (!value && value !== 0) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (!parsed) return null;
+    const yyyy = String(parsed.y).padStart(4, "0");
+    const mm = String(parsed.m).padStart(2, "0");
+    const dd = String(parsed.d).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+    const d = new Date(trimmed);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toISOString().slice(0, 10);
+    }
+  }
+
+  return null;
+}
+
 async function importHolidaysSheet(referenceTable, ws) {
   const rows = sheetRows(ws);
   let imported = 0;
@@ -431,7 +515,7 @@ async function importHolidaysSheet(referenceTable, ws) {
   for (let r = 1; r < rows.length; r += 1) {
     const row = rows[r] || [];
 
-    const holidayDate = row[0];
+    const holidayDate = excelDateToIso(row[0]);
     const monthTag = safeText(row[3]);
     const workingDays = toNumber(row[4]);
 
@@ -539,7 +623,11 @@ module.exports = async function (context, req) {
     }
 
     if (workbook.Sheets.CXNS) {
-      const cxnsResult = await importCxnsSheet(sharedTable, workbook.Sheets.CXNS);
+      const cxnsResult = await importCxnsSheet(
+        sharedTable,
+        workbook.Sheets.CXNS,
+        workingDaysMap
+      );
 
       results.shared.push({
         sheet: "CXNS",
