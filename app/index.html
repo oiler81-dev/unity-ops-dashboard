@@ -40,6 +40,11 @@
       <main>
         <section id="dashboardView">
           <div class="panel heroPanel">
+            <div class="sectionHeader compact">
+              <h3>Dashboard</h3>
+              <p>Multi-entity performance view with period and comparison controls.</p>
+            </div>
+
             <div class="fieldRow">
               <div>
                 <label for="dashboardPeriodType">Period</label>
@@ -226,3 +231,77 @@
               <div id="trendsWeeksWrap">
                 <label for="trendsLimit">Weeks</label>
                 <select id="trendsLimit">
+                  <option value="8">8</option>
+                  <option value="12" selected>12</option>
+                  <option value="16">16</option>
+                  <option value="24">24</option>
+                  <option value="52">52</option>
+                </select>
+              </div>
+
+              <div id="trendsStartWrap" style="display:none;">
+                <label for="trendsStartDate">Start Date</label>
+                <input type="date" id="trendsStartDate" />
+              </div>
+
+              <div id="trendsEndWrap" style="display:none;">
+                <label for="trendsEndDate">End Date</label>
+                <input type="date" id="trendsEndDate" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="loadTrendsBtn" type="button">Load Trends</button>
+              </div>
+            </div>
+
+            <div id="trendsBrandWrap" class="brandContextWrap"></div>
+
+            <div id="trendsCards" class="cardGrid"></div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <h3>Trend History</h3>
+              </div>
+              <div id="trendsTableWrap"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Trends Debug Output</summary>
+              <pre id="trendsDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="importView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <h3>Admin Workbook Import</h3>
+              <p>Upload the locked workbook to backfill historical weekly data into the dashboard.</p>
+            </div>
+
+            <div class="fieldRow">
+              <div style="min-width:320px;">
+                <label for="importFile">Workbook File</label>
+                <input type="file" id="importFile" accept=".xlsx,.xls" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="runImportBtn" type="button">Run Import</button>
+              </div>
+            </div>
+
+            <div id="importStatusMessage" class="statusMessage"></div>
+
+            <details class="debugPanel">
+              <summary>Import Debug Output</summary>
+              <pre id="importDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
