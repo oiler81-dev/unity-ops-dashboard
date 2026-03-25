@@ -245,11 +245,22 @@ function renderExecutiveCards(summary) {
   const cards = document.getElementById("executiveCards");
   cards.innerHTML = "";
 
+  const regions = summary.regions || [];
+
+  const avg = (key) => {
+    if (!regions.length) return 0;
+    const total = regions.reduce((sum, r) => sum + Number(r[key] || 0), 0);
+    return (total / regions.length).toFixed(1);
+  };
+
   const cardData = [
     { label: "Approved Regions", value: summary.entityCount || 0 },
     { label: "Visit Volume", value: summary.totals?.visitVolume || 0 },
     { label: "Call Volume", value: summary.totals?.callVolume || 0 },
-    { label: "New Patients", value: summary.totals?.newPatients || 0 }
+    { label: "New Patients", value: summary.totals?.newPatients || 0 },
+    { label: "Avg No Show %", value: avg("noShowRate") + "%" },
+    { label: "Avg Cancel %", value: avg("cancellationRate") + "%" },
+    { label: "Avg Abandoned %", value: avg("abandonedCallRate") + "%" }
   ];
 
   cardData.forEach((item) => {
@@ -271,16 +282,28 @@ function renderExecutiveRegions(summary) {
     return;
   }
 
-  const rows = summary.regions.map((region) => `
+  const getClass = (value, type) => {
+    value = Number(value || 0);
+
+    if (type === "rate") {
+      if (value >= 20) return "bad";
+      if (value >= 10) return "warning";
+      return "good";
+    }
+
+    return "";
+  };
+
+  const rows = summary.regions.map((r) => `
     <tr>
-      <td>${region.entity}</td>
-      <td>${region.visitVolume}</td>
-      <td>${region.callVolume}</td>
-      <td>${region.newPatients}</td>
-      <td>${region.noShowRate}</td>
-      <td>${region.cancellationRate}</td>
-      <td>${region.abandonedCallRate}</td>
-      <td>${region.status}</td>
+      <td>${r.entity}</td>
+      <td>${r.visitVolume}</td>
+      <td>${r.callVolume}</td>
+      <td>${r.newPatients}</td>
+      <td class="${getClass(r.noShowRate, "rate")}">${r.noShowRate}%</td>
+      <td class="${getClass(r.cancellationRate, "rate")}">${r.cancellationRate}%</td>
+      <td class="${getClass(r.abandonedCallRate, "rate")}">${r.abandonedCallRate}%</td>
+      <td>${r.status}</td>
     </tr>
   `).join("");
 
@@ -289,18 +312,16 @@ function renderExecutiveRegions(summary) {
       <thead>
         <tr>
           <th>Entity</th>
-          <th>Visit Volume</th>
-          <th>Call Volume</th>
-          <th>New Patients</th>
-          <th>No Show Rate</th>
-          <th>Cancellation Rate</th>
-          <th>Abandoned Call Rate</th>
+          <th>Visit</th>
+          <th>Calls</th>
+          <th>New</th>
+          <th>No Show</th>
+          <th>Cancel</th>
+          <th>Abandoned</th>
           <th>Status</th>
         </tr>
       </thead>
-      <tbody>
-        ${rows}
-      </tbody>
+      <tbody>${rows}</tbody>
     </table>
   `;
 }
