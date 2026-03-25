@@ -1,5 +1,3 @@
-// api/import-budget/index.js
-
 const XLSX = require("xlsx");
 const { getTableClient } = require("../shared/table");
 const { resolveAccessFromRequest } = require("../shared/access");
