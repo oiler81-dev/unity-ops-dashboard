@@ -1,5 +1,40 @@
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
+const ENTITY_BRANDING = {
+  LAOSS: {
+    label: "LAOSS",
+    fullName: "Los Angeles Orthopedic Surgery Specialists",
+    logo: "/assets/logos/laoss.png",
+    accent: "#F28C28",
+    accentSoft: "rgba(242,140,40,0.12)",
+    accentBorder: "rgba(242,140,40,0.35)"
+  },
+  NES: {
+    label: "NES",
+    fullName: "Northwest Extremity Specialists",
+    logo: "/assets/logos/nes.png",
+    accent: "#2E5B88",
+    accentSoft: "rgba(46,91,136,0.12)",
+    accentBorder: "rgba(46,91,136,0.35)"
+  },
+  SpineOne: {
+    label: "SpineOne",
+    fullName: "SpineOne",
+    logo: "/assets/logos/spineone.png",
+    accent: "#5A6F95",
+    accentSoft: "rgba(90,111,149,0.12)",
+    accentBorder: "rgba(90,111,149,0.35)"
+  },
+  MRO: {
+    label: "MRO",
+    fullName: "Midland & Riverside Orthopedics",
+    logo: "/assets/logos/mro.png",
+    accent: "#6B7E99",
+    accentSoft: "rgba(107,126,153,0.12)",
+    accentBorder: "rgba(107,126,153,0.35)"
+  }
+};
+
 let currentUser = null;
 let currentWeekData = null;
 
@@ -38,6 +73,19 @@ async function apiPost(url, payload) {
     body: JSON.stringify(payload)
   });
   return parseApiResponse(res);
+}
+
+function setActiveNav(buttonId) {
+  [
+    "navDashboardBtn",
+    "navEntryBtn",
+    "navExecutiveBtn",
+    "navTrendsBtn",
+    "navImportBtn"
+  ].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.toggle("activeNav", id === buttonId);
+  });
 }
 
 function setStatus(message, isError = false) {
@@ -162,6 +210,39 @@ function getSelectedTrendsEntity() {
   return document.getElementById("trendsEntitySelect").value;
 }
 
+function getBranding(entity) {
+  return ENTITY_BRANDING[entity] || {
+    label: entity,
+    fullName: entity,
+    logo: "",
+    accent: "#3b82f6",
+    accentSoft: "rgba(59,130,246,0.12)",
+    accentBorder: "rgba(59,130,246,0.35)"
+  };
+}
+
+function renderContextBrand(containerId, entity) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  if (!entity) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const brand = getBranding(entity);
+
+  container.innerHTML = `
+    <div class="contextBrandLogo" style="box-shadow: inset 0 0 0 1px ${brand.accentBorder};">
+      <img src="${brand.logo}" alt="${brand.label}" />
+    </div>
+    <div class="contextBrandText">
+      <strong style="display:block;color:${brand.accent};">${brand.label}</strong>
+      <span>${brand.fullName}</span>
+    </div>
+  `;
+}
+
 function renderForm() {
   const fields = [
     { key: "visitVolume", label: "Visit Volume" },
@@ -242,6 +323,8 @@ async function loadWeek() {
   const weekEnding = document.getElementById("weekEnding").value;
   const entity = getSelectedEntity();
 
+  renderContextBrand("entryContextBrand", entity);
+
   setStatus("Loading...");
   const result = await apiGet(
     `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
@@ -321,6 +404,7 @@ async function openOverride(entity, weekEnding) {
   showEntryView();
   document.getElementById("entitySelect").value = entity;
   document.getElementById("weekEnding").value = weekEnding;
+  renderContextBrand("entryContextBrand", entity);
   await loadWeek();
   setStatus(`Admin override mode: ${entity} ${weekEnding}`);
 }
@@ -336,27 +420,34 @@ function hideAllViews() {
 function showDashboardView() {
   hideAllViews();
   document.getElementById("dashboardView").style.display = "";
+  setActiveNav("navDashboardBtn");
 }
 
 function showEntryView() {
   hideAllViews();
   document.getElementById("entryView").style.display = "";
+  setActiveNav("navEntryBtn");
+  renderContextBrand("entryContextBrand", getSelectedEntity());
 }
 
 function showExecutiveView() {
   hideAllViews();
   document.getElementById("executiveView").style.display = "";
+  setActiveNav("navExecutiveBtn");
 }
 
 function showTrendsView() {
   hideAllViews();
   document.getElementById("trendsView").style.display = "";
+  setActiveNav("navTrendsBtn");
   syncTrendsRangeUi();
+  renderContextBrand("trendsContextBrand", getSelectedTrendsEntity());
 }
 
 function showImportView() {
   hideAllViews();
   document.getElementById("importView").style.display = "";
+  setActiveNav("navImportBtn");
 }
 
 function renderExecutiveCards(summary) {
@@ -561,6 +652,8 @@ async function loadTrends() {
   const startDate = document.getElementById("trendsStartDate").value;
   const endDate = document.getElementById("trendsEndDate").value;
 
+  renderContextBrand("trendsContextBrand", entity);
+
   let url = `/api/trends?entity=${encodeURIComponent(entity)}`;
 
   if (mode === "dates") {
@@ -662,6 +755,18 @@ function statusClass(status) {
   return "dashboardStatus-missing";
 }
 
+function varianceClass(pct) {
+  if (pct === null || pct === undefined || pct === "") return "varianceNeutral";
+  if (Number(pct) > 0) return "variancePos";
+  if (Number(pct) < 0) return "varianceNeg";
+  return "varianceNeutral";
+}
+
+function formatVarianceText(actual) {
+  const n = normalizeNumber(actual);
+  return `${n}`;
+}
+
 function renderDashboardEntities(current, previous) {
   const container = document.getElementById("dashboardEntities");
   container.innerHTML = "";
@@ -687,41 +792,78 @@ function renderDashboardEntities(current, previous) {
       newPatients: 0
     };
 
+    const brand = getBranding(entity);
+
     const card = document.createElement("div");
     card.className = "dashboardEntityCard";
+    card.style.borderColor = brand.accentBorder;
     card.innerHTML = `
-      <div class="dashboardStatusBadge ${statusClass(row.status)}">${row.status}</div>
-      <h4>${entity}</h4>
-      <div class="dashboardEntityMeta">Target / forecast wiring pending</div>
+      <div class="dashboardEntityTopBar" style="background:${brand.accent};"></div>
+      <div class="dashboardEntityInner">
+        <div class="dashboardEntityHeader">
+          <div class="dashboardEntityTitleWrap">
+            <div class="dashboardStatusBadge ${statusClass(row.status)}">${row.status}</div>
+            <h4>${entity}</h4>
+            <div class="dashboardEntityMeta">${brand.fullName}</div>
+          </div>
+          <div class="dashboardEntityLogoWrap" style="box-shadow: inset 0 0 0 1px ${brand.accentBorder};">
+            <img src="${brand.logo}" alt="${brand.label}" />
+          </div>
+        </div>
 
-      <div class="dashboardMetricRow">
-        <span>Visits</span>
-        <span class="metricValue">${normalizeNumber(row.visitVolume)} <span class="metricSub">${formatDeltaOnly(row.visitVolume, prior.visitVolume)}</span></span>
-      </div>
+        <div class="dashboardMetricRow">
+          <span>Visits</span>
+          <span class="metricValue">
+            ${normalizeNumber(row.visitVolume)}
+            <span class="metricSub">${formatDeltaOnly(row.visitVolume, prior.visitVolume)}</span>
+          </span>
+        </div>
 
-      <div class="dashboardMetricRow">
-        <span>Calls</span>
-        <span class="metricValue">${normalizeNumber(row.callVolume)} <span class="metricSub">${formatDeltaOnly(row.callVolume, prior.callVolume)}</span></span>
-      </div>
+        <div class="dashboardMetricRow">
+          <span>Calls</span>
+          <span class="metricValue">
+            ${normalizeNumber(row.callVolume)}
+            <span class="metricSub">${formatDeltaOnly(row.callVolume, prior.callVolume)}</span>
+          </span>
+        </div>
 
-      <div class="dashboardMetricRow">
-        <span>New Patients</span>
-        <span class="metricValue">${normalizeNumber(row.newPatients)} <span class="metricSub">${formatDeltaOnly(row.newPatients, prior.newPatients)}</span></span>
-      </div>
+        <div class="dashboardMetricRow">
+          <span>New Patients</span>
+          <span class="metricValue">
+            ${normalizeNumber(row.newPatients)}
+            <span class="metricSub">${formatDeltaOnly(row.newPatients, prior.newPatients)}</span>
+          </span>
+        </div>
 
-      <div class="dashboardMetricRow">
-        <span>No Show</span>
-        <span class="metricValue">${normalizeNumber(row.noShowRate)}%</span>
-      </div>
+        <div class="dashboardMetricRow">
+          <span>No Show</span>
+          <span class="metricValue">${normalizeNumber(row.noShowRate)}%</span>
+        </div>
 
-      <div class="dashboardMetricRow">
-        <span>Cancel</span>
-        <span class="metricValue">${normalizeNumber(row.cancellationRate)}%</span>
-      </div>
+        <div class="dashboardMetricRow">
+          <span>Cancel</span>
+          <span class="metricValue">${normalizeNumber(row.cancellationRate)}%</span>
+        </div>
 
-      <div class="dashboardMetricRow">
-        <span>Abandoned</span>
-        <span class="metricValue">${normalizeNumber(row.abandonedCallRate)}%</span>
+        <div class="dashboardMetricRow">
+          <span>Abandoned</span>
+          <span class="metricValue">${normalizeNumber(row.abandonedCallRate)}%</span>
+        </div>
+
+        <div class="dashboardVarianceRow">
+          <div class="varianceChip" style="border-color:${brand.accentBorder}; background:${brand.accentSoft};">
+            <span class="chipLabel">Visit Target</span>
+            <span class="chipValue ${varianceClass(null)}">${formatVarianceText(row.visitVolume)}</span>
+          </div>
+          <div class="varianceChip" style="border-color:${brand.accentBorder}; background:${brand.accentSoft};">
+            <span class="chipLabel">Call Target</span>
+            <span class="chipValue ${varianceClass(null)}">${formatVarianceText(row.callVolume)}</span>
+          </div>
+          <div class="varianceChip" style="border-color:${brand.accentBorder}; background:${brand.accentSoft};">
+            <span class="chipLabel">NP Target</span>
+            <span class="chipValue ${varianceClass(null)}">${formatVarianceText(row.newPatients)}</span>
+          </div>
+        </div>
       </div>
     `;
     container.appendChild(card);
@@ -928,8 +1070,11 @@ async function runImport() {
     document.getElementById("trendsEndDate").value = defaultWeek;
 
     syncTrendsRangeUi();
+    renderContextBrand("entryContextBrand", getSelectedEntity());
+    renderContextBrand("trendsContextBrand", getSelectedTrendsEntity());
 
     document.getElementById("entitySelect").addEventListener("change", async () => {
+      renderContextBrand("entryContextBrand", getSelectedEntity());
       try {
         await loadWeek();
       } catch (e) {
@@ -1030,6 +1175,7 @@ async function runImport() {
     });
 
     document.getElementById("trendsEntitySelect").addEventListener("change", async () => {
+      renderContextBrand("trendsContextBrand", getSelectedTrendsEntity());
       try {
         await loadTrends();
       } catch (e) {
