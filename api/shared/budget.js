@@ -8,6 +8,7 @@ function pad2(value) {
 
 function safeNumber(value) {
   if (value == null || value === "") return null;
+
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
@@ -59,6 +60,7 @@ function normalizeMonthLabel(value) {
 
 function monthLabelToMonthNumber(monthLabel) {
   const normalized = normalizeMonthLabel(monthLabel);
+
   const map = {
     Jan: 1,
     Feb: 2,
@@ -73,6 +75,7 @@ function monthLabelToMonthNumber(monthLabel) {
     Nov: 11,
     Dec: 12
   };
+
   return map[normalized] || null;
 }
 
@@ -113,6 +116,17 @@ function getPreviousMonthDateRange(dateValue) {
 
   return {
     monthKey: `${start.getUTCFullYear()}-${pad2(start.getUTCMonth() + 1)}`,
+    startDate: `${start.getUTCFullYear()}-${pad2(start.getUTCMonth() + 1)}-${pad2(start.getUTCDate())}`,
+    endDate: `${end.getUTCFullYear()}-${pad2(end.getUTCMonth() + 1)}-${pad2(end.getUTCDate())}`
+  };
+}
+
+function getWeekRangeFromWeekEnding(weekEnding) {
+  const end = new Date(`${weekEnding}T12:00:00Z`);
+  const start = new Date(end);
+  start.setUTCDate(end.getUTCDate() - 6);
+
+  return {
     startDate: `${start.getUTCFullYear()}-${pad2(start.getUTCMonth() + 1)}-${pad2(start.getUTCDate())}`,
     endDate: `${end.getUTCFullYear()}-${pad2(end.getUTCMonth() + 1)}-${pad2(end.getUTCDate())}`
   };
@@ -175,6 +189,7 @@ module.exports = {
   getMonthKeyFromDate,
   getMonthDateRange,
   getPreviousMonthDateRange,
+  getWeekRangeFromWeekEnding,
   getWorkingDaysBetween,
   getWorkingDaysForMonth,
   prorateMonthlyValue,
