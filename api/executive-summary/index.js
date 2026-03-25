@@ -1,80 +1,128 @@
 const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
-const { ok, badRequest, forbidden, serverError } = require("../shared/response");
-const { ensureTable } = require("../shared/table");
-const { WEEKLY_TABLE } = require("../shared/constants");
+const { getTableClient } = require("../shared/table");
 
+const REGION_TABLE = "WeeklyRegionData";
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
+
+function toNumber(value) {
+  if (value == null || value === "") return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseJson(value) {
+  if (!value) return {};
+  try {
+    return typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    return {};
+  }
+}
+
+function normalizeStatus(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "approved") return "approved";
+  if (s === "submitted") return "submitted";
+  return "draft";
+}
+
+function mapRecord(record) {
+  const values = parseJson(record.valuesJson);
+
+  return {
+    entity: record.partitionKey,
+    weekEnding: record.rowKey,
+    status: normalizeStatus(record.status),
+
+    visitVolume:
+      toNumber(values.totalVisits) || toNumber(record.visitVolume),
+
+    callVolume:
+      toNumber(values.totalCalls) || toNumber(record.callVolume),
+
+    newPatients:
+      toNumber(values.npActual) || toNumber(record.newPatients),
+
+    noShowRate:
+      toNumber(values.noShowRate) || toNumber(record.noShowRate),
+
+    cancellationRate:
+      toNumber(values.cancellationRate) || toNumber(record.cancellationRate),
+
+    abandonedCallRate:
+      toNumber(values.abandonmentRate) ||
+      toNumber(record.abandonedCallRate)
+  };
+}
 
 module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
-    const access = resolveAccess(user);
+    resolveAccess(user);
 
-    if (!access.allowed) {
-      return forbidden();
-    }
-
-    const weekEnding = req.query && req.query.weekEnding ? req.query.weekEnding : null;
+    const weekEnding = req.query.weekEnding;
 
     if (!weekEnding) {
-      return badRequest("Missing weekEnding");
+      return {
+        status: 400,
+        body: { ok: false, error: "Missing weekEnding" }
+      };
     }
 
-    const client = await ensureTable(WEEKLY_TABLE);
-    const regions = [];
+    const table = getTableClient(REGION_TABLE);
+
+    const rows = [];
 
     for (const entity of ENTITIES) {
       try {
-        const record = await client.getEntity(entity, weekEnding);
+        const record = await table.getEntity(entity, weekEnding);
+        const mapped = mapRecord(record);
 
-        if (record.status === "approved") {
-          regions.push({
-            entity,
-            weekEnding,
-            status: record.status || "draft",
-            visitVolume: Number(record.visitVolume || 0),
-            callVolume: Number(record.callVolume || 0),
-            newPatients: Number(record.newPatients || 0),
-            noShowRate: Number(record.noShowRate || 0),
-            cancellationRate: Number(record.cancellationRate || 0),
-            abandonedCallRate: Number(record.abandonedCallRate || 0),
-            submittedBy: record.submittedBy || null,
-            submittedAt: record.submittedAt || null,
-            approvedBy: record.approvedBy || null,
-            approvedAt: record.approvedAt || null,
-            updatedBy: record.updatedBy || null,
-            updatedAt: record.updatedAt || null
-          });
+        if (mapped.status === "approved") {
+          rows.push(mapped);
         }
-      } catch (error) {
-        if (error?.statusCode !== 404) {
-          throw error;
-        }
+      } catch (err) {
+        if (err.statusCode !== 404) throw err;
       }
     }
 
     const totals = {
-      visitVolume: 0,
-      callVolume: 0,
-      newPatients: 0
+      visitVolume: rows.reduce((s, r) => s + r.visitVolume, 0),
+      callVolume: rows.reduce((s, r) => s + r.callVolume, 0),
+      newPatients: rows.reduce((s, r) => s + r.newPatients, 0)
     };
 
-    regions.forEach((region) => {
-      totals.visitVolume += region.visitVolume;
-      totals.callVolume += region.callVolume;
-      totals.newPatients += region.newPatients;
-    });
+    const avg = (arr) =>
+      arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
 
-    return ok({
-      ok: true,
-      weekEnding,
-      entityCount: regions.length,
-      totals,
-      regions
-    });
+    const averages = {
+      noShowRate: avg(rows.map((r) => r.noShowRate)),
+      cancellationRate: avg(rows.map((r) => r.cancellationRate)),
+      abandonedCallRate: avg(rows.map((r) => r.abandonedCallRate))
+    };
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        weekEnding,
+        entityCount: rows.length,
+        totals,
+        averages,
+        regions: rows
+      }
+    };
   } catch (error) {
-    context.log.error("executive-summary failed", error);
-    return serverError(error, "Failed to load executive summary");
+    context.log.error("executive failed", error);
+
+    return {
+      status: 500,
+      body: {
+        ok: false,
+        error: "Failed to load executive summary",
+        details: error.message
+      }
+    };
   }
 };
