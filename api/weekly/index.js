@@ -1,78 +1,86 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess, canAccessEntity } = require("../shared/permissions");
-const { ok, badRequest, forbidden, serverError } = require("../shared/response");
-const { ensureTable } = require("../shared/table");
-const { WEEKLY_TABLE, KPI_FIELDS } = require("../shared/constants");
+const { resolveAccess } = require("../shared/permissions");
+const { getTableClient } = require("../shared/table");
+
+const REGION_TABLE = "WeeklyRegionData";
+
+function mapValues(valuesJson) {
+  if (!valuesJson) return {};
+
+  let v = {};
+  try {
+    v = typeof valuesJson === "string" ? JSON.parse(valuesJson) : valuesJson;
+  } catch {
+    return {};
+  }
+
+  return {
+    visitVolume: v.totalVisits ?? null,
+    callVolume: v.totalCalls ?? null,
+    newPatients: v.npActual ?? null,
+
+    noShowRate: v.noShowRate ?? null,
+    cancellationRate: v.cancellationRate ?? null,
+    abandonedCallRate: v.abandonmentRate ?? null
+  };
+}
 
 module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access.allowed) {
-      return forbidden();
+    const entity = req.query.entity;
+    const weekEnding = req.query.weekEnding;
+
+    if (!entity || !weekEnding) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: "Missing entity or weekEnding"
+        }
+      };
     }
 
-    const weekEnding = req.query && req.query.weekEnding ? req.query.weekEnding : null;
-    let entity = req.query && req.query.entity ? req.query.entity : null;
+    const table = getTableClient(REGION_TABLE);
 
-    if (!weekEnding) {
-      return badRequest("Missing weekEnding");
+    const entityData = await table.getEntity(entity, weekEnding);
+
+    if (!entityData) {
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          found: false
+        }
+      };
     }
 
-    if (!entity) {
-      entity = access.isAdmin ? "LAOSS" : access.entity;
-    }
+    const mappedData = mapValues(entityData.valuesJson);
 
-    if (!canAccessEntity(access, entity)) {
-      return forbidden("You cannot view this entity");
-    }
-
-    const client = await ensureTable(WEEKLY_TABLE);
-
-    let record = null;
-
-    try {
-      record = await client.getEntity(entity, weekEnding);
-    } catch (error) {
-      if (error?.statusCode !== 404) {
-        throw error;
-      }
-    }
-
-    if (!record) {
-      const emptyData = {};
-      for (const field of KPI_FIELDS) {
-        emptyData[field.key] = null;
-      }
-
-      return ok({
+    return {
+      status: 200,
+      body: {
         ok: true,
-        found: false,
+        found: true,
         entity,
         weekEnding,
-        data: emptyData,
-        status: "draft"
-      });
-    }
-
-    const data = {};
-    for (const field of KPI_FIELDS) {
-      data[field.key] = record[field.key] ?? null;
-    }
-
-    return ok({
-      ok: true,
-      found: true,
-      entity,
-      weekEnding,
-      data,
-      status: record.status || "draft",
-      updatedBy: record.updatedBy || null,
-      updatedAt: record.updatedAt || null
-    });
+        data: mappedData,
+        status: entityData.status,
+        updatedAt: entityData.updatedAt
+      }
+    };
   } catch (error) {
-    context.log.error("weekly failed", error);
-    return serverError(error, "Failed to load weekly data");
+    context.log.error("weekly get failed", error);
+
+    return {
+      status: 500,
+      body: {
+        ok: false,
+        error: "Failed to load weekly data",
+        details: error.message
+      }
+    };
   }
 };
