@@ -37,14 +37,27 @@ async function parseApiResponse(res) {
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
-    throw new Error(text || "Invalid response");
+    data = null;
   }
 
   if (!res.ok) {
-    throw new Error(data?.details || data?.error || "Request failed");
+    const message =
+      data?.details ||
+      data?.error ||
+      text ||
+      `Request failed with status ${res.status}`;
+
+    throw new Error(message);
   }
 
-  return data;
+  if (data !== null) {
+    return data;
+  }
+
+  return {
+    ok: true,
+    raw: text
+  };
 }
 
 async function apiGet(url) {
