@@ -23,9 +23,7 @@ async function parseApiResponse(res) {
 async function apiGet(url) {
   const res = await fetch(url, {
     method: "GET",
-    headers: {
-      "Accept": "application/json"
-    }
+    headers: { "Accept": "application/json" }
   });
   return parseApiResponse(res);
 }
@@ -63,6 +61,19 @@ function setExecutiveDebug(data) {
 
 function setTrendsDebug(data) {
   const el = document.getElementById("trendsDebugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function setImportStatus(message, isError = false) {
+  const el = document.getElementById("importStatusMessage");
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = isError ? "#ff8a8a" : "#7CFC98";
+}
+
+function setImportDebug(data) {
+  const el = document.getElementById("importDebugOutput");
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
@@ -207,7 +218,6 @@ async function loadWeek() {
   );
 
   currentWeekData = result;
-
   setFormValues(result.data || {});
   updateButtonState();
 
@@ -289,19 +299,29 @@ function showEntryView() {
   document.getElementById("entryView").style.display = "";
   document.getElementById("executiveView").style.display = "none";
   document.getElementById("trendsView").style.display = "none";
+  document.getElementById("importView").style.display = "none";
 }
 
 function showExecutiveView() {
   document.getElementById("entryView").style.display = "none";
   document.getElementById("executiveView").style.display = "";
   document.getElementById("trendsView").style.display = "none";
+  document.getElementById("importView").style.display = "none";
 }
 
 function showTrendsView() {
   document.getElementById("entryView").style.display = "none";
   document.getElementById("executiveView").style.display = "none";
   document.getElementById("trendsView").style.display = "";
+  document.getElementById("importView").style.display = "none";
   syncTrendsRangeUi();
+}
+
+function showImportView() {
+  document.getElementById("entryView").style.display = "none";
+  document.getElementById("executiveView").style.display = "none";
+  document.getElementById("trendsView").style.display = "none";
+  document.getElementById("importView").style.display = "";
 }
 
 function renderExecutiveCards(summary) {
@@ -309,7 +329,6 @@ function renderExecutiveCards(summary) {
   cards.innerHTML = "";
 
   const regions = summary.regions || [];
-
   const avg = (key) => {
     if (!regions.length) return 0;
     const total = regions.reduce((sum, r) => sum + Number(r[key] || 0), 0);
@@ -329,10 +348,7 @@ function renderExecutiveCards(summary) {
   cardData.forEach((item) => {
     const div = document.createElement("div");
     div.className = "summaryCard";
-    div.innerHTML = `
-      <h3>${item.label}</h3>
-      <div class="value">${item.value}</div>
-    `;
+    div.innerHTML = `<h3>${item.label}</h3><div class="value">${item.value}</div>`;
     cards.appendChild(div);
   });
 }
@@ -345,27 +361,15 @@ function renderExecutiveRegions(summary) {
     return;
   }
 
-  const getClass = (value, type) => {
-    value = Number(value || 0);
-
-    if (type === "rate") {
-      if (value >= 20) return "bad";
-      if (value >= 10) return "warning";
-      return "good";
-    }
-
-    return "";
-  };
-
   const rows = summary.regions.map((r) => `
     <tr>
       <td>${r.entity}</td>
       <td>${r.visitVolume}</td>
       <td>${r.callVolume}</td>
       <td>${r.newPatients}</td>
-      <td class="${getClass(r.noShowRate, "rate")}">${r.noShowRate}%</td>
-      <td class="${getClass(r.cancellationRate, "rate")}">${r.cancellationRate}%</td>
-      <td class="${getClass(r.abandonedCallRate, "rate")}">${r.abandonedCallRate}%</td>
+      <td>${r.noShowRate}%</td>
+      <td>${r.cancellationRate}%</td>
+      <td>${r.abandonedCallRate}%</td>
       <td>${r.status}</td>
     </tr>
   `).join("");
@@ -391,10 +395,7 @@ function renderExecutiveRegions(summary) {
 
 async function loadExecutiveSummary() {
   const weekEnding = document.getElementById("executiveWeekEnding").value;
-  const result = await apiGet(
-    `/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`
-  );
-
+  const result = await apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
   renderExecutiveCards(result);
   renderExecutiveRegions(result);
   setExecutiveDebug(result);
@@ -425,10 +426,7 @@ function renderTrendsCards(result) {
   cardData.forEach((item) => {
     const div = document.createElement("div");
     div.className = "summaryCard";
-    div.innerHTML = `
-      <h3>${item.label}</h3>
-      <div class="value">${item.value}</div>
-    `;
+    div.innerHTML = `<h3>${item.label}</h3><div class="value">${item.value}</div>`;
     cards.appendChild(div);
   });
 }
@@ -499,13 +497,9 @@ function renderTrendsTable(result) {
 
 function syncTrendsRangeUi() {
   const mode = document.getElementById("trendsRangeMode").value;
-  const weeksWrap = document.getElementById("trendsWeeksWrap");
-  const startWrap = document.getElementById("trendsStartWrap");
-  const endWrap = document.getElementById("trendsEndWrap");
-
-  weeksWrap.style.display = mode === "recent" ? "" : "block";
-  startWrap.style.display = mode === "dates" ? "block" : "none";
-  endWrap.style.display = mode === "dates" ? "block" : "none";
+  document.getElementById("trendsWeeksWrap").style.display = mode === "recent" ? "" : "none";
+  document.getElementById("trendsStartWrap").style.display = mode === "dates" ? "" : "none";
+  document.getElementById("trendsEndWrap").style.display = mode === "dates" ? "" : "none";
 }
 
 async function loadTrends() {
@@ -518,21 +512,58 @@ async function loadTrends() {
   let url = `/api/trends?entity=${encodeURIComponent(entity)}`;
 
   if (mode === "dates") {
-    if (startDate) {
-      url += `&startDate=${encodeURIComponent(startDate)}`;
-    }
-    if (endDate) {
-      url += `&endDate=${encodeURIComponent(endDate)}`;
-    }
+    if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
   } else {
     url += `&limit=${encodeURIComponent(limit)}`;
   }
 
   const result = await apiGet(url);
-
   renderTrendsCards(result);
   renderTrendsTable(result);
   setTrendsDebug(result);
+}
+
+async function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result || "";
+      const base64 = String(result).split(",")[1] || "";
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function runImport() {
+  if (!currentUser?.access?.isAdmin) {
+    throw new Error("Admin only");
+  }
+
+  const fileInput = document.getElementById("importFile");
+  const file = fileInput.files && fileInput.files[0];
+
+  if (!file) {
+    throw new Error("Select a workbook file first");
+  }
+
+  setImportStatus("Reading workbook...");
+  const fileBase64 = await readFileAsBase64(file);
+
+  const payload = {
+    fileName: file.name,
+    fileBase64
+  };
+
+  setImportStatus("Importing workbook...");
+  setImportDebug(payload.fileName);
+
+  const result = await apiPost("/api/import-excel", payload);
+
+  setImportStatus(result.message || "Import completed");
+  setImportDebug(result);
 }
 
 (async function init() {
@@ -544,145 +575,33 @@ async function loadTrends() {
     setupTrendsEntityDropdown(currentUser);
     renderForm();
 
-    const weekInput = document.getElementById("weekEnding");
-    const executiveWeekInput = document.getElementById("executiveWeekEnding");
-
     const defaultWeek = getDefaultWeekEnding();
-    weekInput.value = defaultWeek;
-    executiveWeekInput.value = defaultWeek;
-
+    document.getElementById("weekEnding").value = defaultWeek;
+    document.getElementById("executiveWeekEnding").value = defaultWeek;
     document.getElementById("trendsStartDate").value = getDateWeeksAgo(12);
     document.getElementById("trendsEndDate").value = defaultWeek;
 
     syncTrendsRangeUi();
 
-    document.getElementById("entitySelect").addEventListener("change", async () => {
-      try {
-        await loadWeek();
-      } catch (error) {
-        setStatus(error.message || "Failed to load week", true);
-        setDebug(String(error));
-      }
-    });
-
-    weekInput.addEventListener("change", async () => {
-      try {
-        await loadWeek();
-      } catch (error) {
-        setStatus(error.message || "Failed to load week", true);
-        setDebug(String(error));
-      }
-    });
-
-    document.getElementById("saveBtn").addEventListener("click", async () => {
-      try {
-        await saveWeek();
-      } catch (error) {
-        setStatus(error.message || "Failed to save", true);
-        setDebug(String(error));
-      }
-    });
-
-    document.getElementById("submitBtn").addEventListener("click", async () => {
-      try {
-        await submitWeek();
-      } catch (error) {
-        setStatus(error.message || "Failed to submit", true);
-        setDebug(String(error));
-      }
-    });
-
-    document.getElementById("approveBtn").addEventListener("click", async () => {
-      try {
-        await approveWeek();
-      } catch (error) {
-        setStatus(error.message || "Failed to approve", true);
-        setDebug(String(error));
-      }
-    });
+    document.getElementById("entitySelect").addEventListener("change", async () => { try { await loadWeek(); } catch (e) { setStatus(e.message, true); setDebug(String(e)); } });
+    document.getElementById("weekEnding").addEventListener("change", async () => { try { await loadWeek(); } catch (e) { setStatus(e.message, true); setDebug(String(e)); } });
+    document.getElementById("saveBtn").addEventListener("click", async () => { try { await saveWeek(); } catch (e) { setStatus(e.message, true); setDebug(String(e)); } });
+    document.getElementById("submitBtn").addEventListener("click", async () => { try { await submitWeek(); } catch (e) { setStatus(e.message, true); setDebug(String(e)); } });
+    document.getElementById("approveBtn").addEventListener("click", async () => { try { await approveWeek(); } catch (e) { setStatus(e.message, true); setDebug(String(e)); } });
 
     document.getElementById("navEntryBtn").addEventListener("click", showEntryView);
+    document.getElementById("navExecutiveBtn").addEventListener("click", async () => { showExecutiveView(); try { await loadExecutiveSummary(); } catch (e) { setExecutiveDebug(String(e)); } });
+    document.getElementById("navTrendsBtn").addEventListener("click", async () => { showTrendsView(); try { await loadTrends(); } catch (e) { setTrendsDebug(String(e)); } });
+    document.getElementById("navImportBtn").addEventListener("click", showImportView);
 
-    document.getElementById("navExecutiveBtn").addEventListener("click", async () => {
-      showExecutiveView();
-      try {
-        await loadExecutiveSummary();
-      } catch (error) {
-        setExecutiveDebug(String(error));
-      }
-    });
-
-    document.getElementById("navTrendsBtn").addEventListener("click", async () => {
-      showTrendsView();
-      try {
-        await loadTrends();
-      } catch (error) {
-        setTrendsDebug(String(error));
-      }
-    });
-
-    document.getElementById("loadExecutiveBtn").addEventListener("click", async () => {
-      try {
-        await loadExecutiveSummary();
-      } catch (error) {
-        setExecutiveDebug(String(error));
-      }
-    });
-
-    document.getElementById("loadTrendsBtn").addEventListener("click", async () => {
-      try {
-        await loadTrends();
-      } catch (error) {
-        setTrendsDebug(String(error));
-      }
-    });
-
-    document.getElementById("trendsEntitySelect").addEventListener("change", async () => {
-      try {
-        await loadTrends();
-      } catch (error) {
-        setTrendsDebug(String(error));
-      }
-    });
-
-    document.getElementById("trendsLimit").addEventListener("change", async () => {
-      if (document.getElementById("trendsRangeMode").value === "recent") {
-        try {
-          await loadTrends();
-        } catch (error) {
-          setTrendsDebug(String(error));
-        }
-      }
-    });
-
-    document.getElementById("trendsRangeMode").addEventListener("change", async () => {
-      syncTrendsRangeUi();
-      try {
-        await loadTrends();
-      } catch (error) {
-        setTrendsDebug(String(error));
-      }
-    });
-
-    document.getElementById("trendsStartDate").addEventListener("change", async () => {
-      if (document.getElementById("trendsRangeMode").value === "dates") {
-        try {
-          await loadTrends();
-        } catch (error) {
-          setTrendsDebug(String(error));
-        }
-      }
-    });
-
-    document.getElementById("trendsEndDate").addEventListener("change", async () => {
-      if (document.getElementById("trendsRangeMode").value === "dates") {
-        try {
-          await loadTrends();
-        } catch (error) {
-          setTrendsDebug(String(error));
-        }
-      }
-    });
+    document.getElementById("loadExecutiveBtn").addEventListener("click", async () => { try { await loadExecutiveSummary(); } catch (e) { setExecutiveDebug(String(e)); } });
+    document.getElementById("loadTrendsBtn").addEventListener("click", async () => { try { await loadTrends(); } catch (e) { setTrendsDebug(String(e)); } });
+    document.getElementById("trendsEntitySelect").addEventListener("change", async () => { try { await loadTrends(); } catch (e) { setTrendsDebug(String(e)); } });
+    document.getElementById("trendsLimit").addEventListener("change", async () => { if (document.getElementById("trendsRangeMode").value === "recent") { try { await loadTrends(); } catch (e) { setTrendsDebug(String(e)); } } });
+    document.getElementById("trendsRangeMode").addEventListener("change", async () => { syncTrendsRangeUi(); try { await loadTrends(); } catch (e) { setTrendsDebug(String(e)); } });
+    document.getElementById("trendsStartDate").addEventListener("change", async () => { if (document.getElementById("trendsRangeMode").value === "dates") { try { await loadTrends(); } catch (e) { setTrendsDebug(String(e)); } } });
+    document.getElementById("trendsEndDate").addEventListener("change", async () => { if (document.getElementById("trendsRangeMode").value === "dates") { try { await loadTrends(); } catch (e) { setTrendsDebug(String(e)); } } });
+    document.getElementById("runImportBtn").addEventListener("click", async () => { try { await runImport(); } catch (e) { setImportStatus(e.message, true); setImportDebug(String(e)); } });
 
     await loadWeek();
     await loadExecutiveSummary();
