@@ -30,9 +30,13 @@ module.exports = async function (context, req) {
       return badRequest("No data found");
     }
 
-    record.status = "approved";
+    const now = new Date().toISOString();
+
+    record.status = "Approved";
     record.approvedBy = access.email;
-    record.approvedAt = new Date().toISOString();
+    record.approvedAt = now;
+    record.updatedBy = access.email;
+    record.updatedAt = now;
 
     await client.upsertEntity(record, "Replace");
 
@@ -41,7 +45,7 @@ module.exports = async function (context, req) {
       message: "Approved successfully",
       entity,
       weekEnding,
-      status: "approved"
+      status: "Approved"
     });
   } catch (error) {
     context.log.error("approve-week failed", error);
