@@ -86,15 +86,36 @@
                 <label for="trendsEntitySelect">Entity</label>
                 <select id="trendsEntitySelect"></select>
               </div>
+
               <div>
+                <label for="trendsRangeMode">Range Mode</label>
+                <select id="trendsRangeMode">
+                  <option value="recent" selected>Recent Weeks</option>
+                  <option value="dates">Specific Date Range</option>
+                </select>
+              </div>
+
+              <div id="trendsWeeksWrap">
                 <label for="trendsLimit">Weeks</label>
                 <select id="trendsLimit">
                   <option value="8">8</option>
                   <option value="12" selected>12</option>
                   <option value="16">16</option>
                   <option value="24">24</option>
+                  <option value="52">52</option>
                 </select>
               </div>
+
+              <div id="trendsStartWrap" style="display:none;">
+                <label for="trendsStartDate">Start Date</label>
+                <input type="date" id="trendsStartDate" />
+              </div>
+
+              <div id="trendsEndWrap" style="display:none;">
+                <label for="trendsEndDate">End Date</label>
+                <input type="date" id="trendsEndDate" />
+              </div>
+
               <div class="buttonAlignBottom">
                 <button id="loadTrendsBtn" type="button">Load Trends</button>
               </div>
