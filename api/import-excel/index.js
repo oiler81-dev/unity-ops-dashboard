@@ -106,6 +106,28 @@ function excelDateToIso(value) {
   return null;
 }
 
+function monthTagFromIsoDate(isoDate) {
+  if (!isoDate) return null;
+
+  const month = isoDate.slice(5, 7);
+  const map = {
+    "01": "Jan",
+    "02": "Feb",
+    "03": "Mar",
+    "04": "Apr",
+    "05": "May",
+    "06": "Jun",
+    "07": "Jul",
+    "08": "Aug",
+    "09": "Sep",
+    "10": "Oct",
+    "11": "Nov",
+    "12": "Dec"
+  };
+
+  return map[month] || null;
+}
+
 async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) {
   await table.upsertEntity({
     partitionKey: entity,
@@ -729,23 +751,23 @@ async function importHolidaysSheet(referenceTable, ws) {
     const row = rows[r] || [];
 
     const holidayDate = excelDateToIso(row[0]);
-    const monthTag = safeText(row[3]);
     const workingDays = toNumber(row[4]);
+    const derivedMonthTag = monthTagFromIsoDate(holidayDate);
 
-    if (!holidayDate || !monthTag || workingDays == null) {
+    if (!holidayDate || workingDays == null || !derivedMonthTag) {
       if (row.some((v) => v != null && v !== "")) {
         rejectedRows.push({
           rowIndex: r + 1,
           reason: "missing-required-fields",
           holidayDate,
-          monthTag,
+          monthTag: derivedMonthTag,
           workingDays
         });
       }
       continue;
     }
 
-    const rowKey = monthTag;
+    const rowKey = derivedMonthTag;
 
     await upsertReferenceRecord(
       referenceTable,
@@ -753,12 +775,12 @@ async function importHolidaysSheet(referenceTable, ws) {
       rowKey,
       {
         holidayDate,
-        monthTag,
+        monthTag: derivedMonthTag,
         workingDays
       },
       {
         importSourceSheet: "Holidays",
-        importMonthTag: monthTag
+        importMonthTag: derivedMonthTag
       }
     );
 
@@ -766,7 +788,7 @@ async function importHolidaysSheet(referenceTable, ws) {
     acceptedRows.push({
       rowIndex: r + 1,
       holidayDate,
-      monthTag,
+      monthTag: derivedMonthTag,
       workingDays
     });
   }
