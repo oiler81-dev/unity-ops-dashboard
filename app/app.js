@@ -67,46 +67,69 @@ async function apiPost(url, payload) {
   return parseApiResponse(res);
 }
 
+function byId(id) {
+  return document.getElementById(id);
+}
+
+function firstExistingId(ids) {
+  for (const id of ids) {
+    const el = byId(id);
+    if (el) return el;
+  }
+  return null;
+}
+
 function setStatus(message, isError = false) {
-  const el = document.getElementById("statusMessage");
+  const el = byId("statusMessage");
   if (!el) return;
   el.textContent = message;
   el.style.color = isError ? "#ff8a8a" : "#7CFC98";
 }
 
 function setDebug(data) {
-  const el = document.getElementById("debugOutput");
+  const el = byId("debugOutput");
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
 function setExecutiveDebug(data) {
-  const el = document.getElementById("executiveDebugOutput");
+  const el = byId("executiveDebugOutput");
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
 function setTrendsDebug(data) {
-  const el = document.getElementById("trendsDebugOutput");
+  const el = byId("trendsDebugOutput");
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
 function setImportStatus(message, isError = false) {
-  const el = document.getElementById("importStatusMessage");
+  const el =
+    firstExistingId([
+      "importStatusMessage",
+      "adminImportStatusMessage",
+      "budgetImportStatusMessage"
+    ]);
+
   if (!el) return;
   el.textContent = message;
   el.style.color = isError ? "#ff8a8a" : "#7CFC98";
 }
 
 function setImportDebug(data) {
-  const el = document.getElementById("importDebugOutput");
+  const el =
+    firstExistingId([
+      "importDebugOutput",
+      "adminImportDebugOutput"
+    ]);
+
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
 function setDashboardDebug(data) {
-  const el = document.getElementById("dashboardDebugOutput");
+  const el = byId("dashboardDebugOutput");
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
@@ -142,11 +165,13 @@ function normalizeNumber(value) {
 
 function renderUser(userData) {
   const label = `${userData.user.userDetails} (${userData.access.role})`;
-  document.getElementById("userInfo").innerText = label;
+  byId("userInfo").innerText = label;
 }
 
 function setupEntityDropdown(userData) {
-  const select = document.getElementById("entitySelect");
+  const select = byId("entitySelect");
+  if (!select) return;
+
   select.innerHTML = "";
 
   if (userData.access.isAdmin) {
@@ -166,7 +191,9 @@ function setupEntityDropdown(userData) {
 }
 
 function setupTrendsEntityDropdown(userData) {
-  const select = document.getElementById("trendsEntitySelect");
+  const select = byId("trendsEntitySelect");
+  if (!select) return;
+
   select.innerHTML = "";
 
   if (userData.access.isAdmin) {
@@ -186,11 +213,11 @@ function setupTrendsEntityDropdown(userData) {
 }
 
 function getSelectedEntity() {
-  return document.getElementById("entitySelect").value;
+  return byId("entitySelect").value;
 }
 
 function getSelectedTrendsEntity() {
-  return document.getElementById("trendsEntitySelect").value;
+  return byId("trendsEntitySelect").value;
 }
 
 function renderForm() {
@@ -203,7 +230,9 @@ function renderForm() {
     { key: "abandonedCallRate", label: "Abandoned Call Rate" }
   ];
 
-  const container = document.getElementById("kpiForm");
+  const container = byId("kpiForm");
+  if (!container) return;
+
   container.innerHTML = "";
 
   fields.forEach((field) => {
@@ -239,7 +268,7 @@ function setFormValues(data) {
   ];
 
   keys.forEach((key) => {
-    const input = document.getElementById(key);
+    const input = byId(key);
     if (!input) return;
     input.value = mapped[key] !== null && mapped[key] !== undefined ? mapped[key] : "";
   });
@@ -247,19 +276,21 @@ function setFormValues(data) {
 
 function getFormValues() {
   return {
-    visitVolume: document.getElementById("visitVolume").value,
-    callVolume: document.getElementById("callVolume").value,
-    newPatients: document.getElementById("newPatients").value,
-    noShowRate: document.getElementById("noShowRate").value,
-    cancellationRate: document.getElementById("cancellationRate").value,
-    abandonedCallRate: document.getElementById("abandonedCallRate").value
+    visitVolume: byId("visitVolume").value,
+    callVolume: byId("callVolume").value,
+    newPatients: byId("newPatients").value,
+    noShowRate: byId("noShowRate").value,
+    cancellationRate: byId("cancellationRate").value,
+    abandonedCallRate: byId("abandonedCallRate").value
   };
 }
 
 function updateButtonState() {
-  const saveBtn = document.getElementById("saveBtn");
-  const submitBtn = document.getElementById("submitBtn");
-  const approveBtn = document.getElementById("approveBtn");
+  const saveBtn = byId("saveBtn");
+  const submitBtn = byId("submitBtn");
+  const approveBtn = byId("approveBtn");
+
+  if (!saveBtn || !submitBtn || !approveBtn) return;
 
   const status = String(currentWeekData?.status || "draft").toLowerCase();
   const isAdmin = !!currentUser?.access?.isAdmin;
@@ -279,7 +310,7 @@ function getBranding(entity) {
 }
 
 function renderEntityBrand(containerId, entity) {
-  const container = document.getElementById(containerId);
+  const container = byId(containerId);
   if (!container) return;
 
   if (!entity) {
@@ -302,7 +333,7 @@ function renderEntityBrand(containerId, entity) {
 }
 
 function renderMetricCards(containerId, items) {
-  const container = document.getElementById(containerId);
+  const container = byId(containerId);
   if (!container) return;
 
   container.innerHTML = items.map((item) => `
@@ -315,7 +346,7 @@ function renderMetricCards(containerId, items) {
 }
 
 async function loadWeek() {
-  const weekEnding = document.getElementById("weekEnding").value;
+  const weekEnding = byId("weekEnding").value;
   const entity = getSelectedEntity();
 
   renderEntityBrand("entryBrandWrap", entity);
@@ -335,7 +366,7 @@ async function loadWeek() {
 
 async function saveWeek() {
   const payload = {
-    weekEnding: document.getElementById("weekEnding").value,
+    weekEnding: byId("weekEnding").value,
     entity: getSelectedEntity(),
     data: getFormValues()
   };
@@ -353,7 +384,7 @@ async function saveWeek() {
 
 async function submitWeek() {
   const payload = {
-    weekEnding: document.getElementById("weekEnding").value,
+    weekEnding: byId("weekEnding").value,
     entity: getSelectedEntity()
   };
 
@@ -370,7 +401,7 @@ async function submitWeek() {
 
 async function approveWeek() {
   const payload = {
-    weekEnding: document.getElementById("weekEnding").value,
+    weekEnding: byId("weekEnding").value,
     entity: getSelectedEntity()
   };
 
@@ -397,18 +428,18 @@ async function deleteWeek(entity, weekEnding) {
 
 async function openOverride(entity, weekEnding) {
   showEntryView();
-  document.getElementById("entitySelect").value = entity;
-  document.getElementById("weekEnding").value = weekEnding;
+  byId("entitySelect").value = entity;
+  byId("weekEnding").value = weekEnding;
   await loadWeek();
   setStatus(`Admin override mode: ${entity} ${weekEnding}`);
 }
 
 function hideAllViews() {
-  document.getElementById("dashboardView").style.display = "none";
-  document.getElementById("entryView").style.display = "none";
-  document.getElementById("executiveView").style.display = "none";
-  document.getElementById("trendsView").style.display = "none";
-  document.getElementById("importView").style.display = "none";
+  byId("dashboardView").style.display = "none";
+  byId("entryView").style.display = "none";
+  byId("executiveView").style.display = "none";
+  byId("trendsView").style.display = "none";
+  byId("importView").style.display = "none";
 }
 
 function setActiveNav(buttonId) {
@@ -419,7 +450,7 @@ function setActiveNav(buttonId) {
     "navTrendsBtn",
     "navImportBtn"
   ].forEach((id) => {
-    const btn = document.getElementById(id);
+    const btn = byId(id);
     if (!btn) return;
     if (id === buttonId) {
       btn.style.boxShadow = "inset 0 0 0 1px #f7c62f";
@@ -431,26 +462,26 @@ function setActiveNav(buttonId) {
 
 function showDashboardView() {
   hideAllViews();
-  document.getElementById("dashboardView").style.display = "";
+  byId("dashboardView").style.display = "";
   setActiveNav("navDashboardBtn");
 }
 
 function showEntryView() {
   hideAllViews();
-  document.getElementById("entryView").style.display = "";
+  byId("entryView").style.display = "";
   setActiveNav("navEntryBtn");
   renderEntityBrand("entryBrandWrap", getSelectedEntity());
 }
 
 function showExecutiveView() {
   hideAllViews();
-  document.getElementById("executiveView").style.display = "";
+  byId("executiveView").style.display = "";
   setActiveNav("navExecutiveBtn");
 }
 
 function showTrendsView() {
   hideAllViews();
-  document.getElementById("trendsView").style.display = "";
+  byId("trendsView").style.display = "";
   setActiveNav("navTrendsBtn");
   syncTrendsRangeUi();
   renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
@@ -458,15 +489,15 @@ function showTrendsView() {
 
 function showImportView() {
   hideAllViews();
-  document.getElementById("importView").style.display = "";
+  byId("importView").style.display = "";
   setActiveNav("navImportBtn");
 }
 
 function buildWeekSets() {
-  const periodType = document.getElementById("dashboardPeriodType").value;
-  const anchorWeek = document.getElementById("dashboardWeekEnding").value || getDefaultWeekEnding();
-  const customStart = document.getElementById("dashboardCustomStart").value;
-  const customEnd = document.getElementById("dashboardCustomEnd").value;
+  const periodType = byId("dashboardPeriodType").value;
+  const anchorWeek = byId("dashboardWeekEnding").value || getDefaultWeekEnding();
+  const customStart = byId("dashboardCustomStart").value;
+  const customEnd = byId("dashboardCustomEnd").value;
 
   if (periodType === "currentWeek") {
     return {
@@ -569,12 +600,12 @@ function buildWeekSets() {
 }
 
 function syncDashboardPeriodUi() {
-  const periodType = document.getElementById("dashboardPeriodType").value;
+  const periodType = byId("dashboardPeriodType").value;
   const custom = periodType === "custom";
 
-  document.getElementById("dashboardWeekWrap").style.display = custom ? "none" : "";
-  document.getElementById("dashboardCustomStartWrap").style.display = custom ? "" : "none";
-  document.getElementById("dashboardCustomEndWrap").style.display = custom ? "" : "none";
+  byId("dashboardWeekWrap").style.display = custom ? "none" : "";
+  byId("dashboardCustomStartWrap").style.display = custom ? "" : "none";
+  byId("dashboardCustomEndWrap").style.display = custom ? "" : "none";
 }
 
 async function fetchExecutiveSummaryByWeek(weekEnding) {
@@ -723,7 +754,7 @@ function buildVariancePct(current, comparison) {
 }
 
 function renderDashboardEntities(current, comparison, compareAgainst, entityScope) {
-  const container = document.getElementById("dashboardEntities");
+  const container = byId("dashboardEntities");
   const currentMap = getEntityMap(current);
   const comparisonMap = getEntityMap(comparison);
   const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
@@ -818,7 +849,7 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
 }
 
 function renderDashboardAlerts(current, comparison, entityScope) {
-  const container = document.getElementById("dashboardAlerts");
+  const container = byId("dashboardAlerts");
   const currentMap = getEntityMap(current);
   const comparisonMap = getEntityMap(comparison);
   const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
@@ -863,7 +894,7 @@ function renderDashboardAlerts(current, comparison, entityScope) {
 }
 
 function renderDashboardSnapshot(current, entityScope) {
-  const container = document.getElementById("dashboardSnapshot");
+  const container = byId("dashboardSnapshot");
   const rows = (current.regions || []).filter((r) => entityScope === "ALL" || r.entity === entityScope);
 
   if (!rows.length) {
@@ -904,8 +935,8 @@ function renderDashboardSnapshot(current, entityScope) {
 }
 
 async function loadDashboardLanding() {
-  const compareAgainst = document.getElementById("dashboardCompareAgainst").value;
-  const entityScope = document.getElementById("dashboardEntityScope").value;
+  const compareAgainst = byId("dashboardCompareAgainst").value;
+  const entityScope = byId("dashboardEntityScope").value;
   const weekSets = buildWeekSets();
 
   const current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope);
@@ -921,12 +952,12 @@ async function loadDashboardLanding() {
     };
   }
 
-  const summaryEl = document.getElementById("dashboardSummaryText");
+  const summaryEl = byId("dashboardSummaryText");
   if (summaryEl) {
     summaryEl.innerHTML = `<div style="font-size:13px; opacity:0.85;">${weekSets.summary}${entityScope !== "ALL" ? ` • Scope: ${entityScope}` : " • Scope: All Entities"}</div>`;
   }
 
-  const noticeEl = document.getElementById("dashboardBenchmarkNotice");
+  const noticeEl = byId("dashboardBenchmarkNotice");
   if (noticeEl) {
     if (["budget", "target", "forecast"].includes(compareAgainst)) {
       noticeEl.innerHTML = `
@@ -972,7 +1003,7 @@ function renderExecutiveCards(summary) {
 }
 
 function renderExecutiveRegions(summary) {
-  const container = document.getElementById("executiveRegions");
+  const container = byId("executiveRegions");
 
   if (!summary.regions || !summary.regions.length) {
     container.innerHTML = "<p>No approved regions found for this week.</p>";
@@ -1012,7 +1043,7 @@ function renderExecutiveRegions(summary) {
 }
 
 async function loadExecutiveSummary() {
-  const weekEnding = document.getElementById("executiveWeekEnding").value;
+  const weekEnding = byId("executiveWeekEnding").value;
   const result = await apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
   renderExecutiveCards(result);
   renderExecutiveRegions(result);
@@ -1040,7 +1071,7 @@ function renderTrendsCards(result) {
 }
 
 function renderTrendsTable(result) {
-  const wrap = document.getElementById("trendsTableWrap");
+  const wrap = byId("trendsTableWrap");
   const items = result.items || [];
 
   if (!items.length) {
@@ -1104,18 +1135,18 @@ function renderTrendsTable(result) {
 }
 
 function syncTrendsRangeUi() {
-  const mode = document.getElementById("trendsRangeMode").value;
-  document.getElementById("trendsWeeksWrap").style.display = mode === "recent" ? "" : "none";
-  document.getElementById("trendsStartWrap").style.display = mode === "dateRange" ? "" : "none";
-  document.getElementById("trendsEndWrap").style.display = mode === "dateRange" ? "" : "none";
+  const mode = byId("trendsRangeMode").value;
+  byId("trendsWeeksWrap").style.display = mode === "recent" ? "" : "none";
+  byId("trendsStartWrap").style.display = mode === "dateRange" ? "" : "none";
+  byId("trendsEndWrap").style.display = mode === "dateRange" ? "" : "none";
 }
 
 async function loadTrends() {
   const entity = getSelectedTrendsEntity();
-  const mode = document.getElementById("trendsRangeMode").value;
-  const weeks = document.getElementById("trendsLimit").value;
-  const startDate = document.getElementById("trendsStartDate").value;
-  const endDate = document.getElementById("trendsEndDate").value;
+  const mode = byId("trendsRangeMode").value;
+  const weeks = byId("trendsLimit").value;
+  const startDate = byId("trendsStartDate").value;
+  const endDate = byId("trendsEndDate").value;
 
   renderEntityBrand("trendsBrandWrap", entity);
 
@@ -1148,19 +1179,50 @@ async function readFileAsBase64(file) {
   });
 }
 
+function getWeeklyImportFileInput() {
+  return firstExistingId([
+    "importFile",
+    "weeklyImportFile",
+    "historicalImportFile"
+  ]);
+}
+
+function getBudgetImportFileInput() {
+  return firstExistingId([
+    "budgetImportFile",
+    "budgetFile",
+    "importBudgetFile",
+    "budgetWorkbookFile"
+  ]);
+}
+
+function getWeeklyImportButton() {
+  return firstExistingId([
+    "runImportBtn",
+    "runWeeklyImportBtn"
+  ]);
+}
+
+function getBudgetImportButton() {
+  return firstExistingId([
+    "runBudgetImportBtn",
+    "budgetImportBtn"
+  ]);
+}
+
 async function runImport() {
   if (!currentUser?.access?.isAdmin) {
     throw new Error("Admin only");
   }
 
-  const fileInput = document.getElementById("importFile");
-  const file = fileInput.files && fileInput.files[0];
+  const fileInput = getWeeklyImportFileInput();
+  const file = fileInput?.files && fileInput.files[0];
 
   if (!file) {
-    throw new Error("Select a workbook file first");
+    throw new Error("Select a weekly workbook file first");
   }
 
-  setImportStatus("Reading workbook...");
+  setImportStatus("Reading weekly workbook...");
   const fileBase64 = await readFileAsBase64(file);
 
   const payload = {
@@ -1168,12 +1230,47 @@ async function runImport() {
     fileBase64
   };
 
-  setImportStatus("Importing workbook...");
-  setImportDebug(payload.fileName);
+  setImportStatus("Importing weekly workbook...");
+  setImportDebug({
+    route: "/api/import-excel",
+    fileName: payload.fileName
+  });
 
   const result = await apiPost("/api/import-excel", payload);
 
-  setImportStatus(result.message || "Import completed");
+  setImportStatus(result.message || "Weekly import completed");
+  setImportDebug(result);
+}
+
+async function runBudgetImport() {
+  if (!currentUser?.access?.isAdmin) {
+    throw new Error("Admin only");
+  }
+
+  const fileInput = getBudgetImportFileInput();
+  const file = fileInput?.files && fileInput.files[0];
+
+  if (!file) {
+    throw new Error("Select a budget workbook file first");
+  }
+
+  setImportStatus("Reading budget workbook...");
+  const fileBase64 = await readFileAsBase64(file);
+
+  const payload = {
+    fileName: file.name,
+    fileBase64
+  };
+
+  setImportStatus("Importing budget workbook...");
+  setImportDebug({
+    route: "/api/import-budget",
+    fileName: payload.fileName
+  });
+
+  const result = await apiPost("/api/import-budget", payload);
+
+  setImportStatus(result.message || "Budget import completed");
   setImportDebug(result);
 }
 
@@ -1187,231 +1284,296 @@ async function runImport() {
     renderForm();
 
     const defaultWeek = getDefaultWeekEnding();
-    document.getElementById("dashboardWeekEnding").value = defaultWeek;
-    document.getElementById("dashboardCustomEnd").value = defaultWeek;
-    document.getElementById("dashboardCustomStart").value = getDateWeeksAgo(8, defaultWeek);
-    document.getElementById("weekEnding").value = defaultWeek;
-    document.getElementById("executiveWeekEnding").value = defaultWeek;
-    document.getElementById("trendsStartDate").value = getDateWeeksAgo(12, defaultWeek);
-    document.getElementById("trendsEndDate").value = defaultWeek;
 
-    syncTrendsRangeUi();
-    syncDashboardPeriodUi();
-    renderEntityBrand("entryBrandWrap", getSelectedEntity());
-    renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+    if (byId("dashboardWeekEnding")) byId("dashboardWeekEnding").value = defaultWeek;
+    if (byId("dashboardCustomEnd")) byId("dashboardCustomEnd").value = defaultWeek;
+    if (byId("dashboardCustomStart")) byId("dashboardCustomStart").value = getDateWeeksAgo(8, defaultWeek);
+    if (byId("weekEnding")) byId("weekEnding").value = defaultWeek;
+    if (byId("executiveWeekEnding")) byId("executiveWeekEnding").value = defaultWeek;
+    if (byId("trendsStartDate")) byId("trendsStartDate").value = getDateWeeksAgo(12, defaultWeek);
+    if (byId("trendsEndDate")) byId("trendsEndDate").value = defaultWeek;
 
-    document.getElementById("entitySelect").addEventListener("change", async () => {
-      renderEntityBrand("entryBrandWrap", getSelectedEntity());
-      try {
-        await loadWeek();
-      } catch (e) {
-        setStatus(e.message, true);
-        setDebug(String(e));
-      }
-    });
+    if (byId("trendsRangeMode")) syncTrendsRangeUi();
+    if (byId("dashboardPeriodType")) syncDashboardPeriodUi();
 
-    document.getElementById("weekEnding").addEventListener("change", async () => {
-      try {
-        await loadWeek();
-      } catch (e) {
-        setStatus(e.message, true);
-        setDebug(String(e));
-      }
-    });
+    renderEntityBrand("entryBrandWrap", byId("entitySelect") ? getSelectedEntity() : "");
+    renderEntityBrand("trendsBrandWrap", byId("trendsEntitySelect") ? getSelectedTrendsEntity() : "");
 
-    document.getElementById("saveBtn").addEventListener("click", async () => {
-      try {
-        await saveWeek();
-      } catch (e) {
-        setStatus(e.message, true);
-        setDebug(String(e));
-      }
-    });
+    if (byId("entitySelect")) {
+      byId("entitySelect").addEventListener("change", async () => {
+        renderEntityBrand("entryBrandWrap", getSelectedEntity());
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
 
-    document.getElementById("submitBtn").addEventListener("click", async () => {
-      try {
-        await submitWeek();
-      } catch (e) {
-        setStatus(e.message, true);
-        setDebug(String(e));
-      }
-    });
+    if (byId("weekEnding")) {
+      byId("weekEnding").addEventListener("change", async () => {
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
 
-    document.getElementById("approveBtn").addEventListener("click", async () => {
-      try {
-        await approveWeek();
-      } catch (e) {
-        setStatus(e.message, true);
-        setDebug(String(e));
-      }
-    });
+    if (byId("saveBtn")) {
+      byId("saveBtn").addEventListener("click", async () => {
+        try {
+          await saveWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
 
-    document.getElementById("navDashboardBtn").addEventListener("click", async () => {
-      showDashboardView();
-      try {
-        await loadDashboardLanding();
-      } catch (e) {
-        setDashboardDebug(String(e));
-      }
-    });
+    if (byId("submitBtn")) {
+      byId("submitBtn").addEventListener("click", async () => {
+        try {
+          await submitWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
 
-    document.getElementById("navEntryBtn").addEventListener("click", showEntryView);
+    if (byId("approveBtn")) {
+      byId("approveBtn").addEventListener("click", async () => {
+        try {
+          await approveWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
 
-    document.getElementById("navExecutiveBtn").addEventListener("click", async () => {
-      showExecutiveView();
-      try {
-        await loadExecutiveSummary();
-      } catch (e) {
-        setExecutiveDebug(String(e));
-      }
-    });
-
-    document.getElementById("navTrendsBtn").addEventListener("click", async () => {
-      showTrendsView();
-      try {
-        await loadTrends();
-      } catch (e) {
-        setTrendsDebug(String(e));
-      }
-    });
-
-    document.getElementById("navImportBtn").addEventListener("click", showImportView);
-
-    document.getElementById("loadDashboardBtn").addEventListener("click", async () => {
-      try {
-        await loadDashboardLanding();
-      } catch (e) {
-        setDashboardDebug(String(e));
-      }
-    });
-
-    document.getElementById("dashboardPeriodType").addEventListener("change", async () => {
-      syncDashboardPeriodUi();
-      try {
-        await loadDashboardLanding();
-      } catch (e) {
-        setDashboardDebug(String(e));
-      }
-    });
-
-    document.getElementById("dashboardCompareAgainst").addEventListener("change", async () => {
-      try {
-        await loadDashboardLanding();
-      } catch (e) {
-        setDashboardDebug(String(e));
-      }
-    });
-
-    document.getElementById("dashboardEntityScope").addEventListener("change", async () => {
-      try {
-        await loadDashboardLanding();
-      } catch (e) {
-        setDashboardDebug(String(e));
-      }
-    });
-
-    document.getElementById("dashboardWeekEnding").addEventListener("change", async () => {
-      if (document.getElementById("dashboardPeriodType").value !== "custom") {
+    if (byId("navDashboardBtn")) {
+      byId("navDashboardBtn").addEventListener("click", async () => {
+        showDashboardView();
         try {
           await loadDashboardLanding();
         } catch (e) {
           setDashboardDebug(String(e));
         }
-      }
-    });
+      });
+    }
 
-    document.getElementById("dashboardCustomStart").addEventListener("change", async () => {
-      if (document.getElementById("dashboardPeriodType").value === "custom") {
+    if (byId("navEntryBtn")) {
+      byId("navEntryBtn").addEventListener("click", showEntryView);
+    }
+
+    if (byId("navExecutiveBtn")) {
+      byId("navExecutiveBtn").addEventListener("click", async () => {
+        showExecutiveView();
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navTrendsBtn")) {
+      byId("navTrendsBtn").addEventListener("click", async () => {
+        showTrendsView();
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navImportBtn")) {
+      byId("navImportBtn").addEventListener("click", showImportView);
+    }
+
+    if (byId("loadDashboardBtn")) {
+      byId("loadDashboardBtn").addEventListener("click", async () => {
         try {
           await loadDashboardLanding();
         } catch (e) {
           setDashboardDebug(String(e));
         }
-      }
-    });
+      });
+    }
 
-    document.getElementById("dashboardCustomEnd").addEventListener("change", async () => {
-      if (document.getElementById("dashboardPeriodType").value === "custom") {
+    if (byId("dashboardPeriodType")) {
+      byId("dashboardPeriodType").addEventListener("change", async () => {
+        syncDashboardPeriodUi();
         try {
           await loadDashboardLanding();
         } catch (e) {
           setDashboardDebug(String(e));
         }
-      }
-    });
+      });
+    }
 
-    document.getElementById("loadExecutiveBtn").addEventListener("click", async () => {
-      try {
-        await loadExecutiveSummary();
-      } catch (e) {
-        setExecutiveDebug(String(e));
-      }
-    });
+    if (byId("dashboardCompareAgainst")) {
+      byId("dashboardCompareAgainst").addEventListener("change", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
 
-    document.getElementById("loadTrendsBtn").addEventListener("click", async () => {
-      try {
-        await loadTrends();
-      } catch (e) {
-        setTrendsDebug(String(e));
-      }
-    });
+    if (byId("dashboardEntityScope")) {
+      byId("dashboardEntityScope").addEventListener("change", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
 
-    document.getElementById("trendsEntitySelect").addEventListener("change", async () => {
-      renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
-      try {
-        await loadTrends();
-      } catch (e) {
-        setTrendsDebug(String(e));
-      }
-    });
+    if (byId("dashboardWeekEnding")) {
+      byId("dashboardWeekEnding").addEventListener("change", async () => {
+        if (byId("dashboardPeriodType").value !== "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
 
-    document.getElementById("trendsLimit").addEventListener("change", async () => {
-      if (document.getElementById("trendsRangeMode").value === "recent") {
+    if (byId("dashboardCustomStart")) {
+      byId("dashboardCustomStart").addEventListener("change", async () => {
+        if (byId("dashboardPeriodType").value === "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("dashboardCustomEnd")) {
+      byId("dashboardCustomEnd").addEventListener("change", async () => {
+        if (byId("dashboardPeriodType").value === "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("loadExecutiveBtn")) {
+      byId("loadExecutiveBtn").addEventListener("click", async () => {
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("loadTrendsBtn")) {
+      byId("loadTrendsBtn").addEventListener("click", async () => {
         try {
           await loadTrends();
         } catch (e) {
           setTrendsDebug(String(e));
         }
-      }
-    });
+      });
+    }
 
-    document.getElementById("trendsRangeMode").addEventListener("change", async () => {
-      syncTrendsRangeUi();
-      try {
-        await loadTrends();
-      } catch (e) {
-        setTrendsDebug(String(e));
-      }
-    });
-
-    document.getElementById("trendsStartDate").addEventListener("change", async () => {
-      if (document.getElementById("trendsRangeMode").value === "dateRange") {
+    if (byId("trendsEntitySelect")) {
+      byId("trendsEntitySelect").addEventListener("change", async () => {
+        renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
         try {
           await loadTrends();
         } catch (e) {
           setTrendsDebug(String(e));
         }
-      }
-    });
+      });
+    }
 
-    document.getElementById("trendsEndDate").addEventListener("change", async () => {
-      if (document.getElementById("trendsRangeMode").value === "dateRange") {
+    if (byId("trendsLimit")) {
+      byId("trendsLimit").addEventListener("change", async () => {
+        if (byId("trendsRangeMode").value === "recent") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsRangeMode")) {
+      byId("trendsRangeMode").addEventListener("change", async () => {
+        syncTrendsRangeUi();
         try {
           await loadTrends();
         } catch (e) {
           setTrendsDebug(String(e));
         }
-      }
-    });
+      });
+    }
 
-    document.getElementById("runImportBtn").addEventListener("click", async () => {
-      try {
-        await runImport();
-      } catch (e) {
-        setImportStatus(e.message, true);
-        setImportDebug(String(e));
-      }
-    });
+    if (byId("trendsStartDate")) {
+      byId("trendsStartDate").addEventListener("change", async () => {
+        if (byId("trendsRangeMode").value === "dateRange") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsEndDate")) {
+      byId("trendsEndDate").addEventListener("change", async () => {
+        if (byId("trendsRangeMode").value === "dateRange") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    const weeklyImportBtn = getWeeklyImportButton();
+    if (weeklyImportBtn) {
+      weeklyImportBtn.addEventListener("click", async () => {
+        try {
+          await runImport();
+        } catch (e) {
+          setImportStatus(e.message, true);
+          setImportDebug(String(e));
+        }
+      });
+    }
+
+    const budgetImportBtn = getBudgetImportButton();
+    if (budgetImportBtn) {
+      budgetImportBtn.addEventListener("click", async () => {
+        try {
+          await runBudgetImport();
+        } catch (e) {
+          setImportStatus(e.message, true);
+          setImportDebug(String(e));
+        }
+      });
+    }
 
     showDashboardView();
     await loadDashboardLanding();
@@ -1419,5 +1581,6 @@ async function runImport() {
     setStatus(error.message || "Failed to load app", true);
     setDebug(String(error));
     setDashboardDebug(String(error));
+    setImportDebug(String(error));
   }
 })();
