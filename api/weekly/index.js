@@ -4,25 +4,13 @@ const { getTableClient } = require("../shared/table");
 
 const REGION_TABLE = "WeeklyRegionData";
 
-function mapValues(valuesJson) {
+function parseValuesJson(valuesJson) {
   if (!valuesJson) return {};
-
-  let v = {};
   try {
-    v = typeof valuesJson === "string" ? JSON.parse(valuesJson) : valuesJson;
+    return typeof valuesJson === "string" ? JSON.parse(valuesJson) : valuesJson;
   } catch {
     return {};
   }
-
-  return {
-    visitVolume: v.totalVisits ?? null,
-    callVolume: v.totalCalls ?? null,
-    newPatients: v.npActual ?? null,
-
-    noShowRate: v.noShowRate ?? null,
-    cancellationRate: v.cancellationRate ?? null,
-    abandonedCallRate: v.abandonmentRate ?? null
-  };
 }
 
 module.exports = async function (context, req) {
@@ -30,8 +18,8 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    const entity = req.query.entity;
-    const weekEnding = req.query.weekEnding;
+    const entity = String(req.query.entity || "").trim();
+    const weekEnding = String(req.query.weekEnding || "").trim();
 
     if (!entity || !weekEnding) {
       return {
@@ -43,36 +31,42 @@ module.exports = async function (context, req) {
       };
     }
 
-    const table = getTableClient(REGION_TABLE);
-
-    const entityData = await table.getEntity(entity, weekEnding);
-
-    if (!entityData) {
+    if (!access.isAdmin && access.entity !== entity) {
       return {
-        status: 200,
+        status: 403,
         body: {
-          ok: true,
-          found: false
+          ok: false,
+          error: "Forbidden"
         }
       };
     }
 
-    const mappedData = mapValues(entityData.valuesJson);
+    const table = getTableClient(REGION_TABLE);
+
+    let record = null;
+    try {
+      record = await table.getEntity(entity, weekEnding);
+    } catch (err) {
+      if (err.statusCode !== 404) {
+        throw err;
+      }
+    }
 
     return {
       status: 200,
       body: {
         ok: true,
-        found: true,
+        found: !!record,
         entity,
         weekEnding,
-        data: mappedData,
-        status: entityData.status,
-        updatedAt: entityData.updatedAt
+        values: record ? parseValuesJson(record.valuesJson) : {},
+        source: record?.source || null,
+        status: record?.status || null,
+        updatedAt: record?.updatedAt || record?.importedAt || null
       }
     };
   } catch (error) {
-    context.log.error("weekly get failed", error);
+    context.log.error("weekly GET failed", error);
 
     return {
       status: 500,
