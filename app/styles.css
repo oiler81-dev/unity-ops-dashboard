@@ -33,6 +33,7 @@ body {
   border: 1px solid #1d536f;
   cursor: pointer;
   text-align: left;
+  font-weight: bold;
 }
 
 #sidebar button:hover {
@@ -113,13 +114,34 @@ button:disabled {
   font-weight: bold;
 }
 
-.debugOutput {
+.debugPanel {
   margin-top: 16px;
+  border: 1px solid #1d435b;
+  border-radius: 8px;
+  background: #0a2233;
+  overflow: hidden;
+}
+
+.debugPanel summary {
+  cursor: pointer;
+  padding: 12px;
+  font-weight: bold;
+  background: #102d42;
+  border-bottom: 1px solid #1d435b;
+  user-select: none;
+}
+
+.debugPanel[open] summary {
+  border-bottom: 1px solid #1d435b;
+}
+
+.debugOutput {
+  margin: 0;
   white-space: pre-wrap;
   background: #0a2233;
-  border: 1px solid #1d435b;
   padding: 12px;
   overflow-x: auto;
+  max-height: 400px;
 }
 
 .cardGrid {
@@ -163,4 +185,17 @@ button:disabled {
 .buttonAlignBottom {
   display: flex;
   align-items: end;
+}
+
+.good {
+  color: #7CFC98;
+}
+
+.warning {
+  color: #f7c62f;
+}
+
+.bad {
+  color: #ff6b6b;
+  font-weight: bold;
 }
