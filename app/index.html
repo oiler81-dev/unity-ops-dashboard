@@ -99,10 +99,6 @@
       font-size: 14px;
     }
 
-    main section {
-      display: block;
-    }
-
     .panel {
       background: var(--panel-bg);
       border: 1px solid var(--border-soft);
@@ -491,6 +487,40 @@
       color: var(--text-soft);
     }
 
+    .dashboardFilterBar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      align-items: end;
+      margin-bottom: 10px;
+    }
+
+    .dashboardSubNote {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
+    .dashboardBenchmarkBanner {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(255,210,77,0.35);
+      background: rgba(255,210,77,0.08);
+      border-radius: 8px;
+      color: #ffe08a;
+      font-size: 13px;
+    }
+
+    .dashboardRangeSummary {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--text-soft);
+    }
+
     @media (max-width: 960px) {
       #appShell {
         flex-direction: column;
@@ -542,15 +572,62 @@
       <main>
         <section id="dashboardView">
           <div class="panel">
-            <div class="fieldRow">
+            <div class="dashboardFilterBar">
               <div>
-                <label for="dashboardWeekEnding">Week Ending</label>
+                <label for="dashboardPeriodType">Period</label>
+                <select id="dashboardPeriodType">
+                  <option value="currentWeek" selected>Current Week</option>
+                  <option value="lastWeek">Last Week</option>
+                  <option value="mtd">Month to Date</option>
+                  <option value="lastMonth">Last Month</option>
+                  <option value="rolling4">Rolling 4 Weeks</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="dashboardCompareAgainst">Compare Against</label>
+                <select id="dashboardCompareAgainst">
+                  <option value="priorPeriod" selected>Prior Period</option>
+                  <option value="target">Target</option>
+                  <option value="budget">Budget</option>
+                  <option value="forecast">Forecast</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="dashboardEntityScope">Entity Scope</label>
+                <select id="dashboardEntityScope">
+                  <option value="ALL" selected>All Entities</option>
+                  <option value="LAOSS">LAOSS</option>
+                  <option value="NES">NES</option>
+                  <option value="SpineOne">SpineOne</option>
+                  <option value="MRO">MRO</option>
+                </select>
+              </div>
+
+              <div id="dashboardWeekWrap">
+                <label for="dashboardWeekEnding">Anchor Week Ending</label>
                 <input type="date" id="dashboardWeekEnding" />
               </div>
+
+              <div id="dashboardCustomStartWrap" style="display:none;">
+                <label for="dashboardCustomStart">Custom Start</label>
+                <input type="date" id="dashboardCustomStart" />
+              </div>
+
+              <div id="dashboardCustomEndWrap" style="display:none;">
+                <label for="dashboardCustomEnd">Custom End</label>
+                <input type="date" id="dashboardCustomEnd" />
+              </div>
+
               <div class="buttonAlignBottom">
                 <button id="loadDashboardBtn" type="button">Load Dashboard</button>
               </div>
             </div>
+
+            <div id="dashboardRangeSummary" class="dashboardRangeSummary"></div>
+            <div id="dashboardBenchmarkBanner" class="dashboardBenchmarkBanner" style="display:none;"></div>
 
             <div id="dashboardCards" class="cardGrid"></div>
 
