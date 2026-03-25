@@ -75,6 +75,37 @@ function hasPositiveNumber(...values) {
   });
 }
 
+function excelDateToIso(value) {
+  if (!value && value !== 0) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (!parsed) return null;
+    const yyyy = String(parsed.y).padStart(4, "0");
+    const mm = String(parsed.m).padStart(2, "0");
+    const dd = String(parsed.d).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+    const d = new Date(trimmed);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toISOString().slice(0, 10);
+    }
+  }
+
+  return null;
+}
+
 async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) {
   await table.upsertEntity({
     partitionKey: entity,
@@ -126,15 +157,19 @@ async function upsertReferenceRecord(table, kind, rowKey, values, meta = {}) {
   });
 }
 
-function buildRegionValues(sheetName, row) {
+function buildRegionValues(sheetName, rowIndex, row) {
   const weekNumber = toNumber(row[0]);
   const daysInPeriod = toNumber(row[1]);
   const monthTag = safeText(sheetName === "Denver" ? row[18] : row[17]);
 
-  if (!weekNumber) return null;
+  if (!weekNumber) {
+    return { accept: false, reason: "missing-week-number", rowIndex };
+  }
 
   const weekEnding = weekEndingFromWeekNumber(weekNumber);
-  if (!weekEnding) return null;
+  if (!weekEnding) {
+    return { accept: false, reason: "invalid-week-ending", rowIndex, weekNumber };
+  }
 
   const npActual = toNumber(row[5]);
   const establishedActual = toNumber(row[6]);
@@ -154,9 +189,66 @@ function buildRegionValues(sheetName, row) {
   const abandonedCalls = toNumber(sheetName === "Denver" ? row[10] : row[9]);
   const cashActual = toNumber(sheetName === "Denver" ? row[17] : row[16]);
 
+  const hasRealData = hasPositiveNumber(
+    totalVisits,
+    npActual,
+    establishedActual,
+    surgeryActual,
+    imagingActual,
+    totalCalls,
+    abandonedCalls
+  );
+
+  const hasUsableDays = daysInPeriod != null && daysInPeriod > 0;
+  const hasMonthTag = !!monthTag;
+
+  if (!hasUsableDays) {
+    return {
+      accept: false,
+      reason: "days-not-positive",
+      rowIndex,
+      weekNumber,
+      weekEnding,
+      daysInPeriod,
+      monthTag,
+      totalVisits,
+      totalCalls,
+      cashActual
+    };
+  }
+
+  if (!hasMonthTag) {
+    return {
+      accept: false,
+      reason: "missing-month-tag",
+      rowIndex,
+      weekNumber,
+      weekEnding,
+      daysInPeriod,
+      totalVisits,
+      totalCalls,
+      cashActual
+    };
+  }
+
+  if (!hasRealData) {
+    return {
+      accept: false,
+      reason: "no-real-data",
+      rowIndex,
+      weekNumber,
+      weekEnding,
+      daysInPeriod,
+      monthTag,
+      totalVisits,
+      totalCalls,
+      cashActual
+    };
+  }
+
   const values = {
     weekNumber,
-    monthTag: monthTag || null,
+    monthTag,
     daysInPeriod,
     totalVisits,
     visitsPerDay: toNumber(row[3]),
@@ -182,24 +274,13 @@ function buildRegionValues(sheetName, row) {
     values.piCashCollection = toNumber(row[20]);
   }
 
-  const hasRealData = hasPositiveNumber(
-    totalVisits,
-    npActual,
-    establishedActual,
-    surgeryActual,
-    imagingActual,
-    totalCalls,
-    abandonedCalls,
-    cashActual
-  );
-
-  const hasUsableDays = daysInPeriod != null && daysInPeriod > 0;
-
-  if (!hasRealData || !hasUsableDays) {
-    return null;
-  }
-
-  return { weekNumber, weekEnding, values };
+  return {
+    accept: true,
+    rowIndex,
+    weekNumber,
+    weekEnding,
+    values
+  };
 }
 
 async function importRegionSheet(regionTable, ws, sheetName) {
@@ -207,16 +288,24 @@ async function importRegionSheet(regionTable, ws, sheetName) {
   const rows = sheetRows(ws);
 
   if (!entity) {
-    return { imported: 0, entity: null, weeks: [] };
+    return { imported: 0, entity: null, weekEndings: [], acceptedRows: [], rejectedRows: [] };
   }
 
   let imported = 0;
-  const weeks = [];
+  const weekEndings = [];
+  const acceptedRows = [];
+  const rejectedRows = [];
 
   for (let r = 6; r < rows.length; r += 1) {
     const row = rows[r] || [];
-    const parsed = buildRegionValues(sheetName, row);
-    if (!parsed) continue;
+    const parsed = buildRegionValues(sheetName, r + 1, row);
+
+    if (!parsed.accept) {
+      if (parsed.reason !== "missing-week-number") {
+        rejectedRows.push(parsed);
+      }
+      continue;
+    }
 
     await upsertRegionRecord(regionTable, entity, parsed.weekEnding, parsed.values, {
       importSourceSheet: sheetName,
@@ -225,10 +314,17 @@ async function importRegionSheet(regionTable, ws, sheetName) {
     });
 
     imported += 1;
-    weeks.push(parsed.weekEnding);
+    weekEndings.push(parsed.weekEnding);
+    acceptedRows.push({
+      rowIndex: parsed.rowIndex,
+      weekNumber: parsed.weekNumber,
+      weekEnding: parsed.weekEnding,
+      monthTag: parsed.values.monthTag,
+      daysInPeriod: parsed.values.daysInPeriod
+    });
   }
 
-  return { imported, entity, weeks };
+  return { imported, entity, weekEndings, acceptedRows, rejectedRows };
 }
 
 function buildWorkingDaysMapFromRegionSheets(workbook) {
@@ -256,261 +352,378 @@ function buildWorkingDaysMapFromRegionSheets(workbook) {
   return map;
 }
 
-async function importPtSheet(sharedTable, ws, workingDaysMap) {
-  const rows = sheetRows(ws);
-  let imported = 0;
-  const weeks = [];
+function buildPtValues(rowIndex, row, workingDaysMap) {
+  const chicagoWeek = toNumber(row[0]);
+  const chicagoMonthTag = safeText(row[1]);
+  const weekEnding = weekEndingFromWeekNumber(chicagoWeek);
 
-  for (let r = 12; r < rows.length; r += 1) {
-    const row = rows[r] || [];
+  if (!chicagoWeek) {
+    return { accept: false, reason: "missing-chicago-week-number", rowIndex };
+  }
 
-    const weekNumber = toNumber(row[0]);
-    const monthTag = safeText(row[1]);
-    const weekEnding = weekEndingFromWeekNumber(weekNumber);
+  if (!weekEnding) {
+    return { accept: false, reason: "invalid-week-ending", rowIndex, chicagoWeek };
+  }
 
-    if (!weekNumber || !weekEnding) continue;
+  const denverWeek = toNumber(row[10]);
+  const denverMonthTag = safeText(row[11]);
+  const portlandWeek = toNumber(row[20]);
+  const portlandMonthTag = safeText(row[21]);
 
-    const chicagoScheduled = toNumber(row[2]);
-    const chicagoCancels = toNumber(row[3]);
-    const chicagoNoShows = toNumber(row[4]);
-    const chicagoReschedules = toNumber(row[5]);
-    const chicagoUnits = toNumber(row[6]);
+  const chicagoScheduled = toNumber(row[2]);
+  const chicagoCancels = toNumber(row[3]);
+  const chicagoNoShows = toNumber(row[4]);
+  const chicagoReschedules = toNumber(row[5]);
+  const chicagoUnits = toNumber(row[6]);
 
-    const denverWeek = toNumber(row[10]);
-    const denverMonthTag = safeText(row[11]);
-    const denverScheduled = toNumber(row[12]);
-    const denverCancels = toNumber(row[13]);
-    const denverNoShows = toNumber(row[14]);
-    const denverReschedules = toNumber(row[15]);
-    const denverUnits = toNumber(row[16]);
+  const denverScheduled = toNumber(row[12]);
+  const denverCancels = toNumber(row[13]);
+  const denverNoShows = toNumber(row[14]);
+  const denverReschedules = toNumber(row[15]);
+  const denverUnits = toNumber(row[16]);
 
-    const portlandWeek = toNumber(row[20]);
-    const portlandMonthTag = safeText(row[21]);
-    const portlandScheduled = toNumber(row[22]);
-    const portlandCancels = toNumber(row[23]);
-    const portlandNoShows = toNumber(row[24]);
-    const portlandReschedules = toNumber(row[25]);
-    const portlandUnits = toNumber(row[26]);
+  const portlandScheduled = toNumber(row[22]);
+  const portlandCancels = toNumber(row[23]);
+  const portlandNoShows = toNumber(row[24]);
+  const portlandReschedules = toNumber(row[25]);
+  const portlandUnits = toNumber(row[26]);
 
-    const ptScheduledVisits = sumNumbers([
-      chicagoScheduled,
-      denverScheduled,
-      portlandScheduled
-    ]);
+  const ptScheduledVisits = sumNumbers([
+    chicagoScheduled,
+    denverScheduled,
+    portlandScheduled
+  ]);
 
-    const ptCancellations = sumNumbers([
-      chicagoCancels,
-      denverCancels,
-      portlandCancels
-    ]);
+  const ptCancellations = sumNumbers([
+    chicagoCancels,
+    denverCancels,
+    portlandCancels
+  ]);
 
-    const ptNoShows = sumNumbers([
-      chicagoNoShows,
-      denverNoShows,
-      portlandNoShows
-    ]);
+  const ptNoShows = sumNumbers([
+    chicagoNoShows,
+    denverNoShows,
+    portlandNoShows
+  ]);
 
-    const ptReschedules = sumNumbers([
-      chicagoReschedules,
-      denverReschedules,
-      portlandReschedules
-    ]);
+  const ptReschedules = sumNumbers([
+    chicagoReschedules,
+    denverReschedules,
+    portlandReschedules
+  ]);
 
-    const totalUnitsBilled = sumNumbers([
-      chicagoUnits,
-      denverUnits,
-      portlandUnits
-    ]);
+  const totalUnitsBilled = sumNumbers([
+    chicagoUnits,
+    denverUnits,
+    portlandUnits
+  ]);
 
-    const hasRealData = hasPositiveNumber(
-      ptScheduledVisits,
-      ptCancellations,
-      ptNoShows,
-      ptReschedules,
-      totalUnitsBilled
-    );
+  const alignedWeek =
+    chicagoWeek === denverWeek && chicagoWeek === portlandWeek;
 
-    const alignedMonthTag = monthTag && monthTag === denverMonthTag && monthTag === portlandMonthTag;
-    const alignedWeek = weekNumber && weekNumber === denverWeek && weekNumber === portlandWeek;
-    const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
+  const alignedMonthTag =
+    !!chicagoMonthTag &&
+    chicagoMonthTag === denverMonthTag &&
+    chicagoMonthTag === portlandMonthTag;
 
-    if (!hasRealData || !alignedMonthTag || !alignedWeek || !hasWorkingDays) {
-      continue;
-    }
+  const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
 
-    const values = {
-      weekNumber,
-      monthTag,
+  const hasRealData = hasPositiveNumber(
+    ptScheduledVisits,
+    ptCancellations,
+    ptNoShows,
+    ptReschedules,
+    totalUnitsBilled
+  );
+
+  if (!alignedWeek) {
+    return {
+      accept: false,
+      reason: "unaligned-week",
+      rowIndex,
+      chicagoWeek,
+      denverWeek,
+      portlandWeek
+    };
+  }
+
+  if (!alignedMonthTag) {
+    return {
+      accept: false,
+      reason: "unaligned-month-tag",
+      rowIndex,
+      chicagoMonthTag,
+      denverMonthTag,
+      portlandMonthTag
+    };
+  }
+
+  if (!hasWorkingDays) {
+    return {
+      accept: false,
+      reason: "no-working-days",
+      rowIndex,
+      chicagoWeek,
+      weekEnding
+    };
+  }
+
+  if (!hasRealData) {
+    return {
+      accept: false,
+      reason: "no-real-data",
+      rowIndex,
+      chicagoWeek,
+      weekEnding
+    };
+  }
+
+  return {
+    accept: true,
+    rowIndex,
+    weekNumber: chicagoWeek,
+    weekEnding,
+    values: {
+      weekNumber: chicagoWeek,
+      monthTag: chicagoMonthTag,
       workingDaysInWeek: workingDaysMap[weekEnding],
       ptScheduledVisits,
       ptCancellations,
       ptNoShows,
       ptReschedules,
       totalUnitsBilled
-    };
+    }
+  };
+}
 
-    await upsertSharedRecord(sharedTable, "PT", weekEnding, values, {
+async function importPtSheet(sharedTable, ws, workingDaysMap) {
+  const rows = sheetRows(ws);
+  let imported = 0;
+  const weekEndings = [];
+  const acceptedRows = [];
+  const rejectedRows = [];
+
+  for (let r = 12; r < rows.length; r += 1) {
+    const row = rows[r] || [];
+    const parsed = buildPtValues(r + 1, row, workingDaysMap);
+
+    if (!parsed.accept) {
+      if (parsed.reason !== "missing-chicago-week-number") {
+        rejectedRows.push(parsed);
+      }
+      continue;
+    }
+
+    await upsertSharedRecord(sharedTable, "PT", parsed.weekEnding, parsed.values, {
       importSourceSheet: "PT",
-      importWeekNumber: weekNumber,
-      importMonthTag: monthTag
+      importWeekNumber: parsed.weekNumber,
+      importMonthTag: parsed.values.monthTag
     });
 
     imported += 1;
-    weeks.push(weekEnding);
+    weekEndings.push(parsed.weekEnding);
+    acceptedRows.push({
+      rowIndex: parsed.rowIndex,
+      weekNumber: parsed.weekNumber,
+      weekEnding: parsed.weekEnding,
+      monthTag: parsed.values.monthTag,
+      workingDaysInWeek: parsed.values.workingDaysInWeek
+    });
   }
 
-  return { imported, weeks };
+  return { imported, weekEndings, acceptedRows, rejectedRows };
+}
+
+function buildCxnsValues(rowIndex, row, workingDaysMap) {
+  const chicagoWeek = toNumber(row[0]);
+  const chicagoMonthTag = safeText(row[1]);
+  const weekEnding = weekEndingFromWeekNumber(chicagoWeek);
+
+  if (!chicagoWeek) {
+    return { accept: false, reason: "missing-chicago-week-number", rowIndex };
+  }
+
+  if (!weekEnding) {
+    return { accept: false, reason: "invalid-week-ending", rowIndex, chicagoWeek };
+  }
+
+  const denverWeek = toNumber(row[8]);
+  const denverMonthTag = safeText(row[9]);
+  const portlandWeek = toNumber(row[16]);
+  const portlandMonthTag = safeText(row[17]);
+  const laWeek = toNumber(row[24]);
+  const laMonthTag = safeText(row[25]);
+
+  const chicagoScheduled = toNumber(row[2]);
+  const chicagoCancels = toNumber(row[3]);
+  const chicagoNoShows = toNumber(row[4]);
+  const chicagoReschedules = toNumber(row[5]);
+
+  const denverScheduled = toNumber(row[10]);
+  const denverCancels = toNumber(row[11]);
+  const denverNoShows = toNumber(row[12]);
+  const denverReschedules = toNumber(row[13]);
+
+  const portlandScheduled = toNumber(row[18]);
+  const portlandCancels = toNumber(row[19]);
+  const portlandNoShows = toNumber(row[20]);
+  const portlandReschedules = toNumber(row[21]);
+
+  const laScheduled = toNumber(row[26]);
+  const laCancels = toNumber(row[27]);
+  const laNoShows = toNumber(row[28]);
+  const laReschedules = toNumber(row[29]);
+
+  const scheduledAppts = sumNumbers([
+    chicagoScheduled,
+    denverScheduled,
+    portlandScheduled,
+    laScheduled
+  ]);
+
+  const cancellations = sumNumbers([
+    chicagoCancels,
+    denverCancels,
+    portlandCancels,
+    laCancels
+  ]);
+
+  const noShows = sumNumbers([
+    chicagoNoShows,
+    denverNoShows,
+    portlandNoShows,
+    laNoShows
+  ]);
+
+  const reschedules = sumNumbers([
+    chicagoReschedules,
+    denverReschedules,
+    portlandReschedules,
+    laReschedules
+  ]);
+
+  const alignedWeek =
+    chicagoWeek === denverWeek &&
+    chicagoWeek === portlandWeek &&
+    chicagoWeek === laWeek;
+
+  const alignedMonthTag =
+    !!chicagoMonthTag &&
+    chicagoMonthTag === denverMonthTag &&
+    chicagoMonthTag === portlandMonthTag &&
+    chicagoMonthTag === laMonthTag;
+
+  const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
+
+  const hasRealData = hasPositiveNumber(
+    scheduledAppts,
+    cancellations,
+    noShows,
+    reschedules
+  );
+
+  if (!alignedWeek) {
+    return {
+      accept: false,
+      reason: "unaligned-week",
+      rowIndex,
+      chicagoWeek,
+      denverWeek,
+      portlandWeek,
+      laWeek
+    };
+  }
+
+  if (!alignedMonthTag) {
+    return {
+      accept: false,
+      reason: "unaligned-month-tag",
+      rowIndex,
+      chicagoMonthTag,
+      denverMonthTag,
+      portlandMonthTag,
+      laMonthTag
+    };
+  }
+
+  if (!hasWorkingDays) {
+    return {
+      accept: false,
+      reason: "no-working-days",
+      rowIndex,
+      chicagoWeek,
+      weekEnding
+    };
+  }
+
+  if (!hasRealData) {
+    return {
+      accept: false,
+      reason: "no-real-data",
+      rowIndex,
+      chicagoWeek,
+      weekEnding
+    };
+  }
+
+  return {
+    accept: true,
+    rowIndex,
+    weekNumber: chicagoWeek,
+    weekEnding,
+    values: {
+      weekNumber: chicagoWeek,
+      monthTag: chicagoMonthTag,
+      scheduledAppts,
+      cancellations,
+      noShows,
+      reschedules
+    }
+  };
 }
 
 async function importCxnsSheet(sharedTable, ws, workingDaysMap) {
   const rows = sheetRows(ws);
   let imported = 0;
-  const weeks = [];
+  const weekEndings = [];
+  const acceptedRows = [];
+  const rejectedRows = [];
 
   for (let r = 12; r < rows.length; r += 1) {
     const row = rows[r] || [];
+    const parsed = buildCxnsValues(r + 1, row, workingDaysMap);
 
-    const weekNumber = toNumber(row[0]);
-    const monthTag = safeText(row[1]);
-    const weekEnding = weekEndingFromWeekNumber(weekNumber);
-
-    if (!weekNumber || !weekEnding) continue;
-
-    const chicagoScheduled = toNumber(row[2]);
-    const chicagoCancels = toNumber(row[3]);
-    const chicagoNoShows = toNumber(row[4]);
-    const chicagoReschedules = toNumber(row[5]);
-
-    const denverWeek = toNumber(row[8]);
-    const denverMonthTag = safeText(row[9]);
-    const denverScheduled = toNumber(row[10]);
-    const denverCancels = toNumber(row[11]);
-    const denverNoShows = toNumber(row[12]);
-    const denverReschedules = toNumber(row[13]);
-
-    const portlandWeek = toNumber(row[16]);
-    const portlandMonthTag = safeText(row[17]);
-    const portlandScheduled = toNumber(row[18]);
-    const portlandCancels = toNumber(row[19]);
-    const portlandNoShows = toNumber(row[20]);
-    const portlandReschedules = toNumber(row[21]);
-
-    const laWeek = toNumber(row[24]);
-    const laMonthTag = safeText(row[25]);
-    const laScheduled = toNumber(row[26]);
-    const laCancels = toNumber(row[27]);
-    const laNoShows = toNumber(row[28]);
-    const laReschedules = toNumber(row[29]);
-
-    const scheduledAppts = sumNumbers([
-      chicagoScheduled,
-      denverScheduled,
-      portlandScheduled,
-      laScheduled
-    ]);
-
-    const cancellations = sumNumbers([
-      chicagoCancels,
-      denverCancels,
-      portlandCancels,
-      laCancels
-    ]);
-
-    const noShows = sumNumbers([
-      chicagoNoShows,
-      denverNoShows,
-      portlandNoShows,
-      laNoShows
-    ]);
-
-    const reschedules = sumNumbers([
-      chicagoReschedules,
-      denverReschedules,
-      portlandReschedules,
-      laReschedules
-    ]);
-
-    const hasRealData = hasPositiveNumber(
-      scheduledAppts,
-      cancellations,
-      noShows,
-      reschedules
-    );
-
-    const alignedMonthTag =
-      monthTag &&
-      monthTag === denverMonthTag &&
-      monthTag === portlandMonthTag &&
-      monthTag === laMonthTag;
-
-    const alignedWeek =
-      weekNumber &&
-      weekNumber === denverWeek &&
-      weekNumber === portlandWeek &&
-      weekNumber === laWeek;
-
-    const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
-
-    if (!hasRealData || !alignedMonthTag || !alignedWeek || !hasWorkingDays) {
+    if (!parsed.accept) {
+      if (parsed.reason !== "missing-chicago-week-number") {
+        rejectedRows.push(parsed);
+      }
       continue;
     }
 
-    const values = {
-      weekNumber,
-      monthTag,
-      scheduledAppts,
-      cancellations,
-      noShows,
-      reschedules
-    };
-
-    await upsertSharedRecord(sharedTable, "CXNS", weekEnding, values, {
+    await upsertSharedRecord(sharedTable, "CXNS", parsed.weekEnding, parsed.values, {
       importSourceSheet: "CXNS",
-      importWeekNumber: weekNumber,
-      importMonthTag: monthTag
+      importWeekNumber: parsed.weekNumber,
+      importMonthTag: parsed.values.monthTag
     });
 
     imported += 1;
-    weeks.push(weekEnding);
+    weekEndings.push(parsed.weekEnding);
+    acceptedRows.push({
+      rowIndex: parsed.rowIndex,
+      weekNumber: parsed.weekNumber,
+      weekEnding: parsed.weekEnding,
+      monthTag: parsed.values.monthTag
+    });
   }
 
-  return { imported, weeks };
-}
-
-function excelDateToIso(value) {
-  if (!value && value !== 0) return null;
-
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
-  }
-
-  if (typeof value === "number") {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (!parsed) return null;
-    const yyyy = String(parsed.y).padStart(4, "0");
-    const mm = String(parsed.m).padStart(2, "0");
-    const dd = String(parsed.d).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-
-    const d = new Date(trimmed);
-    if (!Number.isNaN(d.getTime())) {
-      return d.toISOString().slice(0, 10);
-    }
-  }
-
-  return null;
+  return { imported, weekEndings, acceptedRows, rejectedRows };
 }
 
 async function importHolidaysSheet(referenceTable, ws) {
   const rows = sheetRows(ws);
   let imported = 0;
+  const acceptedRows = [];
+  const rejectedRows = [];
 
   for (let r = 1; r < rows.length; r += 1) {
     const row = rows[r] || [];
@@ -519,7 +732,18 @@ async function importHolidaysSheet(referenceTable, ws) {
     const monthTag = safeText(row[3]);
     const workingDays = toNumber(row[4]);
 
-    if (!holidayDate || !monthTag || workingDays == null) continue;
+    if (!holidayDate || !monthTag || workingDays == null) {
+      if (row.some((v) => v != null && v !== "")) {
+        rejectedRows.push({
+          rowIndex: r + 1,
+          reason: "missing-required-fields",
+          holidayDate,
+          monthTag,
+          workingDays
+        });
+      }
+      continue;
+    }
 
     const rowKey = monthTag;
 
@@ -539,9 +763,15 @@ async function importHolidaysSheet(referenceTable, ws) {
     );
 
     imported += 1;
+    acceptedRows.push({
+      rowIndex: r + 1,
+      holidayDate,
+      monthTag,
+      workingDays
+    });
   }
 
-  return { imported };
+  return { imported, acceptedRows, rejectedRows };
 }
 
 module.exports = async function (context, req) {
@@ -589,6 +819,7 @@ module.exports = async function (context, req) {
     const results = {
       workbookFile: fileName,
       workbookSheets: workbook.SheetNames,
+      workingDaysMap,
       regions: [],
       shared: [],
       reference: []
@@ -603,7 +834,9 @@ module.exports = async function (context, req) {
         sheet: sheetName,
         entity: result.entity,
         imported: result.imported,
-        weekEndings: result.weeks
+        weekEndings: result.weekEndings,
+        acceptedRows: result.acceptedRows,
+        rejectedRows: result.rejectedRows.slice(0, 15)
       });
     }
 
@@ -618,7 +851,9 @@ module.exports = async function (context, req) {
         sheet: "PT",
         page: "PT",
         imported: ptResult.imported,
-        weekEndings: ptResult.weeks
+        weekEndings: ptResult.weekEndings,
+        acceptedRows: ptResult.acceptedRows,
+        rejectedRows: ptResult.rejectedRows.slice(0, 15)
       });
     }
 
@@ -633,7 +868,9 @@ module.exports = async function (context, req) {
         sheet: "CXNS",
         page: "CXNS",
         imported: cxnsResult.imported,
-        weekEndings: cxnsResult.weeks
+        weekEndings: cxnsResult.weekEndings,
+        acceptedRows: cxnsResult.acceptedRows,
+        rejectedRows: cxnsResult.rejectedRows.slice(0, 15)
       });
     }
 
@@ -646,7 +883,9 @@ module.exports = async function (context, req) {
       results.reference.push({
         sheet: "Holidays",
         kind: "holidays",
-        imported: holidaysResult.imported
+        imported: holidaysResult.imported,
+        acceptedRows: holidaysResult.acceptedRows,
+        rejectedRows: holidaysResult.rejectedRows.slice(0, 15)
       });
     }
 
