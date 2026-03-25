@@ -27,13 +27,14 @@ function normalizeStatus(status) {
   return status || "draft";
 }
 
-function toLegacyShape(entity) {
+function mapRow(entity) {
   const values = parseValuesJson(entity.valuesJson);
 
   return {
     entity: entity.entity || entity.partitionKey,
     weekEnding: entity.weekEnding || entity.rowKey,
     status: normalizeStatus(entity.status),
+
     visitVolume: toNumber(values.totalVisits) ?? toNumber(entity.visitVolume) ?? 0,
     callVolume: toNumber(values.totalCalls) ?? toNumber(entity.callVolume) ?? 0,
     newPatients: toNumber(values.npActual) ?? toNumber(entity.newPatients) ?? 0,
@@ -42,43 +43,20 @@ function toLegacyShape(entity) {
       toNumber(values.cancellationRate) ?? toNumber(entity.cancellationRate) ?? 0,
     abandonedCallRate:
       toNumber(values.abandonmentRate) ?? toNumber(entity.abandonedCallRate) ?? 0,
-    updatedBy: entity.updatedBy || entity.submittedBy || entity.approvedBy || null,
-    updatedAt: entity.updatedAt || entity.importedAt || entity.approvedAt || null
+
+    updatedAt: entity.updatedAt || entity.importedAt || null
   };
 }
 
-function isFriday(isoDate) {
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  return d.getUTCDay() === 5;
-}
-
-function previousFridayForDate(isoDate) {
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  const day = d.getUTCDay();
-  const diff = (day + 2) % 7;
-  d.setUTCDate(d.getUTCDate() - diff);
-  return d.toISOString().slice(0, 10);
-}
-
-function dedupeWeeks(items) {
-  const fridayRows = new Map();
-  const nonFridayRows = [];
-
-  for (const item of items) {
-    if (isFriday(item.weekEnding)) {
-      fridayRows.set(item.weekEnding, item);
-    } else {
-      nonFridayRows.push(item);
-    }
-  }
-
-  const filteredNonFriday = nonFridayRows.filter((item) => {
-    const anchorFriday = previousFridayForDate(item.weekEnding);
-    return !fridayRows.has(anchorFriday);
-  });
-
-  return [...fridayRows.values(), ...filteredNonFriday].sort((a, b) =>
-    a.weekEnding < b.weekEnding ? 1 : -1
+// 🚨 THIS IS THE FIX
+function hasRealData(row) {
+  return (
+    (row.visitVolume ?? 0) > 0 ||
+    (row.callVolume ?? 0) > 0 ||
+    (row.newPatients ?? 0) > 0 ||
+    (row.noShowRate ?? 0) > 0 ||
+    (row.cancellationRate ?? 0) > 0 ||
+    (row.abandonedCallRate ?? 0) > 0
   );
 }
 
@@ -108,39 +86,39 @@ module.exports = async function (context, req) {
     if (!entity) {
       return {
         status: 400,
-        body: {
-          ok: false,
-          error: "Missing entity"
-        }
+        body: { ok: false, error: "Missing entity" }
       };
     }
 
     if (!access.isAdmin && access.entity !== entity) {
       return {
         status: 403,
-        body: {
-          ok: false,
-          error: "Forbidden"
-        }
+        body: { ok: false, error: "Forbidden" }
       };
     }
 
     const table = getTableClient(REGION_TABLE);
     const rawRows = await getRowsForEntity(table, entity);
 
-    let items = rawRows.map(toLegacyShape);
+    let items = rawRows.map(mapRow);
+
+    // 🚨 FILTER OUT EMPTY DRAFT ROWS
+    items = items.filter((row) => hasRealData(row));
 
     if (mode === "dateRange" && startDate && endDate) {
       items = items.filter(
         (item) => item.weekEnding >= startDate && item.weekEnding <= endDate
       );
-    } else {
-      items = items
-        .sort((a, b) => (a.weekEnding < b.weekEnding ? 1 : -1))
-        .slice(0, 8);
     }
 
-    items = dedupeWeeks(items);
+    // sort AFTER filtering
+    items = items.sort((a, b) =>
+      a.weekEnding < b.weekEnding ? 1 : -1
+    );
+
+    if (mode !== "dateRange") {
+      items = items.slice(0, 8);
+    }
 
     return {
       status: 200,
@@ -148,16 +126,6 @@ module.exports = async function (context, req) {
         ok: true,
         entity,
         count: items.length,
-        appliedFilter:
-          mode === "dateRange"
-            ? {
-                mode: "dateRange",
-                startDate,
-                endDate
-              }
-            : {
-                mode: "recent"
-              },
         items
       }
     };
