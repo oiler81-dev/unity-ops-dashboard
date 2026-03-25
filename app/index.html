@@ -2,717 +2,264 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>UnityMSK Operations Dashboard</title>
-  <link rel="stylesheet" href="./src/main.css" />
-  <style>
-    :root {
-      --bg-1: #031a2d;
-      --bg-2: #072743;
-      --panel: rgba(20, 54, 88, 0.95);
-      --panel-2: rgba(11, 33, 56, 0.82);
-      --border: rgba(255, 255, 255, 0.08);
-      --text: #e8f1fb;
-      --muted: #b8c9dc;
-      --accent: #6fb6ff;
-      --danger: #ff7d7d;
-      --success: #71d59c;
-      --warning: #ffd166;
-      --shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-      --radius: 20px;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      min-height: 100%;
-      font-family: Arial, Helvetica, sans-serif;
-      color: var(--text);
-      background:
-        radial-gradient(circle at top center, rgba(75, 145, 220, 0.18), transparent 25%),
-        linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 100%);
-    }
-
-    a {
-      color: var(--accent);
-    }
-
-    .app-shell {
-      min-height: 100vh;
-    }
-
-    .topbar {
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      background: rgba(3, 16, 28, 0.45);
-      backdrop-filter: blur(8px);
-    }
-
-    .topbar-inner {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 14px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: end;
-      gap: 18px;
-      flex-wrap: wrap;
-    }
-
-    .topbar-left,
-    .topbar-right {
-      display: flex;
-      align-items: end;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-
-    .brand-wrap {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-logo {
-      height: 30px;
-      width: auto;
-      display: block;
-    }
-
-    .brand-title {
-      font-size: 14px;
-      color: var(--muted);
-      letter-spacing: 0.02em;
-    }
-
-    .topbar-field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-width: 140px;
-    }
-
-    .topbar-field label,
-    .topbar-label {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .topbar-value {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    select,
-    input[type="date"] {
-      width: 100%;
-      min-height: 38px;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.08);
-      color: #fff;
-      padding: 8px 10px;
-      outline: none;
-    }
-
-    option {
-      color: #000;
-    }
-
-    .btn {
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
-      padding: 10px 14px;
-      cursor: pointer;
-      font-weight: 600;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 38px;
-      transition: 0.15s ease;
-    }
-
-    .btn:hover {
-      transform: translateY(-1px);
-    }
-
-    .btn-primary {
-      background: #f2f7ff;
-      color: #08223a;
-    }
-
-    .btn-secondary {
-      background: rgba(255,255,255,0.08);
-      color: #fff;
-    }
-
-    .btn-danger {
-      background: rgba(255, 125, 125, 0.14);
-      color: #fff;
-      border-color: rgba(255, 125, 125, 0.28);
-    }
-
-    .btn-small {
-      min-height: 34px;
-      padding: 8px 12px;
-      font-size: 12px;
-    }
-
-    .hero {
-      padding: 34px 20px 28px;
-      text-align: center;
-    }
-
-    .hero-inner {
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-
-    .hero-kicker {
-      color: var(--muted);
-      font-size: 15px;
-      margin-bottom: 6px;
-    }
-
-    .hero h1 {
-      margin: 0 0 12px;
-      font-size: 46px;
-      line-height: 1.05;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-
-    .hero p {
-      max-width: 840px;
-      margin: 0 auto;
-      color: var(--muted);
-      font-size: 16px;
-    }
-
-    .hero-actions {
-      margin-top: 24px;
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .content-grid {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 0 20px 36px;
-      display: grid;
-      grid-template-columns: 240px minmax(0, 1fr);
-      gap: 18px;
-      align-items: start;
-    }
-
-    .sidebar,
-    .main-panel {
-      border-radius: var(--radius);
-      background: var(--panel);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow);
-    }
-
-    .sidebar {
-      padding: 16px;
-      position: sticky;
-      top: 16px;
-    }
-
-    .sidebar-heading {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-
-    .sidebar-title {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 14px;
-    }
-
-    .nav-links {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .nav-link {
-      display: block;
-      padding: 10px 12px;
-      border-radius: 12px;
-      color: #d6e6f8;
-      text-decoration: none;
-      border: 1px solid transparent;
-    }
-
-    .nav-link:hover {
-      background: rgba(255,255,255,0.06);
-      border-color: rgba(255,255,255,0.06);
-    }
-
-    .nav-link.active {
-      background: rgba(111, 182, 255, 0.14);
-      border-color: rgba(111, 182, 255, 0.18);
-      color: #fff;
-      font-weight: 700;
-    }
-
-    .sidebar-meta {
-      margin-top: 18px;
-      padding-top: 16px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      display: grid;
-      gap: 14px;
-    }
-
-    .meta-label {
-      font-size: 12px;
-      color: var(--muted);
-      margin-bottom: 4px;
-    }
-
-    .meta-value {
-      font-weight: 700;
-    }
-
-    .main-panel {
-      padding: 18px;
-      min-width: 0;
-    }
-
-    .panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      gap: 18px;
-      flex-wrap: wrap;
-      margin-bottom: 18px;
-    }
-
-    .panel-title {
-      margin: 0 0 8px;
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-
-    .panel-subtitle {
-      margin: 0;
-      color: var(--muted);
-      max-width: 760px;
-    }
-
-    .header-sidecard {
-      min-width: 250px;
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 14px;
-    }
-
-    .header-sidecard .meta-block + .meta-block {
-      margin-top: 12px;
-    }
-
-    .header-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 14px;
-    }
-
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-
-    .kpi-card {
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 14px;
-      min-width: 0;
-    }
-
-    .kpi-label {
-      color: var(--muted);
-      font-size: 12px;
-      margin-bottom: 8px;
-    }
-
-    .kpi-value {
-      font-size: 28px;
-      font-weight: 800;
-      line-height: 1.1;
-    }
-
-    .kpi-meta {
-      margin-top: 8px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .kpi-status {
-      margin-top: 10px;
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 5px 8px;
-      font-size: 11px;
-      font-weight: 700;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-
-    .kpi-status.green {
-      color: #0e2f1a;
-      background: var(--success);
-    }
-
-    .kpi-status.red {
-      color: #3f1010;
-      background: var(--danger);
-    }
-
-    .kpi-status.yellow {
-      color: #3e2a00;
-      background: var(--warning);
-    }
-
-    .status-panel,
-    .section-card,
-    .debug-card {
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 16px;
-    }
-
-    .section-card + .section-card,
-    .status-panel + .debug-card,
-    .section-card + .debug-card {
-      margin-top: 16px;
-    }
-
-    .view-hidden {
-      display: none !important;
-    }
-
-    .toolbar-row {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 12px;
-      align-items: end;
-    }
-
-    .toolbar-field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-width: 0;
-    }
-
-    .toolbar-field label {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .toolbar-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: end;
-    }
-
-    .toolbar-hidden {
-      display: none !important;
-    }
-
-    .table-wrap {
-      overflow: auto;
-      width: 100%;
-    }
-
-    .trends-table {
-      width: 100%;
-      min-width: 980px;
-      border-collapse: collapse;
-    }
-
-    .trends-table th,
-    .trends-table td {
-      text-align: left;
-      padding: 11px 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      vertical-align: top;
-      white-space: nowrap;
-    }
-
-    .trends-table th {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-    }
-
-    .trends-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    details.debug-card summary {
-      cursor: pointer;
-      font-weight: 700;
-      user-select: none;
-    }
-
-    #debugJsonPanel {
-      margin: 12px 0 0;
-      white-space: pre-wrap;
-      word-break: break-word;
-      overflow: auto;
-      font-size: 12px;
-      line-height: 1.45;
-      color: #dce7f5;
-    }
-
-    @media (max-width: 1180px) {
-      .content-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .sidebar {
-        position: static;
-      }
-
-      .kpi-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .toolbar-row {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 760px) {
-      .hero h1 {
-        font-size: 34px;
-      }
-
-      .panel-title {
-        font-size: 26px;
-      }
-
-      .kpi-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .toolbar-row {
-        grid-template-columns: 1fr;
-      }
-
-      .topbar-inner {
-        align-items: start;
-      }
-    }
-  </style>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UnityMSK Ops Dashboard</title>
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div class="topbar-left">
-          <div class="brand-wrap">
-            <img src="./assets/unitymsk-logo.png" alt="UnityMSK" class="brand-logo" onerror="this.style.display='none';" />
-            <div class="brand-title">UnityMSK Operations Dashboard</div>
-          </div>
-        </div>
-
-        <div class="topbar-right">
-          <div class="topbar-field">
-            <label for="weekEndingSelect">Week Ending</label>
-            <select id="weekEndingSelect"></select>
-          </div>
-
-          <div class="topbar-field">
-            <div class="topbar-label">Signed in as</div>
-            <div id="signedInUserText" class="topbar-value">Loading...</div>
-          </div>
-
-          <a id="signInButton" class="btn btn-secondary" href="/.auth/login/aad">Sign In</a>
-          <a id="signOutButton" class="btn btn-secondary" href="/.auth/logout">Sign Out</a>
-        </div>
+  <div id="appShell">
+    <aside id="sidebar">
+      <div style="margin-bottom:16px; text-align:center;">
+        <img
+          src="./assets/logos/unitymsk.png"
+          alt="UnityMSK"
+          style="max-width:100%; max-height:56px; object-fit:contain; display:block; margin:0 auto 10px;"
+        />
       </div>
-    </header>
 
-    <section class="hero">
-      <div class="hero-inner">
-        <div class="hero-kicker">UnityMSK</div>
-        <h1>Operations Dashboard</h1>
-        <p>
-          A single source of truth for weekly operational performance across LAOSS, NES, SpineOne, MRO and UnityMSK executive reporting.
-        </p>
-        <div class="hero-actions">
-          <button id="goToMyRegionButton" class="btn btn-primary" type="button">Go to My Region</button>
-          <button id="executiveSummaryButton" class="btn btn-secondary" type="button">Executive Summary</button>
-          <button id="openTrendsButton" class="btn btn-secondary" type="button">Trends</button>
-        </div>
-      </div>
-    </section>
+      <button id="navDashboardBtn" type="button">Dashboard</button>
+      <button id="navEntryBtn" type="button">Weekly Entry</button>
+      <button id="navExecutiveBtn" type="button">Executive Summary</button>
+      <button id="navTrendsBtn" type="button">Trends</button>
+      <button id="navImportBtn" type="button">Admin Import</button>
+    </aside>
 
-    <main class="content-grid">
-      <aside class="sidebar" id="dashboardNav">
-        <div class="sidebar-heading">Navigation</div>
-        <div class="sidebar-title">Dashboard</div>
+    <div id="mainContent">
+      <header id="topbar">
+        <h1>UnityMSK Ops Dashboard</h1>
+        <div id="userInfo">Loading...</div>
+      </header>
 
-        <nav class="nav-links">
-          <a class="nav-link active" data-route="dashboard" href="#">Executive Summary</a>
-          <a class="nav-link" data-route="region" data-entity="LAOSS" href="#">LAOSS</a>
-          <a class="nav-link" data-route="region" data-entity="NES" href="#">NES</a>
-          <a class="nav-link" data-route="region" data-entity="SpineOne" href="#">SpineOne</a>
-          <a class="nav-link" data-route="region" data-entity="MRO" href="#">MRO</a>
-          <a class="nav-link" data-route="shared" data-page="PT" href="#">PT</a>
-          <a class="nav-link" data-route="shared" data-page="CXNS" href="#">CXNS</a>
-          <a class="nav-link" data-route="shared" data-page="Capacity" href="#">Capacity</a>
-          <a class="nav-link" data-route="shared" data-page="Productivity Builder" href="#">Productivity Builder</a>
-          <a class="nav-link" data-route="trends" href="#">Trends</a>
-        </nav>
+      <main>
+        <section id="dashboardView">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
+                <label for="dashboardPeriodType">Period</label>
+                <select id="dashboardPeriodType">
+                  <option value="currentWeek" selected>Current Week</option>
+                  <option value="lastWeek">Last Week</option>
+                  <option value="mtd">Month to Date</option>
+                  <option value="lastMonth">Last Month</option>
+                  <option value="rolling4">Rolling 4 Weeks</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+              </div>
 
-        <div class="sidebar-meta">
-          <div>
-            <div class="meta-label">Assigned Entity</div>
-            <div id="assignedEntityText" class="meta-value">Loading...</div>
-          </div>
-          <div>
-            <div class="meta-label">Role</div>
-            <div id="roleText" class="meta-value">Loading...</div>
-          </div>
-        </div>
-      </aside>
+              <div>
+                <label for="dashboardCompareAgainst">Compare Against</label>
+                <select id="dashboardCompareAgainst">
+                  <option value="priorPeriod" selected>Prior Period</option>
+                  <option value="budget">Budget</option>
+                  <option value="target">Target</option>
+                  <option value="forecast">Forecast</option>
+                </select>
+              </div>
 
-      <section class="main-panel">
-        <div class="panel-header">
-          <div>
-            <h2 id="dashboardTitle" class="panel-title">Executive Summary</h2>
-            <p id="dashboardSubtitle" class="panel-subtitle">
-              Weekly companywide KPI overview with trends, target comparisons, and submission visibility.
-            </p>
-          </div>
+              <div>
+                <label for="dashboardEntityScope">Entity Scope</label>
+                <select id="dashboardEntityScope">
+                  <option value="ALL" selected>All Entities</option>
+                  <option value="LAOSS">LAOSS</option>
+                  <option value="NES">NES</option>
+                  <option value="SpineOne">SpineOne</option>
+                  <option value="MRO">MRO</option>
+                </select>
+              </div>
 
-          <div class="header-sidecard">
-            <div class="meta-block">
-              <div class="meta-label">Week Ending</div>
-              <div id="sidebarWeekEndingText" class="meta-value">Loading...</div>
+              <div id="dashboardWeekWrap">
+                <label for="dashboardWeekEnding">Anchor Week Ending</label>
+                <input type="date" id="dashboardWeekEnding" />
+              </div>
+
+              <div id="dashboardCustomStartWrap" style="display:none;">
+                <label for="dashboardCustomStart">Custom Start</label>
+                <input type="date" id="dashboardCustomStart" />
+              </div>
+
+              <div id="dashboardCustomEndWrap" style="display:none;">
+                <label for="dashboardCustomEnd">Custom End</label>
+                <input type="date" id="dashboardCustomEnd" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="loadDashboardBtn" type="button">Load Dashboard</button>
+              </div>
             </div>
 
-            <div class="meta-block">
-              <div class="meta-label">Submission Status</div>
-              <div id="submissionStatusText" class="meta-value">Draft</div>
+            <div id="dashboardSummaryText" style="margin-bottom:12px;"></div>
+            <div id="dashboardBenchmarkNotice" style="margin-bottom:12px;"></div>
+
+            <div id="dashboardCards" class="cardGrid"></div>
+
+            <div class="panel" style="margin-top:16px;">
+              <h3>Entity Performance</h3>
+              <div id="dashboardEntities"></div>
             </div>
 
-            <div class="header-actions">
-              <button id="saveButton" class="btn btn-primary btn-small" type="button">Save</button>
-              <button id="submitWeekButton" class="btn btn-secondary btn-small" type="button">Submit Week</button>
+            <div class="panel" style="margin-top:16px;">
+              <h3>Alerts</h3>
+              <div id="dashboardAlerts"></div>
             </div>
-          </div>
-        </div>
 
-        <section id="standardView">
-          <div id="dashboardCards" class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-label">Total Visits</div>
-              <div class="kpi-value">—</div>
+            <div class="panel" style="margin-top:16px;">
+              <h3>Entity Snapshot</h3>
+              <div id="dashboardSnapshot"></div>
             </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Visits / Day</div>
-              <div class="kpi-value">—</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">New Patients</div>
-              <div class="kpi-value">—</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Surgical Cases</div>
-              <div class="kpi-value">—</div>
-            </div>
-          </div>
 
-          <div id="dashboardStatusPanel" class="status-panel">
-            Loading dashboard...
+            <details class="debugPanel">
+              <summary>Dashboard Debug Output</summary>
+              <pre id="dashboardDebugOutput" class="debugOutput"></pre>
+            </details>
           </div>
         </section>
 
-        <section id="trendsView" class="view-hidden">
-          <div class="section-card">
-            <div class="toolbar-row">
-              <div class="toolbar-field">
+        <section id="entryView" style="display:none;">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
+                <label for="entitySelect">Entity</label>
+                <select id="entitySelect"></select>
+              </div>
+
+              <div>
+                <label for="weekEnding">Week Ending</label>
+                <input type="date" id="weekEnding" />
+              </div>
+            </div>
+
+            <div id="entryBrandWrap" style="margin-bottom:16px;"></div>
+
+            <section id="kpiForm"></section>
+
+            <div class="buttonRow">
+              <button id="saveBtn" type="button">Save</button>
+              <button id="submitBtn" type="button">Submit</button>
+              <button id="approveBtn" type="button">Approve</button>
+            </div>
+
+            <div id="statusMessage" class="statusMessage"></div>
+
+            <details class="debugPanel">
+              <summary>Debug Output</summary>
+              <pre id="debugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="executiveView" style="display:none;">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
+                <label for="executiveWeekEnding">Week Ending</label>
+                <input type="date" id="executiveWeekEnding" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="loadExecutiveBtn" type="button">Load Summary</button>
+              </div>
+            </div>
+
+            <div id="executiveCards" class="cardGrid"></div>
+
+            <div class="panel" style="margin-top:16px;">
+              <h3>Approved Regions</h3>
+              <div id="executiveRegions"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Executive Debug Output</summary>
+              <pre id="executiveDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="trendsView" style="display:none;">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
                 <label for="trendsEntitySelect">Entity</label>
                 <select id="trendsEntitySelect"></select>
               </div>
 
-              <div class="toolbar-field">
+              <div>
                 <label for="trendsRangeMode">Range Mode</label>
                 <select id="trendsRangeMode">
-                  <option value="recent">Recent Weeks</option>
-                  <option value="custom">Custom Date Range</option>
+                  <option value="recent" selected>Recent Weeks</option>
+                  <option value="dateRange">Specific Date Range</option>
                 </select>
               </div>
 
-              <div class="toolbar-field" id="trendsWeeksWrap">
-                <label for="trendsWeeksSelect">Weeks</label>
-                <select id="trendsWeeksSelect">
-                  <option value="4">4</option>
-                  <option value="8" selected>8</option>
-                  <option value="12">12</option>
-                  <option value="26">26</option>
+              <div id="trendsWeeksWrap">
+                <label for="trendsLimit">Weeks</label>
+                <select id="trendsLimit">
+                  <option value="8">8</option>
+                  <option value="12" selected>12</option>
+                  <option value="16">16</option>
+                  <option value="24">24</option>
                   <option value="52">52</option>
                 </select>
               </div>
 
-              <div class="toolbar-field toolbar-hidden" id="trendsStartWrap">
+              <div id="trendsStartWrap" style="display:none;">
                 <label for="trendsStartDate">Start Date</label>
-                <input id="trendsStartDate" type="date" />
+                <input type="date" id="trendsStartDate" />
               </div>
 
-              <div class="toolbar-field toolbar-hidden" id="trendsEndWrap">
+              <div id="trendsEndWrap" style="display:none;">
                 <label for="trendsEndDate">End Date</label>
-                <input id="trendsEndDate" type="date" />
+                <input type="date" id="trendsEndDate" />
               </div>
 
-              <div class="toolbar-actions">
-                <button id="loadTrendsButton" class="btn btn-primary btn-small" type="button">Load Trends</button>
+              <div class="buttonAlignBottom">
+                <button id="loadTrendsBtn" type="button">Load Trends</button>
               </div>
             </div>
-          </div>
 
-          <div id="trendsCards" class="kpi-grid"></div>
+            <div id="trendsBrandWrap" style="margin-bottom:16px;"></div>
 
-          <div class="section-card">
-            <div style="font-weight:700; margin-bottom:12px;">Trend History</div>
-            <div id="trendsTableWrap" class="table-wrap"></div>
+            <div id="trendsCards" class="cardGrid"></div>
+
+            <div class="panel" style="margin-top:16px;">
+              <h3>Trend History</h3>
+              <div id="trendsTableWrap"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Trends Debug Output</summary>
+              <pre id="trendsDebugOutput" class="debugOutput"></pre>
+            </details>
           </div>
         </section>
 
-        <details class="debug-card">
-          <summary>Debug JSON</summary>
-          <pre id="debugJsonPanel">{}</pre>
-        </details>
-      </section>
-    </main>
+        <section id="importView" style="display:none;">
+          <div class="panel">
+            <h3>Admin Workbook Import</h3>
+            <p>Upload the locked workbook to backfill historical weekly data into the dashboard.</p>
+
+            <div class="fieldRow">
+              <div style="min-width:320px;">
+                <label for="importFile">Workbook File</label>
+                <input type="file" id="importFile" accept=".xlsx,.xls" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="runImportBtn" type="button">Run Import</button>
+              </div>
+            </div>
+
+            <div id="importStatusMessage" class="statusMessage"></div>
+
+            <details class="debugPanel">
+              <summary>Import Debug Output</summary>
+              <pre id="importDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
   </div>
 
-  <script type="module" src="./src/app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
