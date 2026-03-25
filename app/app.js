@@ -301,6 +301,7 @@ function showTrendsView() {
   document.getElementById("entryView").style.display = "none";
   document.getElementById("executiveView").style.display = "none";
   document.getElementById("trendsView").style.display = "";
+  syncTrendsRangeUi();
 }
 
 function renderExecutiveCards(summary) {
@@ -498,9 +499,13 @@ function renderTrendsTable(result) {
 
 function syncTrendsRangeUi() {
   const mode = document.getElementById("trendsRangeMode").value;
-  document.getElementById("trendsWeeksWrap").style.display = mode === "recent" ? "" : "none";
-  document.getElementById("trendsStartWrap").style.display = mode === "dates" ? "" : "none";
-  document.getElementById("trendsEndWrap").style.display = mode === "dates" ? "" : "none";
+  const weeksWrap = document.getElementById("trendsWeeksWrap");
+  const startWrap = document.getElementById("trendsStartWrap");
+  const endWrap = document.getElementById("trendsEndWrap");
+
+  weeksWrap.style.display = mode === "recent" ? "" : "block";
+  startWrap.style.display = mode === "dates" ? "block" : "none";
+  endWrap.style.display = mode === "dates" ? "block" : "none";
 }
 
 async function loadTrends() {
@@ -641,15 +646,22 @@ async function loadTrends() {
     });
 
     document.getElementById("trendsLimit").addEventListener("change", async () => {
+      if (document.getElementById("trendsRangeMode").value === "recent") {
+        try {
+          await loadTrends();
+        } catch (error) {
+          setTrendsDebug(String(error));
+        }
+      }
+    });
+
+    document.getElementById("trendsRangeMode").addEventListener("change", async () => {
+      syncTrendsRangeUi();
       try {
         await loadTrends();
       } catch (error) {
         setTrendsDebug(String(error));
       }
-    });
-
-    document.getElementById("trendsRangeMode").addEventListener("change", () => {
-      syncTrendsRangeUi();
     });
 
     document.getElementById("trendsStartDate").addEventListener("change", async () => {
