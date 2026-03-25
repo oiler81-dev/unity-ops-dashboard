@@ -4,6 +4,7 @@ const {
   getMonthDateRange,
   getPreviousMonthDateRange,
   getWorkingDaysBetween,
+  getWeekRangeFromWeekEnding,
   prorateMonthlyValue,
   normalizeEntityLabel,
   safeNumber
@@ -54,13 +55,20 @@ module.exports = async function (context, req) {
       safeNumber(record?.workingDaysInMonth) ||
       getWorkingDaysBetween(range.startDate, range.endDate);
 
-    if (period === "currentWeek") {
-      workingDaysUsed = Number.isFinite(daysInPeriod)
-        ? daysInPeriod
-        : getWorkingDaysBetween(
-            range.weekStartDate || weekEnding,
-            weekEnding
-          );
+    if (period === "currentWeek" || period === "lastWeek") {
+      if (Number.isFinite(daysInPeriod)) {
+        workingDaysUsed = daysInPeriod;
+      } else {
+        const weekRange = getWeekRangeFromWeekEnding(weekEnding);
+
+        const effectiveStart =
+          weekRange.startDate < range.startDate ? range.startDate : weekRange.startDate;
+
+        const effectiveEnd =
+          weekRange.endDate > range.endDate ? range.endDate : weekRange.endDate;
+
+        workingDaysUsed = getWorkingDaysBetween(effectiveStart, effectiveEnd);
+      }
     } else if (period === "mtd") {
       workingDaysUsed = getWorkingDaysBetween(range.startDate, weekEnding);
     } else if (period === "lastMonth") {
@@ -85,8 +93,16 @@ module.exports = async function (context, req) {
         workingDaysUsed,
         visitBudgetMonthly,
         newPatientsBudgetMonthly,
-        visitBudgetProrated: prorateMonthlyValue(visitBudgetMonthly, workingDaysUsed, workingDaysInMonth),
-        newPatientsBudgetProrated: prorateMonthlyValue(newPatientsBudgetMonthly, workingDaysUsed, workingDaysInMonth)
+        visitBudgetProrated: prorateMonthlyValue(
+          visitBudgetMonthly,
+          workingDaysUsed,
+          workingDaysInMonth
+        ),
+        newPatientsBudgetProrated: prorateMonthlyValue(
+          newPatientsBudgetMonthly,
+          workingDaysUsed,
+          workingDaysInMonth
+        )
       }
     };
   } catch (error) {
