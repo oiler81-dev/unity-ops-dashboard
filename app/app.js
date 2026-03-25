@@ -61,6 +61,12 @@ function setExecutiveDebug(data) {
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
+function setTrendsDebug(data) {
+  const el = document.getElementById("trendsDebugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
 function getDefaultWeekEnding() {
   const d = new Date();
   const diff = (5 - d.getDay() + 7) % 7;
@@ -93,8 +99,32 @@ function setupEntityDropdown(userData) {
   }
 }
 
+function setupTrendsEntityDropdown(userData) {
+  const select = document.getElementById("trendsEntitySelect");
+  select.innerHTML = "";
+
+  if (userData.access.isAdmin) {
+    ENTITIES.forEach((entity) => {
+      const option = document.createElement("option");
+      option.value = entity;
+      option.textContent = entity;
+      select.appendChild(option);
+    });
+  } else {
+    const option = document.createElement("option");
+    option.value = userData.access.entity;
+    option.textContent = userData.access.entity;
+    select.appendChild(option);
+    select.disabled = true;
+  }
+}
+
 function getSelectedEntity() {
   return document.getElementById("entitySelect").value;
+}
+
+function getSelectedTrendsEntity() {
+  return document.getElementById("trendsEntitySelect").value;
 }
 
 function renderForm() {
@@ -234,11 +264,19 @@ async function approveWeek() {
 function showEntryView() {
   document.getElementById("entryView").style.display = "";
   document.getElementById("executiveView").style.display = "none";
+  document.getElementById("trendsView").style.display = "none";
 }
 
 function showExecutiveView() {
   document.getElementById("entryView").style.display = "none";
   document.getElementById("executiveView").style.display = "";
+  document.getElementById("trendsView").style.display = "none";
+}
+
+function showTrendsView() {
+  document.getElementById("entryView").style.display = "none";
+  document.getElementById("executiveView").style.display = "none";
+  document.getElementById("trendsView").style.display = "";
 }
 
 function renderExecutiveCards(summary) {
@@ -337,12 +375,112 @@ async function loadExecutiveSummary() {
   setExecutiveDebug(result);
 }
 
+function renderTrendsCards(result) {
+  const cards = document.getElementById("trendsCards");
+  cards.innerHTML = "";
+
+  const items = result.items || [];
+  const latest = items.length ? items[items.length - 1] : null;
+  const previous = items.length > 1 ? items[items.length - 2] : null;
+
+  const formatDelta = (current, prior) => {
+    if (current == null) return "-";
+    if (prior == null) return `${current}`;
+    const diff = Number(current) - Number(prior);
+    return `${current} (${diff >= 0 ? "+" : ""}${diff})`;
+  };
+
+  const cardData = [
+    {
+      label: "Weeks Loaded",
+      value: items.length
+    },
+    {
+      label: "Latest Visit Volume",
+      value: latest ? formatDelta(latest.visitVolume, previous?.visitVolume) : "-"
+    },
+    {
+      label: "Latest Call Volume",
+      value: latest ? formatDelta(latest.callVolume, previous?.callVolume) : "-"
+    },
+    {
+      label: "Latest New Patients",
+      value: latest ? formatDelta(latest.newPatients, previous?.newPatients) : "-"
+    }
+  ];
+
+  cardData.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "summaryCard";
+    div.innerHTML = `
+      <h3>${item.label}</h3>
+      <div class="value">${item.value}</div>
+    `;
+    cards.appendChild(div);
+  });
+}
+
+function renderTrendsTable(result) {
+  const wrap = document.getElementById("trendsTableWrap");
+  const items = result.items || [];
+
+  if (!items.length) {
+    wrap.innerHTML = "<p>No trend data found for this entity.</p>";
+    return;
+  }
+
+  const rows = items.slice().reverse().map((item) => `
+    <tr>
+      <td>${item.weekEnding}</td>
+      <td>${item.visitVolume}</td>
+      <td>${item.callVolume}</td>
+      <td>${item.newPatients}</td>
+      <td>${item.noShowRate}%</td>
+      <td>${item.cancellationRate}%</td>
+      <td>${item.abandonedCallRate}%</td>
+      <td>${item.status}</td>
+    </tr>
+  `).join("");
+
+  wrap.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Week Ending</th>
+          <th>Visit Volume</th>
+          <th>Call Volume</th>
+          <th>New Patients</th>
+          <th>No Show Rate</th>
+          <th>Cancellation Rate</th>
+          <th>Abandoned Call Rate</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+async function loadTrends() {
+  const entity = getSelectedTrendsEntity();
+  const limit = document.getElementById("trendsLimit").value;
+
+  const result = await apiGet(
+    `/api/trends?entity=${encodeURIComponent(entity)}&limit=${encodeURIComponent(limit)}`
+  );
+
+  renderTrendsCards(result);
+  renderTrendsTable(result);
+  setTrendsDebug(result);
+}
+
 (async function init() {
   try {
     currentUser = await apiGet("/api/me");
 
     renderUser(currentUser);
     setupEntityDropdown(currentUser);
+    setupTrendsEntityDropdown(currentUser);
     renderForm();
 
     const weekInput = document.getElementById("weekEnding");
@@ -398,12 +536,22 @@ async function loadExecutiveSummary() {
     });
 
     document.getElementById("navEntryBtn").addEventListener("click", showEntryView);
+
     document.getElementById("navExecutiveBtn").addEventListener("click", async () => {
       showExecutiveView();
       try {
         await loadExecutiveSummary();
       } catch (error) {
         setExecutiveDebug(String(error));
+      }
+    });
+
+    document.getElementById("navTrendsBtn").addEventListener("click", async () => {
+      showTrendsView();
+      try {
+        await loadTrends();
+      } catch (error) {
+        setTrendsDebug(String(error));
       }
     });
 
@@ -415,8 +563,33 @@ async function loadExecutiveSummary() {
       }
     });
 
+    document.getElementById("loadTrendsBtn").addEventListener("click", async () => {
+      try {
+        await loadTrends();
+      } catch (error) {
+        setTrendsDebug(String(error));
+      }
+    });
+
+    document.getElementById("trendsEntitySelect").addEventListener("change", async () => {
+      try {
+        await loadTrends();
+      } catch (error) {
+        setTrendsDebug(String(error));
+      }
+    });
+
+    document.getElementById("trendsLimit").addEventListener("change", async () => {
+      try {
+        await loadTrends();
+      } catch (error) {
+        setTrendsDebug(String(error));
+      }
+    });
+
     await loadWeek();
     await loadExecutiveSummary();
+    await loadTrends();
   } catch (error) {
     setStatus(error.message || "Failed to load app", true);
     setDebug(String(error));
