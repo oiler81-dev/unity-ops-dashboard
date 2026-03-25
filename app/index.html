@@ -44,7 +44,11 @@
             </div>
 
             <div id="statusMessage" class="statusMessage"></div>
-            <pre id="debugOutput" class="debugOutput"></pre>
+
+            <details class="debugPanel" open>
+              <summary>Debug Output</summary>
+              <pre id="debugOutput" class="debugOutput"></pre>
+            </details>
           </div>
         </section>
 
@@ -67,7 +71,10 @@
               <div id="executiveRegions"></div>
             </div>
 
-            <pre id="executiveDebugOutput" class="debugOutput"></pre>
+            <details class="debugPanel">
+              <summary>Executive Debug Output</summary>
+              <pre id="executiveDebugOutput" class="debugOutput"></pre>
+            </details>
           </div>
         </section>
       </main>
