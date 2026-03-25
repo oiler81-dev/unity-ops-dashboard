@@ -199,3 +199,10 @@ button:disabled {
   color: #ff6b6b;
   font-weight: bold;
 }
+
+.actionBtn {
+  margin-right: 6px;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
