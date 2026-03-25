@@ -12,6 +12,7 @@
       <h2>UnityMSK</h2>
       <button id="navEntryBtn" type="button">Weekly Entry</button>
       <button id="navExecutiveBtn" type="button">Executive Summary</button>
+      <button id="navTrendsBtn" type="button">Trends</button>
     </aside>
 
     <div id="mainContent">
@@ -45,7 +46,7 @@
 
             <div id="statusMessage" class="statusMessage"></div>
 
-            <details class="debugPanel" open>
+            <details class="debugPanel">
               <summary>Debug Output</summary>
               <pre id="debugOutput" class="debugOutput"></pre>
             </details>
@@ -74,6 +75,41 @@
             <details class="debugPanel">
               <summary>Executive Debug Output</summary>
               <pre id="executiveDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="trendsView" style="display:none;">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
+                <label for="trendsEntitySelect">Entity</label>
+                <select id="trendsEntitySelect"></select>
+              </div>
+              <div>
+                <label for="trendsLimit">Weeks</label>
+                <select id="trendsLimit">
+                  <option value="8">8</option>
+                  <option value="12" selected>12</option>
+                  <option value="16">16</option>
+                  <option value="24">24</option>
+                </select>
+              </div>
+              <div class="buttonAlignBottom">
+                <button id="loadTrendsBtn" type="button">Load Trends</button>
+              </div>
+            </div>
+
+            <div id="trendsCards" class="cardGrid"></div>
+
+            <div class="panel" style="margin-top:16px;">
+              <h3>Trend History</h3>
+              <div id="trendsTableWrap"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Trends Debug Output</summary>
+              <pre id="trendsDebugOutput" class="debugOutput"></pre>
             </details>
           </div>
         </section>
