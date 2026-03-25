@@ -2,14 +2,15 @@ const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
-const REGION_TABLE = "WeeklyRegionData";
+const TABLE_NAME = "WeeklyRegionData";
 
-function parseValuesJson(valuesJson) {
-  if (!valuesJson) return {};
+function parseJsonSafely(value, fallback = {}) {
+  if (!value) return fallback;
+
   try {
-    return typeof valuesJson === "string" ? JSON.parse(valuesJson) : valuesJson;
+    return typeof value === "string" ? JSON.parse(value) : value;
   } catch {
-    return {};
+    return fallback;
   }
 }
 
@@ -41,7 +42,7 @@ module.exports = async function (context, req) {
       };
     }
 
-    const table = getTableClient(REGION_TABLE);
+    const table = getTableClient(TABLE_NAME);
 
     let record = null;
     try {
@@ -52,6 +53,8 @@ module.exports = async function (context, req) {
       }
     }
 
+    const values = record ? parseJsonSafely(record.valuesJson, {}) : {};
+
     return {
       status: 200,
       body: {
@@ -59,10 +62,12 @@ module.exports = async function (context, req) {
         found: !!record,
         entity,
         weekEnding,
-        values: record ? parseValuesJson(record.valuesJson) : {},
+        values,
+        raw: record || null,
         source: record?.source || null,
         status: record?.status || null,
-        updatedAt: record?.updatedAt || record?.importedAt || null
+        importedAt: record?.importedAt || null,
+        updatedAt: record?.updatedAt || null
       }
     };
   } catch (error) {
@@ -72,7 +77,7 @@ module.exports = async function (context, req) {
       status: 500,
       body: {
         ok: false,
-        error: "Failed to load weekly data",
+        error: "Failed to load weekly region data",
         details: error.message
       }
     };
