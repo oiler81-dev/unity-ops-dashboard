@@ -9,9 +9,13 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access.allowed) return forbidden();
+    if (!access.allowed) {
+      return forbidden();
+    }
 
-    const { weekEnding, entity } = req.body || {};
+    const body = req.body || {};
+    const weekEnding = body.weekEnding;
+    const entity = body.entity;
 
     if (!weekEnding || !entity) {
       return badRequest("Missing fields");
@@ -26,7 +30,7 @@ module.exports = async function (context, req) {
     let record;
     try {
       record = await client.getEntity(entity, weekEnding);
-    } catch {
+    } catch (error) {
       return badRequest("No data found to submit");
     }
 
@@ -38,11 +42,13 @@ module.exports = async function (context, req) {
 
     return ok({
       ok: true,
-      message: "Submitted successfully"
+      message: "Submitted successfully",
+      entity,
+      weekEnding,
+      status: "submitted"
     });
-
   } catch (error) {
-    context.log.error(error);
-    return serverError(error);
+    context.log.error("submit-week failed", error);
+    return serverError(error, "Failed to submit week");
   }
 };
