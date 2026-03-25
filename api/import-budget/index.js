@@ -33,16 +33,15 @@ function pickFirstSheet(workbook, names) {
 }
 
 function sheetRows(sheet) {
-  return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, blankrows: false });
+  return XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: null,
+    blankrows: false
+  });
 }
 
 function normalizeText(value) {
   return String(value || "").trim();
-}
-
-function isMonthCell(value) {
-  const m = normalizeMonthLabel(value);
-  return !!m;
 }
 
 function upsertPayload(base, sourceSheet, importFileName) {
@@ -74,14 +73,12 @@ function parseBudgetVMonthlyResultsVisitBudgets(sheet) {
       continue;
     }
 
-    const np = safeNumber(row[2]);
-    const established = safeNumber(row[3]);
-    const pt = safeNumber(row[4]);
-    const surgery = safeNumber(row[5]);
+    const np = safeNumber(row[2]) || 0;
+    const established = safeNumber(row[3]) || 0;
+    const pt = safeNumber(row[4]) || 0;
+    const surgery = safeNumber(row[5]) || 0;
 
-    const visitBudgetMonthly = [np, established, pt, surgery].reduce((sum, value) => {
-      return sum + (Number.isFinite(value) ? value : 0);
-    }, 0);
+    const visitBudgetMonthly = np + established + pt + surgery;
 
     items.push({
       entity,
@@ -151,7 +148,6 @@ function parseExpectedVisitBudgetSheet(sheet) {
 
     const hasMonth = Object.keys(map).some((k) => k === "month");
     const hasEntity = Object.keys(map).some((k) => k === "entity" || k === "region" || k === "practice");
-    const hasCategory = Object.keys(map).some((k) => k.includes("category"));
     const hasBudget = Object.keys(map).some((k) => k.includes("budget"));
 
     if (hasMonth && hasEntity && hasBudget) {
@@ -169,17 +165,13 @@ function parseExpectedVisitBudgetSheet(sheet) {
   const entityIdx = headerMap.entity ?? headerMap.region ?? headerMap.practice;
   const categoryIdx = headerMap.category ?? headerMap["visit category"] ?? headerMap["volume category"];
   const budgetIdx =
-    headerMap["budget"] ??
+    headerMap.budget ??
     headerMap["volume budget"] ??
     headerMap["visit budget"] ??
     headerMap["monthly budget"] ??
     headerMap["budget amount"];
 
-  if (
-    monthIdx == null ||
-    entityIdx == null ||
-    budgetIdx == null
-  ) {
+  if (monthIdx == null || entityIdx == null || budgetIdx == null) {
     return [];
   }
 
@@ -200,6 +192,7 @@ function parseExpectedVisitBudgetSheet(sheet) {
     if (!monthKey) continue;
 
     const key = `${entity}|${monthKey}`;
+
     if (!grouped.has(key)) {
       grouped.set(key, {
         entity,
@@ -249,7 +242,7 @@ function parseExpectedNpBudgetSheet(sheet) {
   const monthIdx = headerMap.month;
   const entityIdx = headerMap.entity ?? headerMap.region ?? headerMap.practice;
   const budgetIdx =
-    headerMap["budget"] ??
+    headerMap.budget ??
     headerMap["new patient budget"] ??
     headerMap["np budget"] ??
     headerMap["monthly budget"] ??
@@ -321,11 +314,7 @@ async function upsertBudgetRows(table, visitRows, npRows, sourceMeta) {
 
   for (const item of merged.values()) {
     await table.upsertEntity(
-      upsertPayload(
-        item,
-        sourceMeta.sourceSheet,
-        sourceMeta.importFileName
-      )
+      upsertPayload(item, sourceMeta.sourceSheet, sourceMeta.importFileName)
     );
     written += 1;
   }
@@ -385,32 +374,25 @@ module.exports = async function (context, req) {
     let npRows = [];
 
     if (visitSheetInfo.sheet) {
-      if (visitSheetInfo.name === "Budget V. Monthly Results") {
-        visitRows = parseBudgetVMonthlyResultsVisitBudgets(visitSheetInfo.sheet);
-      } else {
-        visitRows = parseExpectedVisitBudgetSheet(visitSheetInfo.sheet);
-      }
+      visitRows =
+        visitSheetInfo.name === "Budget V. Monthly Results"
+          ? parseBudgetVMonthlyResultsVisitBudgets(visitSheetInfo.sheet)
+          : parseExpectedVisitBudgetSheet(visitSheetInfo.sheet);
     }
 
     if (npSheetInfo.sheet) {
-      if (npSheetInfo.name === "Budget V. Monthly Results") {
-        npRows = parseBudgetVMonthlyResultsNpBudgets(npSheetInfo.sheet);
-      } else {
-        npRows = parseExpectedNpBudgetSheet(npSheetInfo.sheet);
-      }
+      npRows =
+        npSheetInfo.name === "Budget V. Monthly Results"
+          ? parseBudgetVMonthlyResultsNpBudgets(npSheetInfo.sheet)
+          : parseExpectedNpBudgetSheet(npSheetInfo.sheet);
     }
 
     const table = getTableClient(BUDGET_TABLE);
 
-    const written = await upsertBudgetRows(
-      table,
-      visitRows,
-      npRows,
-      {
-        sourceSheet: [visitSheetInfo.name, npSheetInfo.name].filter(Boolean).join(" + "),
-        importFileName: fileName
-      }
-    );
+    const written = await upsertBudgetRows(table, visitRows, npRows, {
+      sourceSheet: [visitSheetInfo.name, npSheetInfo.name].filter(Boolean).join(" + "),
+      importFileName: fileName
+    });
 
     context.res = {
       status: 200,
