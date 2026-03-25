@@ -3,15 +3,11 @@ import {
   apiPost,
   getDefaultWeekEnding,
   formatDate,
-  handleFatalError,
-  collectRegionFormValues,
-  collectSharedFormValues,
-  renderKpiCards
+  handleFatalError
 } from "./helpers.js";
 
-const REGION_KEYS = ["LAOSS", "NES", "SpineOne", "MRO"];
-const SHARED_KEYS = ["PT", "CXNS", "Capacity", "Productivity Builder"];
 const ADMIN_EMAILS = ["nperez@unitymsk.com", "tessa.kelley@spineone.com"];
+const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
 const state = {
   authenticated: false,
@@ -19,13 +15,18 @@ const state = {
   role: "guest",
   entity: "None",
   isAdmin: false,
+  currentView: "dashboard",
+  selectedEntity: "LAOSS",
   weekEnding: getDefaultWeekEnding(),
-  currentRoute: "dashboard",
-  currentRegion: "LAOSS",
-  currentSharedPage: "PT"
+  lastDashboardResult: null,
+  lastExecutiveResult: null,
+  lastTrendsResult: null,
+  lastWeeklyResult: null
 };
 
-const $ = (id) => document.getElementById(id);
+function $(id) {
+  return document.getElementById(id);
+}
 
 function q(selector) {
   return document.querySelector(selector);
@@ -39,52 +40,223 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
-function normalizeEmail(value) {
+function normalizeLower(value) {
   return normalizeText(value).toLowerCase();
 }
 
-function emailIsAdmin(value) {
-  return ADMIN_EMAILS.includes(normalizeEmail(value));
+function normalizeEmail(value) {
+  return normalizeLower(value);
 }
 
-function unique(values) {
-  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
+function safeJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function emailIsAdmin(email) {
+  return ADMIN_EMAILS.includes(normalizeEmail(email));
 }
 
 function setText(id, value) {
   const el = $(id);
-  if (el) el.textContent = value;
+  if (el) {
+    el.textContent = value;
+  }
 }
 
 function setHtml(id, value) {
   const el = $(id);
-  if (el) el.innerHTML = value;
+  if (el) {
+    el.innerHTML = value;
+  }
 }
 
 function show(el) {
-  if (el) el.style.display = "";
+  if (el) {
+    el.style.display = "";
+  }
 }
 
 function hide(el) {
-  if (el) el.style.display = "none";
+  if (el) {
+    el.style.display = "none";
+  }
+}
+
+function setTopStatus(text) {
+  const candidates = [
+    $("headerStatusText"),
+    $("topRightStatusText"),
+    $("statusBadge"),
+    q(".status-badge"),
+    q(".top-right-status"),
+    q(".header-status")
+  ].filter(Boolean);
+
+  candidates.forEach((el) => {
+    el.textContent = text;
+  });
+}
+
+function setHeaderMeta() {
+  setText("signedInUserText", state.authenticated ? state.userDetails : "Not signed in");
+  setText("signedInAsText", state.authenticated ? state.userDetails : "Not signed in");
+  setText("assignedEntityText", state.entity || "None");
+  setText("entityText", state.entity || "None");
+  setText("roleText", state.role || "guest");
+
+  const signIn = $("signInButton") || q("a[href*='/.auth/login']");
+  const signOut = $("signOutButton") || q("a[href*='/.auth/logout']");
+
+  if (signIn) {
+    signIn.setAttribute("href", "/.auth/login/aad");
+  }
+
+  if (signOut) {
+    signOut.setAttribute("href", "/.auth/logout");
+  }
+
+  if (state.authenticated) {
+    hide(signIn);
+    show(signOut);
+  } else {
+    show(signIn);
+    hide(signOut);
+  }
+}
+
+function setDebugOutput(value) {
+  const text = typeof value === "string" ? value : safeJson(value);
+
+  [
+    "dashboardDebugOutput",
+    "debugOutput",
+    "executiveDebugOutput",
+    "trendsDebugOutput"
+  ].forEach((id) => {
+    const el = $(id);
+    if (el) {
+      el.textContent = text;
+    }
+  });
+}
+
+function findPanelByHeadingText(label) {
+  const headings = qa("h1, h2, h3, h4");
+  const wanted = normalizeLower(label);
+
+  for (const heading of headings) {
+    if (normalizeLower(heading.textContent) === wanted) {
+      const panel =
+        heading.closest(".panel") ||
+        heading.closest(".card") ||
+        heading.closest("section") ||
+        heading.parentElement;
+
+      if (panel) {
+        return panel;
+      }
+    }
+  }
+
+  return null;
+}
+
+function ensureRenderSlot(panel, slotClassName) {
+  if (!panel) return null;
+
+  let slot = panel.querySelector(`.${slotClassName}`);
+  if (slot) return slot;
+
+  slot = document.createElement("div");
+  slot.className = slotClassName;
+  slot.style.marginTop = "18px";
+  panel.appendChild(slot);
+  return slot;
+}
+
+function getDashboardPanel() {
+  return findPanelByHeadingText("Dashboard");
+}
+
+function getEntityPerformancePanel() {
+  return findPanelByHeadingText("Entity Performance");
+}
+
+function getAlertsPanel() {
+  return findPanelByHeadingText("Alerts");
+}
+
+function getSnapshotPanel() {
+  return findPanelByHeadingText("Entity Snapshot");
+}
+
+function formatWhole(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? Math.round(n).toLocaleString() : "0";
+}
+
+function formatPercent(value, digits = 1) {
+  const n = Number(value || 0);
+  return `${Number.isFinite(n) ? n.toFixed(digits) : "0.0"}%`;
+}
+
+function formatValue(value, format) {
+  if (format === "percent") {
+    return formatPercent(value, 1);
+  }
+  return formatWhole(value);
 }
 
 function currentWeekEnding() {
   const candidates = [
-    $("weekEndingSelect"),
     $("anchorWeekEnding"),
     $("anchorWeekEndingInput"),
-    q("input[type='date'][id*='week']"),
+    $("weekEnding"),
+    $("weekEndingSelect"),
     q("input[type='date']")
   ].filter(Boolean);
 
   const control = candidates[0];
   const value = normalizeText(control?.value);
+
   return value || state.weekEnding || getDefaultWeekEnding();
+}
+
+function setWeekEndingControlValue(value) {
+  const candidates = [
+    $("anchorWeekEnding"),
+    $("anchorWeekEndingInput"),
+    $("weekEnding"),
+    $("weekEndingSelect"),
+    q("input[type='date']")
+  ].filter(Boolean);
+
+  const control = candidates[0];
+  if (!control) return;
+
+  if (!normalizeText(control.value)) {
+    control.value = value;
+  }
+}
+
+function currentCompareAgainst() {
+  const candidates = [
+    $("compareAgainst"),
+    $("compareAgainstSelect"),
+    q("select[id*='compare']"),
+    q("select[name='compareAgainst']")
+  ].filter(Boolean);
+
+  return normalizeText(candidates[0]?.value) || "Prior Period";
 }
 
 function currentPeriod() {
   const candidates = [
+    $("period"),
     $("periodSelect"),
     $("dashboardPeriodSelect"),
     q("select[id*='period']"),
@@ -94,21 +266,10 @@ function currentPeriod() {
   return normalizeText(candidates[0]?.value) || "Current Week";
 }
 
-function currentCompareAgainst() {
-  const candidates = [
-    $("compareAgainstSelect"),
-    $("compareAgainst"),
-    q("select[id*='compare']"),
-    q("select[name='compareAgainst']")
-  ].filter(Boolean);
-
-  return normalizeText(candidates[0]?.value) || "Prior Period";
-}
-
 function currentEntityScope() {
   const candidates = [
-    $("entityScopeSelect"),
     $("entityScope"),
+    $("entityScopeSelect"),
     q("select[id*='scope']"),
     q("select[name='entityScope']")
   ].filter(Boolean);
@@ -116,120 +277,49 @@ function currentEntityScope() {
   return normalizeText(candidates[0]?.value) || "All Entities";
 }
 
-function isAdmin() {
-  return state.isAdmin === true || state.role === "admin";
-}
-
-function getNavContainer() {
-  return $("dashboardNav") || q(".sidebar-nav") || document.body;
-}
-
-function getSignInEl() {
-  return $("signInButton") || q("a[href*='/.auth/login']");
-}
-
-function getSignOutEl() {
-  return $("signOutButton") || q("a[href*='/.auth/logout']");
-}
-
-function setSignedInUserText(value) {
-  setText("signedInUserText", value);
-  setText("signedInAsText", value);
-}
-
-function setAssignedEntityText(value) {
-  setText("assignedEntityText", value);
-  setText("entityText", value);
-}
-
-function setRoleText(value) {
-  setText("roleText", value);
-}
-
-function setLoadingHeader() {
-  setSignedInUserText("Loading...");
-  setAssignedEntityText("Loading...");
-  setRoleText("Loading...");
-}
-
-function setViewHeader(title, subtitle) {
-  setText("dashboardTitle", title);
-  setText("dashboardSubtitle", subtitle);
-}
-
-function setStatusPanelText(value) {
-  setText("dashboardStatusPanel", value);
-  setText("statusMessage", value);
-  setText("dashboardStatusMessage", value);
-}
-
-function setTopRightStatus(value) {
-  setText("headerStatusText", value);
-  setText("topRightStatusText", value);
-}
-
-function safeJsonStringify(value) {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function setDebugOutput(value) {
-  const text = typeof value === "string" ? value : safeJsonStringify(value);
-
-  [
-    "dashboardDebugOutput",
-    "debugOutput",
-    "executiveDebugOutput",
-    "trendsDebugOutput"
-  ].forEach((id) => {
-    const el = $(id);
-    if (el) el.textContent = text;
-  });
-}
-
 function normalizeApiMe(result) {
-  if (!result || !result.authenticated) return null;
+  if (!result) return null;
 
-  const userDetails = result.userDetails || "";
-  const roles = unique(result.roles);
-  const apiSaysAdmin =
-    !!result.isAdmin ||
-    roles.some((r) => normalizeText(r).toLowerCase() === "admin");
-  const forcedAdmin = emailIsAdmin(userDetails);
+  if (result.authenticated) {
+    const roles = Array.isArray(result.roles) ? result.roles : [];
+    return {
+      authenticated: true,
+      userDetails: result.userDetails || "",
+      entity: result.entity || "",
+      isAdmin: !!result.isAdmin || roles.some((r) => normalizeLower(r) === "admin"),
+      roles
+    };
+  }
 
-  return {
-    authenticated: true,
-    userDetails,
-    roles,
-    entity: forcedAdmin ? "Admin" : (result.entity || ""),
-    isAdmin: apiSaysAdmin || forcedAdmin
-  };
+  if (result.user && result.access) {
+    const roles = Array.isArray(result.user.roles) ? result.user.roles : [];
+    return {
+      authenticated: !!result.user.authenticated,
+      userDetails: result.user.userDetails || result.access.email || "",
+      entity: result.access.entity || "",
+      isAdmin: !!result.access.isAdmin || normalizeLower(result.access.role) === "admin",
+      roles
+    };
+  }
+
+  return null;
 }
 
 function normalizeAuthMe(result) {
   const principal = result?.clientPrincipal;
   if (!principal || !principal.userId) return null;
 
-  const userDetails = principal.userDetails || principal.userId || "";
-  const roles = unique(principal.userRoles || []);
-  const roleAdmin = roles.some((r) => normalizeText(r).toLowerCase() === "admin");
-  const forcedAdmin = emailIsAdmin(userDetails);
-
+  const roles = Array.isArray(principal.userRoles) ? principal.userRoles : [];
   return {
     authenticated: true,
-    userDetails,
-    roles,
-    entity: forcedAdmin ? "Admin" : "",
-    isAdmin: roleAdmin || forcedAdmin
+    userDetails: principal.userDetails || principal.userId || "",
+    entity: "",
+    isAdmin: roles.some((r) => normalizeLower(r) === "admin"),
+    roles
   };
 }
 
 async function resolveAuth() {
-  setLoadingHeader();
-
   let me = null;
 
   try {
@@ -252,800 +342,392 @@ async function resolveAuth() {
     state.role = "guest";
     state.entity = "None";
     state.isAdmin = false;
-    state.currentRegion = "LAOSS";
-    syncAuthUi();
+    setHeaderMeta();
     return;
   }
 
   state.authenticated = true;
   state.userDetails = me.userDetails || "Unknown User";
-  state.isAdmin = !!me.isAdmin;
+  state.isAdmin = !!me.isAdmin || emailIsAdmin(me.userDetails);
   state.role = state.isAdmin ? "admin" : "user";
   state.entity = state.isAdmin ? "Admin" : (me.entity || "LAOSS");
-  state.currentRegion = state.isAdmin ? "LAOSS" : (me.entity || "LAOSS");
 
-  syncAuthUi();
+  setHeaderMeta();
 }
 
-function syncAuthUi() {
-  const signInEl = getSignInEl();
-  const signOutEl = getSignOutEl();
+function renderDashboardKpis(kpis) {
+  const panel = getDashboardPanel();
+  const slot = ensureRenderSlot(panel, "dashboard-kpi-grid");
+  if (!slot) return;
 
-  if (signInEl) signInEl.setAttribute("href", "/.auth/login/aad");
-  if (signOutEl) signOutEl.setAttribute("href", "/.auth/logout");
+  const items = Array.isArray(kpis) ? kpis : [];
 
-  if (state.authenticated) {
-    setSignedInUserText(state.userDetails);
-    setAssignedEntityText(state.entity);
-    setRoleText(state.role);
-    hide(signInEl);
-    show(signOutEl);
-  } else {
-    setSignedInUserText("Not signed in");
-    setAssignedEntityText("None");
-    setRoleText("guest");
-    show(signInEl);
-    hide(signOutEl);
+  slot.style.display = "grid";
+  slot.style.gridTemplateColumns = "repeat(auto-fit, minmax(180px, 1fr))";
+  slot.style.gap = "14px";
+
+  slot.innerHTML = items.map((item) => {
+    const label = item?.label || item?.key || "Metric";
+    const value = formatValue(item?.value, item?.format);
+    const meta = item?.meta || "";
+    return `
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;">
+        <div style="font-size:13px;opacity:.85;margin-bottom:8px;">${label}</div>
+        <div style="font-size:30px;font-weight:700;line-height:1.1;margin-bottom:6px;">${value}</div>
+        <div style="font-size:12px;opacity:.75;">${meta}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderEntityPerformance(entities) {
+  const panel = getEntityPerformancePanel();
+  const slot = ensureRenderSlot(panel, "entity-performance-grid");
+  if (!slot) return;
+
+  const items = Array.isArray(entities) ? entities : [];
+
+  slot.style.display = "grid";
+  slot.style.gridTemplateColumns = "repeat(auto-fit, minmax(220px, 1fr))";
+  slot.style.gap = "14px";
+
+  slot.innerHTML = items.map((item) => {
+    return `
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+          <div style="font-size:18px;font-weight:700;">${item.entity || "Unknown"}</div>
+          <div style="font-size:12px;opacity:.75;text-transform:capitalize;">${item.status || "draft"}</div>
+        </div>
+        <div style="font-size:13px;opacity:.85;margin-bottom:6px;">Visits: <strong>${formatWhole(item.visitVolume)}</strong></div>
+        <div style="font-size:13px;opacity:.85;margin-bottom:6px;">Calls: <strong>${formatWhole(item.callVolume)}</strong></div>
+        <div style="font-size:13px;opacity:.85;margin-bottom:6px;">New Patients: <strong>${formatWhole(item.newPatients)}</strong></div>
+        <div style="font-size:13px;opacity:.85;margin-bottom:6px;">No Show: <strong>${formatPercent(item.noShowRate)}</strong></div>
+        <div style="font-size:13px;opacity:.85;">Cancel: <strong>${formatPercent(item.cancellationRate)}</strong></div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderAlerts(alerts) {
+  const panel = getAlertsPanel();
+  const slot = ensureRenderSlot(panel, "alerts-list");
+  if (!slot) return;
+
+  const items = Array.isArray(alerts) ? alerts : [];
+
+  slot.style.display = "grid";
+  slot.style.gap = "10px";
+
+  slot.innerHTML = items.map((item) => {
+    const severity = normalizeLower(item.severity || "yellow");
+    const accent =
+      severity === "red" ? "#ef4444" :
+      severity === "green" ? "#22c55e" :
+      "#facc15";
+
+    return `
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-left:4px solid ${accent};border-radius:14px;padding:14px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px;">${item.entity || "System"}</div>
+        <div style="font-size:13px;opacity:.9;">${item.message || ""}</div>
+      </div>
+    `;
+  }).join("");
+
+  if (!items.length) {
+    slot.innerHTML = `<div style="font-size:13px;opacity:.8;">No alerts.</div>`;
   }
-
-  ensureAdminImportLink();
 }
 
-function ensureAdminImportLink() {
-  const existing = $("adminImportNavItem");
+function renderSnapshot(entities) {
+  const panel = getSnapshotPanel();
+  const slot = ensureRenderSlot(panel, "snapshot-table-wrap");
+  if (!slot) return;
 
-  if (!isAdmin()) {
-    if (existing) existing.remove();
-    return;
-  }
+  const items = Array.isArray(entities) ? entities : [];
 
-  const nav = getNavContainer();
-  if (!nav || existing) return;
-
-  const wrapper = document.createElement("div");
-  wrapper.id = "adminImportNavItem";
-  wrapper.className = "sidebar-admin-link-wrap";
-  wrapper.innerHTML = `<a class="nav-link" href="./admin-import.html">Admin Import</a>`;
-
-  nav.appendChild(wrapper);
-}
-
-function initWeekSelector() {
-  const select =
-    $("weekEndingSelect") ||
-    $("anchorWeekEnding") ||
-    $("anchorWeekEndingInput");
-
-  if (!select || select.tagName !== "SELECT") {
-    const input =
-      $("anchorWeekEnding") ||
-      $("anchorWeekEndingInput") ||
-      q("input[type='date'][id*='week']") ||
-      q("input[type='date']");
-
-    if (input) {
-      if (!normalizeText(input.value)) {
-        input.value = state.weekEnding;
-      }
-
-      input.addEventListener("change", () => {
-        state.weekEnding = normalizeText(input.value) || getDefaultWeekEnding();
-      });
-    }
-
-    return;
-  }
-
-  const today = new Date();
-  const weeks = [];
-
-  for (let i = 0; i < 20; i += 1) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - today.getDay() - i * 7);
-    const iso = d.toISOString().split("T")[0];
-    weeks.push(iso);
-  }
-
-  select.innerHTML = weeks
-    .map((w) => `<option value="${w}">${formatDate(w)}</option>`)
-    .join("");
-
-  if (weeks.includes(state.weekEnding)) {
-    select.value = state.weekEnding;
-  } else if (weeks.length) {
-    select.value = weeks[0];
-    state.weekEnding = weeks[0];
-  }
-
-  select.addEventListener("change", () => {
-    state.weekEnding = normalizeText(select.value) || getDefaultWeekEnding();
-  });
-}
-
-function activateNav(link) {
-  qa(".nav-link").forEach((el) => el.classList.remove("active"));
-  if (link) link.classList.add("active");
-}
-
-function findNavLinkByText(needle) {
-  const lower = normalizeText(needle).toLowerCase();
-  return qa(".nav-link").find((el) =>
-    normalizeText(el.textContent).toLowerCase().includes(lower)
-  );
-}
-
-function routeFromLink(link) {
-  const explicit = normalizeText(link?.dataset?.route);
-  if (explicit) return explicit;
-
-  const dataEntity = normalizeText(link?.dataset?.entity);
-  const dataPage = normalizeText(link?.dataset?.page);
-  const text = normalizeText(link?.textContent).toLowerCase();
-
-  if (REGION_KEYS.includes(dataEntity)) return "region";
-  if (SHARED_KEYS.includes(dataPage)) return "shared";
-
-  if (text === "dashboard") return "dashboard";
-  if (text === "weekly entry") return "entry";
-  if (text === "executive summary") return "dashboard";
-  if (text === "trends") return "trends";
-  if (text === "admin import") return "admin-import";
-  if (REGION_KEYS.map((x) => x.toLowerCase()).includes(text)) return "region";
-  if (SHARED_KEYS.map((x) => x.toLowerCase()).includes(text)) return "shared";
-
-  return "dashboard";
-}
-
-function parseNumber(value) {
-  const n = Number(value || 0);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function formatWhole(value) {
-  return Math.round(parseNumber(value)).toLocaleString();
-}
-
-function formatDecimal(value, digits = 1) {
-  return parseNumber(value).toFixed(digits);
-}
-
-function formatPercent(value, digits = 1) {
-  return `${parseNumber(value).toFixed(digits)}%`;
-}
-
-function formatCurrency(value) {
-  return `$${Math.round(parseNumber(value)).toLocaleString()}`;
-}
-
-function inferTrend(current, previous, betterDirection = "up") {
-  const c = parseNumber(current);
-  const p = parseNumber(previous);
-  const diff = c - p;
-
-  if (betterDirection === "down") {
-    if (diff < 0) return { status: "Improved", statusColor: "green", diff };
-    if (diff > 0) return { status: "Worse", statusColor: "red", diff };
-    return { status: "Flat", statusColor: "yellow", diff };
-  }
-
-  if (diff > 0) return { status: "Up", statusColor: "green", diff };
-  if (diff < 0) return { status: "Down", statusColor: "red", diff };
-  return { status: "Flat", statusColor: "yellow", diff };
-}
-
-function renderCardsFromItems(items) {
-  renderKpiCards(
-    (Array.isArray(items) ? items : []).map((item) => ({
-      label: item.label,
-      value: item.value,
-      meta: item.meta || "",
-      status: item.status || "",
-      statusColor: item.statusColor || "yellow"
-    }))
-  );
-}
-
-function normalizeRegionValues(result) {
-  if (!result || typeof result !== "object") return {};
-  if (result.values && typeof result.values === "object") return result.values;
-  if (result.valuesJson) {
-    try {
-      return JSON.parse(result.valuesJson);
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function normalizeSharedValues(result) {
-  if (!result || typeof result !== "object") return {};
-  if (result.values && typeof result.values === "object") return result.values;
-  if (result.valuesJson) {
-    try {
-      return JSON.parse(result.valuesJson);
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function buildRegionCards(current, previous = {}) {
-  const visitTrend = inferTrend(current.totalVisits, previous.totalVisits, "up");
-  const vpdTrend = inferTrend(current.visitsPerDay, previous.visitsPerDay, "up");
-  const npTrend = inferTrend(current.npActual, previous.npActual, "up");
-  const surgTrend = inferTrend(current.surgeryActual, previous.surgeryActual, "up");
-  const callTrend = inferTrend(current.totalCalls, previous.totalCalls, "up");
-  const abdTrend = inferTrend(current.abandonmentRate, previous.abandonmentRate, "down");
-  const convTrend = inferTrend(current.answeredCallToNpConversion, previous.answeredCallToNpConversion, "up");
-  const cashTrend = inferTrend(current.cashActual, previous.cashActual, "up");
-
-  return [
-    {
-      label: "Total Visits",
-      value: formatWhole(current.totalVisits),
-      meta: `${visitTrend.diff >= 0 ? "+" : ""}${formatWhole(visitTrend.diff)} vs prior week`,
-      status: visitTrend.status,
-      statusColor: visitTrend.statusColor
-    },
-    {
-      label: "Visits / Day",
-      value: formatDecimal(current.visitsPerDay, 1),
-      meta: `${vpdTrend.diff >= 0 ? "+" : ""}${formatDecimal(vpdTrend.diff, 1)} vs prior week`,
-      status: vpdTrend.status,
-      statusColor: vpdTrend.statusColor
-    },
-    {
-      label: "New Patients",
-      value: formatWhole(current.npActual),
-      meta: `${npTrend.diff >= 0 ? "+" : ""}${formatWhole(npTrend.diff)} vs prior week`,
-      status: npTrend.status,
-      statusColor: npTrend.statusColor
-    },
-    {
-      label: "Surgical Cases",
-      value: formatWhole(current.surgeryActual),
-      meta: `${surgTrend.diff >= 0 ? "+" : ""}${formatWhole(surgTrend.diff)} vs prior week`,
-      status: surgTrend.status,
-      statusColor: surgTrend.statusColor
-    },
-    {
-      label: "Call Volume",
-      value: formatWhole(current.totalCalls),
-      meta: `${callTrend.diff >= 0 ? "+" : ""}${formatWhole(callTrend.diff)} vs prior week`,
-      status: callTrend.status,
-      statusColor: callTrend.statusColor
-    },
-    {
-      label: "Abandonment Rate",
-      value: formatPercent(current.abandonmentRate, 1),
-      meta: `${abdTrend.diff >= 0 ? "+" : ""}${formatDecimal(abdTrend.diff, 1)} pts vs prior week`,
-      status: abdTrend.status,
-      statusColor: abdTrend.statusColor
-    },
-    {
-      label: "Answered Call to NP %",
-      value: formatPercent(current.answeredCallToNpConversion, 1),
-      meta: `${convTrend.diff >= 0 ? "+" : ""}${formatDecimal(convTrend.diff, 1)} pts vs prior week`,
-      status: convTrend.status,
-      statusColor: convTrend.statusColor
-    },
-    {
-      label: "Cash Collected",
-      value: formatCurrency(current.cashActual),
-      meta: `${cashTrend.diff >= 0 ? "+" : ""}$${formatWhole(cashTrend.diff)} vs prior week`,
-      status: cashTrend.status,
-      statusColor: cashTrend.statusColor
-    }
-  ];
-}
-
-function buildSharedCards(page, current, previous = {}) {
-  if (page === "PT") {
-    const visitTrend = inferTrend(current.ptScheduledVisits, previous.ptScheduledVisits, "up");
-    const cancelTrend = inferTrend(current.ptCancellations, previous.ptCancellations, "down");
-    const noShowTrend = inferTrend(current.ptNoShows, previous.ptNoShows, "down");
-    const rescheduleTrend = inferTrend(current.ptReschedules, previous.ptReschedules, "down");
-    const unitsTrend = inferTrend(current.totalUnitsBilled, previous.totalUnitsBilled, "up");
-
-    return [
-      {
-        label: "PT Scheduled Visits",
-        value: formatWhole(current.ptScheduledVisits),
-        meta: `${visitTrend.diff >= 0 ? "+" : ""}${formatWhole(visitTrend.diff)} vs prior week`,
-        status: visitTrend.status,
-        statusColor: visitTrend.statusColor
-      },
-      {
-        label: "PT Cancellations",
-        value: formatWhole(current.ptCancellations),
-        meta: `${cancelTrend.diff >= 0 ? "+" : ""}${formatWhole(cancelTrend.diff)} vs prior week`,
-        status: cancelTrend.status,
-        statusColor: cancelTrend.statusColor
-      },
-      {
-        label: "PT No Shows",
-        value: formatWhole(current.ptNoShows),
-        meta: `${noShowTrend.diff >= 0 ? "+" : ""}${formatWhole(noShowTrend.diff)} vs prior week`,
-        status: noShowTrend.status,
-        statusColor: noShowTrend.statusColor
-      },
-      {
-        label: "PT Reschedules",
-        value: formatWhole(current.ptReschedules),
-        meta: `${rescheduleTrend.diff >= 0 ? "+" : ""}${formatWhole(rescheduleTrend.diff)} vs prior week`,
-        status: rescheduleTrend.status,
-        statusColor: rescheduleTrend.statusColor
-      },
-      {
-        label: "Units Billed",
-        value: formatWhole(current.totalUnitsBilled),
-        meta: `${unitsTrend.diff >= 0 ? "+" : ""}${formatWhole(unitsTrend.diff)} vs prior week`,
-        status: unitsTrend.status,
-        statusColor: unitsTrend.statusColor
-      }
-    ];
-  }
-
-  if (page === "CXNS") {
-    const scheduledTrend = inferTrend(current.scheduledAppts, previous.scheduledAppts, "up");
-    const cancelTrend = inferTrend(current.cancellations, previous.cancellations, "down");
-    const noShowTrend = inferTrend(current.noShows, previous.noShows, "down");
-    const rescheduleTrend = inferTrend(current.reschedules, previous.reschedules, "down");
-
-    return [
-      {
-        label: "CXNS Scheduled",
-        value: formatWhole(current.scheduledAppts),
-        meta: `${scheduledTrend.diff >= 0 ? "+" : ""}${formatWhole(scheduledTrend.diff)} vs prior week`,
-        status: scheduledTrend.status,
-        statusColor: scheduledTrend.statusColor
-      },
-      {
-        label: "CXNS Cancellations",
-        value: formatWhole(current.cancellations),
-        meta: `${cancelTrend.diff >= 0 ? "+" : ""}${formatWhole(cancelTrend.diff)} vs prior week`,
-        status: cancelTrend.status,
-        statusColor: cancelTrend.statusColor
-      },
-      {
-        label: "CXNS No Shows",
-        value: formatWhole(current.noShows),
-        meta: `${noShowTrend.diff >= 0 ? "+" : ""}${formatWhole(noShowTrend.diff)} vs prior week`,
-        status: noShowTrend.status,
-        statusColor: noShowTrend.statusColor
-      },
-      {
-        label: "CXNS Reschedules",
-        value: formatWhole(current.reschedules),
-        meta: `${rescheduleTrend.diff >= 0 ? "+" : ""}${formatWhole(rescheduleTrend.diff)} vs prior week`,
-        status: rescheduleTrend.status,
-        statusColor: rescheduleTrend.statusColor
-      }
-    ];
-  }
-
-  return [
-    {
-      label: page,
-      value: "Coming Soon",
-      meta: "This section is not fully wired yet.",
-      status: "Flat",
-      statusColor: "yellow"
-    }
-  ];
-}
-
-function getPreviousWeekEnding(weekEnding) {
-  const d = new Date(`${weekEnding}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 7);
-  return d.toISOString().split("T")[0];
+  slot.innerHTML = `
+    <div style="overflow:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid rgba(255,255,255,0.1);">Entity</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid rgba(255,255,255,0.1);">Status</th>
+            <th style="text-align:right;padding:10px;border-bottom:1px solid rgba(255,255,255,0.1);">Visits</th>
+            <th style="text-align:right;padding:10px;border-bottom:1px solid rgba(255,255,255,0.1);">Calls</th>
+            <th style="text-align:right;padding:10px;border-bottom:1px solid rgba(255,255,255,0.1);">New Patients</th>
+            <th style="text-align:right;padding:10px;border-bottom:1px solid rgba(255,255,255,0.1);">Abandoned %</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.06);">${item.entity || ""}</td>
+              <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.06);text-transform:capitalize;">${item.status || "draft"}</td>
+              <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:right;">${formatWhole(item.visitVolume)}</td>
+              <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:right;">${formatWhole(item.callVolume)}</td>
+              <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:right;">${formatWhole(item.newPatients)}</td>
+              <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:right;">${formatPercent(item.abandonedCallRate)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 async function loadDashboard() {
-  const week = currentWeekEnding();
+  state.currentView = "dashboard";
+  state.weekEnding = currentWeekEnding();
 
-  setViewHeader(
-    "Dashboard",
-    "Multi-entity performance view with period and comparison controls."
-  );
-  setStatusPanelText("Loading dashboard...");
-  setTopRightStatus("Loading...");
+  setTopStatus("Loading...");
+  setDebugOutput("Loading dashboard...");
 
   const query = new URLSearchParams({
-    weekEnding: week,
+    weekEnding: state.weekEnding,
     period: currentPeriod(),
     compareAgainst: currentCompareAgainst(),
     entityScope: currentEntityScope()
   });
 
-  const result = await safeApiGet(`/api/dashboard?${query.toString()}`, { kpis: [] });
+  const result = await safeApiGet(`/api/dashboard?${query.toString()}`, {
+    ok: false,
+    kpis: [],
+    entities: [],
+    alerts: []
+  });
 
-  renderKpiCards(Array.isArray(result?.kpis) ? result.kpis : []);
+  state.lastDashboardResult = result;
+
+  renderDashboardKpis(result.kpis || []);
+  renderEntityPerformance(result.entities || []);
+  renderAlerts(result.alerts || []);
+  renderSnapshot(result.entities || []);
   setDebugOutput(result);
-
-  setStatusPanelText("Dashboard loaded.");
-  setTopRightStatus("Ready");
-}
-
-async function loadRegionPage(entity) {
-  const week = currentWeekEnding();
-  const previousWeek = getPreviousWeekEnding(week);
-
-  setViewHeader(
-    `${entity} Weekly View`,
-    `Weekly operational performance for ${entity}.`
-  );
-  setStatusPanelText(`Loading ${entity} weekly data...`);
-  setTopRightStatus("Loading...");
-
-  const currentResponse = await safeApiGet(
-    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
-    {}
-  );
-
-  const previousResponse = await safeApiGet(
-    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(previousWeek)}`,
-    {}
-  );
-
-  const currentValues = normalizeRegionValues(currentResponse);
-  const previousValues = normalizeRegionValues(previousResponse);
-
-  renderCardsFromItems(buildRegionCards(currentValues, previousValues));
-  setDebugOutput({
-    currentRoute: state.currentRoute,
-    entity,
-    weekEnding: week,
-    current: currentResponse,
-    previous: previousResponse
-  });
-
-  setStatusPanelText(`${entity} weekly data loaded.`);
-  setTopRightStatus("Ready");
-}
-
-async function loadSharedPage(page) {
-  const week = currentWeekEnding();
-  const previousWeek = getPreviousWeekEnding(week);
-
-  setViewHeader(
-    `${page} Weekly View`,
-    `Weekly metrics for ${page}.`
-  );
-  setStatusPanelText(`Loading ${page} data...`);
-  setTopRightStatus("Loading...");
-
-  if (page === "Capacity" || page === "Productivity Builder") {
-    renderCardsFromItems(buildSharedCards(page, {}, {}));
-    setDebugOutput({ page, message: "Not fully wired yet." });
-    setStatusPanelText(`${page} is not fully wired yet.`);
-    setTopRightStatus("Ready");
-    return;
-  }
-
-  const currentResponse = await safeApiGet(
-    `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(week)}`,
-    {}
-  );
-
-  const previousResponse = await safeApiGet(
-    `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(previousWeek)}`,
-    {}
-  );
-
-  const currentValues = normalizeSharedValues(currentResponse);
-  const previousValues = normalizeSharedValues(previousResponse);
-
-  renderCardsFromItems(buildSharedCards(page, currentValues, previousValues));
-  setDebugOutput({
-    currentRoute: state.currentRoute,
-    page,
-    weekEnding: week,
-    current: currentResponse,
-    previous: previousResponse
-  });
-
-  setStatusPanelText(`${page} weekly data loaded.`);
-  setTopRightStatus("Ready");
+  setTopStatus("Ready");
 }
 
 async function loadExecutiveSummary() {
-  const week = currentWeekEnding();
+  state.currentView = "executive";
+  state.weekEnding = currentWeekEnding();
 
-  setViewHeader(
-    "Executive Summary",
-    "Weekly companywide KPI overview with trends, target comparisons, and submission visibility."
-  );
-  setStatusPanelText("Loading executive summary...");
-  setTopRightStatus("Loading...");
+  setTopStatus("Loading...");
+  setDebugOutput("Loading executive summary...");
 
   const result = await safeApiGet(
-    `/api/executive-summary?weekEnding=${encodeURIComponent(week)}`,
-    { kpis: [] }
+    `/api/executive-summary?weekEnding=${encodeURIComponent(state.weekEnding)}`,
+    { ok: false, kpis: [], entities: [], alerts: [] }
   );
 
-  renderKpiCards(Array.isArray(result?.kpis) ? result.kpis : []);
-  setDebugOutput(result);
+  state.lastExecutiveResult = result;
 
-  setStatusPanelText("Executive summary loaded.");
-  setTopRightStatus("Ready");
+  renderDashboardKpis(result.kpis || []);
+  renderEntityPerformance(result.entities || []);
+  renderAlerts(result.alerts || []);
+  renderSnapshot(result.entities || []);
+  setDebugOutput(result);
+  setTopStatus("Ready");
 }
 
 async function loadTrends() {
-  const week = currentWeekEnding();
+  state.currentView = "trends";
+  state.weekEnding = currentWeekEnding();
 
-  setViewHeader(
-    "Trends",
-    "Historical trend view for the selected entity and date range."
-  );
-  setStatusPanelText("Loading trends...");
-  setTopRightStatus("Loading...");
+  setTopStatus("Loading...");
+  setDebugOutput("Loading trends...");
+
+  const entityScope = currentEntityScope();
+  const entity = entityScope && entityScope !== "All Entities" ? entityScope : state.selectedEntity;
 
   const query = new URLSearchParams({
-    weekEnding: week,
-    entity: state.currentRegion
+    entity,
+    weekEnding: state.weekEnding
   });
 
-  const result = await safeApiGet(`/api/trends?${query.toString()}`, { items: [] });
+  const result = await safeApiGet(`/api/trends?${query.toString()}`, { ok: false, items: [] });
 
+  state.lastTrendsResult = result;
   setDebugOutput(result);
-  setStatusPanelText("Trends loaded.");
-  setTopRightStatus("Ready");
+  setTopStatus("Ready");
 }
 
-async function loadCurrentView() {
-  try {
-    if (state.currentRoute === "region") {
-      await loadRegionPage(state.currentRegion);
-      return;
-    }
+async function loadWeeklyEntryView() {
+  state.currentView = "weekly";
+  state.weekEnding = currentWeekEnding();
 
-    if (state.currentRoute === "shared") {
-      await loadSharedPage(state.currentSharedPage);
-      return;
-    }
+  setTopStatus("Loading...");
+  setDebugOutput("Loading weekly entry data...");
 
-    if (state.currentRoute === "trends") {
-      await loadTrends();
-      return;
-    }
+  const entityScope = currentEntityScope();
+  const entity = entityScope && entityScope !== "All Entities" ? entityScope : state.selectedEntity;
 
-    if (state.currentRoute === "entry") {
-      await loadRegionPage(state.currentRegion);
-      return;
-    }
+  const current = await safeApiGet(
+    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(state.weekEnding)}`,
+    { ok: false, values: {} }
+  );
 
-    if (state.currentRoute === "executive") {
-      await loadExecutiveSummary();
-      return;
-    }
-
-    await loadDashboard();
-  } catch (error) {
-    setTopRightStatus("Error");
-    setDebugOutput({
-      error: error?.message || String(error),
-      stack: error?.stack || null
-    });
-    handleFatalError(error);
-  }
+  state.lastWeeklyResult = current;
+  setDebugOutput(current);
+  setTopStatus("Ready");
 }
 
-function initNavigation() {
-  const nav = getNavContainer();
-  if (!nav) return;
+function navLinks() {
+  return qa(".nav-link");
+}
 
-  nav.addEventListener("click", async (e) => {
-    const link = e.target.closest(".nav-link");
-    if (!link) return;
+function activateNavByText(text) {
+  const target = normalizeLower(text);
 
-    const href = normalizeText(link.getAttribute("href"));
-    if (href.includes("admin-import.html")) {
-      return;
-    }
-
-    e.preventDefault();
-
-    const route = routeFromLink(link);
-    const text = normalizeText(link.textContent);
-
-    if (route === "dashboard") {
-      state.currentRoute = text.toLowerCase().includes("executive") ? "executive" : "dashboard";
-    } else {
-      state.currentRoute = route;
-    }
-
-    if (route === "region") {
-      const clickedEntity = normalizeText(link.dataset.entity || text);
-      if (REGION_KEYS.includes(clickedEntity)) {
-        state.currentRegion = clickedEntity;
-      }
-    }
-
-    if (route === "shared") {
-      const clickedPage = normalizeText(link.dataset.page || text);
-      if (SHARED_KEYS.includes(clickedPage)) {
-        state.currentSharedPage = clickedPage;
-      }
-    }
-
-    if (route === "trends") {
-      state.currentRoute = "trends";
-    }
-
-    if (route === "entry") {
-      state.currentRoute = "entry";
-    }
-
-    activateNav(link);
-    await loadCurrentView();
+  navLinks().forEach((link) => {
+    const isMatch = normalizeLower(link.textContent) === target;
+    link.classList.toggle("active", isMatch);
   });
 }
 
-async function saveRegion() {
-  const payload = collectRegionFormValues();
+function routeFromLink(link) {
+  const text = normalizeLower(link?.textContent);
 
-  if (!payload.entity || payload.entity === "Loading..." || payload.entity === "None" || payload.entity === "Admin") {
-    payload.entity = state.currentRegion;
-  }
+  if (text === "dashboard") return "dashboard";
+  if (text === "weekly entry") return "weekly";
+  if (text === "executive summary") return "executive";
+  if (text === "trends") return "trends";
+  if (text === "admin import") return "admin-import";
 
-  if (!payload.weekEnding) {
-    payload.weekEnding = currentWeekEnding();
-  }
+  return "dashboard";
+}
 
-  const result = await apiPost("/api/weekly-save", payload);
-
-  if (!result || result.error) {
-    alert("Save failed.");
-    setDebugOutput(result || { error: "Save failed." });
+async function handleNav(route) {
+  if (route === "admin-import") {
+    window.location.href = "./admin-import.html";
     return;
   }
 
-  setDebugOutput(result);
-  alert("Saved successfully.");
-  await loadCurrentView();
-}
-
-async function saveShared() {
-  const payload = collectSharedFormValues();
-
-  if (!payload.page || payload.page === "Loading...") {
-    payload.page = state.currentSharedPage;
-  }
-
-  if (!payload.weekEnding) {
-    payload.weekEnding = currentWeekEnding();
-  }
-
-  const result = await apiPost("/api/shared-save", payload);
-
-  if (!result || result.error) {
-    alert("Save failed.");
-    setDebugOutput(result || { error: "Save failed." });
+  if (route === "weekly") {
+    activateNavByText("weekly entry");
+    await loadWeeklyEntryView();
     return;
   }
 
-  setDebugOutput(result);
-  alert("Saved successfully.");
-  await loadCurrentView();
+  if (route === "executive") {
+    activateNavByText("executive summary");
+    await loadExecutiveSummary();
+    return;
+  }
+
+  if (route === "trends") {
+    activateNavByText("trends");
+    await loadTrends();
+    return;
+  }
+
+  activateNavByText("dashboard");
+  await loadDashboard();
 }
 
-function initButtons() {
-  const saveBtn = $("saveButton") || $("saveBtn");
-  const submitBtn = $("submitWeekButton") || $("submitBtn");
-  const loadDashboardBtn = $("loadDashboardButton") || $("loadDashboardBtn");
-
-  if (saveBtn) {
-    saveBtn.addEventListener("click", async () => {
-      if (state.currentRoute === "shared") {
-        await saveShared();
+function bindNavigation() {
+  navLinks().forEach((link) => {
+    link.addEventListener("click", async (event) => {
+      const href = normalizeText(link.getAttribute("href"));
+      if (href && href.includes("admin-import.html")) {
         return;
       }
 
-      await saveRegion();
-    });
-  }
+      event.preventDefault();
 
-  if (submitBtn) {
-    submitBtn.addEventListener("click", async () => {
-      if (state.currentRoute === "shared") {
-        await saveShared();
-        alert("Week submitted.");
-        return;
+      try {
+        await handleNav(routeFromLink(link));
+      } catch (error) {
+        setTopStatus("Error");
+        setDebugOutput({
+          where: "navigation",
+          message: error?.message || String(error),
+          stack: error?.stack || null
+        });
+        handleFatalError(error);
       }
-
-      await saveRegion();
-      alert("Week submitted.");
     });
-  }
-
-  if (loadDashboardBtn) {
-    loadDashboardBtn.addEventListener("click", async () => {
-      state.currentRoute = "dashboard";
-      activateNav(findNavLinkByText("dashboard"));
-      await loadCurrentView();
-    });
-  }
+  });
 }
 
-function initControlReloads() {
-  [
+function bindDashboardButton() {
+  const button =
+    $("loadDashboardButton") ||
+    $("loadDashboardBtn") ||
+    qa("button").find((btn) => normalizeLower(btn.textContent) === "load dashboard");
+
+  if (!button) return;
+
+  button.addEventListener("click", async () => {
+    try {
+      await loadDashboard();
+    } catch (error) {
+      setTopStatus("Error");
+      setDebugOutput({
+        where: "load dashboard button",
+        message: error?.message || String(error),
+        stack: error?.stack || null
+      });
+      handleFatalError(error);
+    }
+  });
+}
+
+function bindControlChanges() {
+  const controls = [
+    $("anchorWeekEnding"),
+    $("anchorWeekEndingInput"),
+    $("weekEnding"),
+    $("weekEndingSelect"),
+    $("period"),
     $("periodSelect"),
     $("dashboardPeriodSelect"),
-    $("compareAgainstSelect"),
     $("compareAgainst"),
-    $("entityScopeSelect"),
+    $("compareAgainstSelect"),
     $("entityScope"),
-    $("weekEndingSelect"),
-    $("anchorWeekEnding"),
-    $("anchorWeekEndingInput")
-  ]
-    .filter(Boolean)
-    .forEach((el) => {
-      el.addEventListener("change", async () => {
-        if (el.type === "date" || el.tagName === "SELECT") {
-          state.weekEnding = currentWeekEnding();
-        }
-      });
+    $("entityScopeSelect")
+  ].filter(Boolean);
+
+  controls.forEach((control) => {
+    control.addEventListener("change", () => {
+      state.weekEnding = currentWeekEnding();
+
+      const entityScope = currentEntityScope();
+      if (entityScope && entityScope !== "All Entities" && ENTITIES.includes(entityScope)) {
+        state.selectedEntity = entityScope;
+      }
     });
+  });
 }
 
-function initHeroButtons() {
-  const goToRegionBtn = $("goToMyRegionButton");
-  const executiveBtn = $("executiveSummaryButton");
+function bindAdminImportLinkVisibility() {
+  const adminLink = navLinks().find((link) => normalizeLower(link.textContent) === "admin import");
+  if (!adminLink) return;
 
-  if (goToRegionBtn) {
-    goToRegionBtn.addEventListener("click", async () => {
-      state.currentRoute = "region";
-      state.currentRegion = isAdmin()
-        ? "LAOSS"
-        : (state.entity === "Admin" ? "LAOSS" : state.entity);
-
-      activateNav(findNavLinkByText(state.currentRegion));
-      await loadCurrentView();
-    });
-  }
-
-  if (executiveBtn) {
-    executiveBtn.addEventListener("click", async () => {
-      state.currentRoute = "executive";
-      activateNav(findNavLinkByText("executive"));
-      await loadCurrentView();
-    });
-  }
-}
-
-function activateInitialNav() {
-  const dashboardLink = findNavLinkByText("dashboard");
-  if (dashboardLink) {
-    activateNav(dashboardLink);
+  if (state.isAdmin) {
+    show(adminLink);
+  } else {
+    hide(adminLink);
   }
 }
 
 async function init() {
   try {
-    setLoadingHeader();
-    setStatusPanelText("Initializing...");
-    setTopRightStatus("Loading...");
-    setDebugOutput("App booting...");
-
-    initWeekSelector();
-    initButtons();
-    initControlReloads();
-    initHeroButtons();
+    setTopStatus("Loading...");
+    setDebugOutput("App starting...");
+    setWeekEndingControlValue(state.weekEnding);
 
     await resolveAuth();
+    bindAdminImportLinkVisibility();
+    bindNavigation();
+    bindDashboardButton();
+    bindControlChanges();
 
-    initNavigation();
-    activateInitialNav();
-
-    await loadCurrentView();
+    activateNavByText("dashboard");
+    await loadDashboard();
   } catch (error) {
-    setTopRightStatus("Error");
+    setTopStatus("Error");
     setDebugOutput({
-      error: error?.message || String(error),
+      where: "init",
+      message: error?.message || String(error),
       stack: error?.stack || null
     });
     handleFatalError(error);
