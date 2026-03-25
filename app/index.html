@@ -9,13 +9,15 @@
 <body>
   <div id="appShell">
     <aside id="sidebar">
-      <div style="margin-bottom:16px; text-align:center;">
+      <div class="sidebarBrand">
         <img
           src="./assets/logos/unitymsk.png"
           alt="UnityMSK"
-          style="max-width:100%; max-height:56px; object-fit:contain; display:block; margin:0 auto 10px;"
+          class="sidebarBrandLogo"
         />
       </div>
+
+      <div class="sidebarSectionLabel">Navigation</div>
 
       <button id="navDashboardBtn" type="button">Dashboard</button>
       <button id="navEntryBtn" type="button">Weekly Entry</button>
@@ -26,13 +28,18 @@
 
     <div id="mainContent">
       <header id="topbar">
-        <h1>UnityMSK Ops Dashboard</h1>
+        <div class="pageHeading">
+          <h1>UnityMSK Ops Dashboard</h1>
+          <p class="pageSubheading">
+            Weekly operating visibility across LAOSS, NES, SpineOne, and MRO.
+          </p>
+        </div>
         <div id="userInfo">Loading...</div>
       </header>
 
       <main>
         <section id="dashboardView">
-          <div class="panel">
+          <div class="panel heroPanel">
             <div class="fieldRow">
               <div>
                 <label for="dashboardPeriodType">Period</label>
@@ -87,35 +94,49 @@
               </div>
             </div>
 
-            <div id="dashboardSummaryText" style="margin-bottom:12px;"></div>
-            <div id="dashboardBenchmarkNotice" style="margin-bottom:12px;"></div>
+            <div id="dashboardSummaryText" class="subtleBanner"></div>
+            <div id="dashboardBenchmarkNotice"></div>
 
             <div id="dashboardCards" class="cardGrid"></div>
-
-            <div class="panel" style="margin-top:16px;">
-              <h3>Entity Performance</h3>
-              <div id="dashboardEntities"></div>
-            </div>
-
-            <div class="panel" style="margin-top:16px;">
-              <h3>Alerts</h3>
-              <div id="dashboardAlerts"></div>
-            </div>
-
-            <div class="panel" style="margin-top:16px;">
-              <h3>Entity Snapshot</h3>
-              <div id="dashboardSnapshot"></div>
-            </div>
-
-            <details class="debugPanel">
-              <summary>Dashboard Debug Output</summary>
-              <pre id="dashboardDebugOutput" class="debugOutput"></pre>
-            </details>
           </div>
+
+          <div class="panel sectionPanel">
+            <div class="sectionHeader">
+              <h3>Entity Performance</h3>
+              <p>How each operating unit is performing in the selected period.</p>
+            </div>
+            <div id="dashboardEntities"></div>
+          </div>
+
+          <div class="panel sectionPanel">
+            <div class="sectionHeader">
+              <h3>Alerts</h3>
+              <p>Items that need attention based on current thresholds.</p>
+            </div>
+            <div id="dashboardAlerts"></div>
+          </div>
+
+          <div class="panel sectionPanel">
+            <div class="sectionHeader">
+              <h3>Entity Snapshot</h3>
+              <p>Quick tabular view of actuals for the selected scope.</p>
+            </div>
+            <div id="dashboardSnapshot"></div>
+          </div>
+
+          <details class="debugPanel">
+            <summary>Dashboard Debug Output</summary>
+            <pre id="dashboardDebugOutput" class="debugOutput"></pre>
+          </details>
         </section>
 
         <section id="entryView" style="display:none;">
           <div class="panel">
+            <div class="sectionHeader">
+              <h3>Weekly Entry</h3>
+              <p>Update weekly operational metrics for the selected entity.</p>
+            </div>
+
             <div class="fieldRow">
               <div>
                 <label for="entitySelect">Entity</label>
@@ -128,7 +149,7 @@
               </div>
             </div>
 
-            <div id="entryBrandWrap" style="margin-bottom:16px;"></div>
+            <div id="entryBrandWrap" class="brandContextWrap"></div>
 
             <section id="kpiForm"></section>
 
@@ -149,6 +170,11 @@
 
         <section id="executiveView" style="display:none;">
           <div class="panel">
+            <div class="sectionHeader">
+              <h3>Executive Summary</h3>
+              <p>Roll-up of approved regional performance for the selected week.</p>
+            </div>
+
             <div class="fieldRow">
               <div>
                 <label for="executiveWeekEnding">Week Ending</label>
@@ -162,8 +188,10 @@
 
             <div id="executiveCards" class="cardGrid"></div>
 
-            <div class="panel" style="margin-top:16px;">
-              <h3>Approved Regions</h3>
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <h3>Approved Regions</h3>
+              </div>
               <div id="executiveRegions"></div>
             </div>
 
@@ -176,6 +204,11 @@
 
         <section id="trendsView" style="display:none;">
           <div class="panel">
+            <div class="sectionHeader">
+              <h3>Trends</h3>
+              <p>Review historical movement and manage overrides when needed.</p>
+            </div>
+
             <div class="fieldRow">
               <div>
                 <label for="trendsEntitySelect">Entity</label>
@@ -193,73 +226,3 @@
               <div id="trendsWeeksWrap">
                 <label for="trendsLimit">Weeks</label>
                 <select id="trendsLimit">
-                  <option value="8">8</option>
-                  <option value="12" selected>12</option>
-                  <option value="16">16</option>
-                  <option value="24">24</option>
-                  <option value="52">52</option>
-                </select>
-              </div>
-
-              <div id="trendsStartWrap" style="display:none;">
-                <label for="trendsStartDate">Start Date</label>
-                <input type="date" id="trendsStartDate" />
-              </div>
-
-              <div id="trendsEndWrap" style="display:none;">
-                <label for="trendsEndDate">End Date</label>
-                <input type="date" id="trendsEndDate" />
-              </div>
-
-              <div class="buttonAlignBottom">
-                <button id="loadTrendsBtn" type="button">Load Trends</button>
-              </div>
-            </div>
-
-            <div id="trendsBrandWrap" style="margin-bottom:16px;"></div>
-
-            <div id="trendsCards" class="cardGrid"></div>
-
-            <div class="panel" style="margin-top:16px;">
-              <h3>Trend History</h3>
-              <div id="trendsTableWrap"></div>
-            </div>
-
-            <details class="debugPanel">
-              <summary>Trends Debug Output</summary>
-              <pre id="trendsDebugOutput" class="debugOutput"></pre>
-            </details>
-          </div>
-        </section>
-
-        <section id="importView" style="display:none;">
-          <div class="panel">
-            <h3>Admin Workbook Import</h3>
-            <p>Upload the locked workbook to backfill historical weekly data into the dashboard.</p>
-
-            <div class="fieldRow">
-              <div style="min-width:320px;">
-                <label for="importFile">Workbook File</label>
-                <input type="file" id="importFile" accept=".xlsx,.xls" />
-              </div>
-
-              <div class="buttonAlignBottom">
-                <button id="runImportBtn" type="button">Run Import</button>
-              </div>
-            </div>
-
-            <div id="importStatusMessage" class="statusMessage"></div>
-
-            <details class="debugPanel">
-              <summary>Import Debug Output</summary>
-              <pre id="importDebugOutput" class="debugOutput"></pre>
-            </details>
-          </div>
-        </section>
-      </main>
-    </div>
-  </div>
-
-  <script src="./app.js"></script>
-</body>
-</html>
