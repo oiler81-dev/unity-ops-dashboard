@@ -5,11 +5,132 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>UnityMSK Ops Dashboard</title>
   <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .dashboardEntityGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .dashboardEntityCard {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 16px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .dashboardEntityCard h4 {
+      margin: 0 0 12px 0;
+      font-size: 18px;
+    }
+
+    .dashboardEntityMeta {
+      font-size: 12px;
+      opacity: 0.85;
+      margin-bottom: 10px;
+    }
+
+    .dashboardMetricRow {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .dashboardMetricRow:last-child {
+      border-bottom: none;
+    }
+
+    .dashboardMetricRow .metricValue {
+      font-weight: 700;
+    }
+
+    .dashboardMetricRow .metricSub {
+      font-size: 12px;
+      opacity: 0.8;
+      margin-left: 6px;
+    }
+
+    .dashboardStatusBadge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .dashboardStatus-approved {
+      background: rgba(48, 191, 120, 0.18);
+      color: #7CFC98;
+    }
+
+    .dashboardStatus-submitted {
+      background: rgba(255, 196, 0, 0.16);
+      color: #ffd24d;
+    }
+
+    .dashboardStatus-draft,
+    .dashboardStatus-missing {
+      background: rgba(255, 120, 120, 0.16);
+      color: #ff9d9d;
+    }
+
+    .dashboardSectionTitle {
+      margin: 18px 0 10px;
+    }
+
+    .dashboardAlerts {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .dashboardAlert {
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .dashboardAlert.red {
+      border-color: rgba(255, 90, 90, 0.4);
+    }
+
+    .dashboardAlert.yellow {
+      border-color: rgba(255, 210, 77, 0.4);
+    }
+
+    .dashboardAlert.green {
+      border-color: rgba(124, 252, 152, 0.35);
+    }
+
+    .dashboardEmpty {
+      opacity: 0.8;
+      padding: 10px 0;
+    }
+
+    .dashboardQuickTable table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    .dashboardQuickTable th,
+    .dashboardQuickTable td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+  </style>
 </head>
 <body>
   <div id="appShell">
     <aside id="sidebar">
       <h2>UnityMSK</h2>
+      <button id="navDashboardBtn" type="button">Dashboard</button>
       <button id="navEntryBtn" type="button">Weekly Entry</button>
       <button id="navExecutiveBtn" type="button">Executive Summary</button>
       <button id="navTrendsBtn" type="button">Trends</button>
@@ -23,7 +144,43 @@
       </header>
 
       <main>
-        <section id="entryView">
+        <section id="dashboardView">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
+                <label for="dashboardWeekEnding">Week Ending</label>
+                <input type="date" id="dashboardWeekEnding" />
+              </div>
+              <div class="buttonAlignBottom">
+                <button id="loadDashboardBtn" type="button">Load Dashboard</button>
+              </div>
+            </div>
+
+            <div id="dashboardCards" class="cardGrid"></div>
+
+            <div class="panel" style="margin-top:16px;">
+              <h3 class="dashboardSectionTitle">Entity Performance</h3>
+              <div id="dashboardEntities" class="dashboardEntityGrid"></div>
+            </div>
+
+            <div class="panel" style="margin-top:16px;">
+              <h3 class="dashboardSectionTitle">Alerts</h3>
+              <div id="dashboardAlerts" class="dashboardAlerts"></div>
+            </div>
+
+            <div class="panel dashboardQuickTable" style="margin-top:16px;">
+              <h3 class="dashboardSectionTitle">Entity Snapshot</h3>
+              <div id="dashboardSnapshot"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Dashboard Debug Output</summary>
+              <pre id="dashboardDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="entryView" style="display:none;">
           <div class="panel">
             <div class="fieldRow">
               <div>
