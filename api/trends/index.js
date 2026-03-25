@@ -34,7 +34,6 @@ function mapRow(entity) {
     entity: entity.entity || entity.partitionKey,
     weekEnding: entity.weekEnding || entity.rowKey,
     status: normalizeStatus(entity.status),
-
     visitVolume: toNumber(values.totalVisits) ?? toNumber(entity.visitVolume) ?? 0,
     callVolume: toNumber(values.totalCalls) ?? toNumber(entity.callVolume) ?? 0,
     newPatients: toNumber(values.npActual) ?? toNumber(entity.newPatients) ?? 0,
@@ -43,12 +42,12 @@ function mapRow(entity) {
       toNumber(values.cancellationRate) ?? toNumber(entity.cancellationRate) ?? 0,
     abandonedCallRate:
       toNumber(values.abandonmentRate) ?? toNumber(entity.abandonedCallRate) ?? 0,
-
-    updatedAt: entity.updatedAt || entity.importedAt || null
+    updatedBy: entity.updatedBy || entity.submittedBy || entity.approvedBy || null,
+    updatedAt: entity.updatedAt || entity.importedAt || entity.approvedAt || null,
+    source: entity.source || null
   };
 }
 
-// 🚨 THIS IS THE FIX
 function hasRealData(row) {
   return (
     (row.visitVolume ?? 0) > 0 ||
@@ -57,6 +56,57 @@ function hasRealData(row) {
     (row.noShowRate ?? 0) > 0 ||
     (row.cancellationRate ?? 0) > 0 ||
     (row.abandonedCallRate ?? 0) > 0
+  );
+}
+
+function isFriday(isoDate) {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  return d.getUTCDay() === 5;
+}
+
+function previousFridayForDate(isoDate) {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  const day = d.getUTCDay();
+  const diff = (day + 2) % 7;
+  d.setUTCDate(d.getUTCDate() - diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function dedupeWeeks(items) {
+  const fridayRows = new Map();
+  const nonFridayRows = [];
+
+  for (const item of items) {
+    if (isFriday(item.weekEnding)) {
+      // Prefer imported/approved Friday rows when duplicates exist
+      const existing = fridayRows.get(item.weekEnding);
+      if (!existing) {
+        fridayRows.set(item.weekEnding, item);
+        continue;
+      }
+
+      const existingScore =
+        (existing.source === "workbook-import" ? 2 : 0) +
+        (existing.status === "Approved" ? 1 : 0);
+      const itemScore =
+        (item.source === "workbook-import" ? 2 : 0) +
+        (item.status === "Approved" ? 1 : 0);
+
+      if (itemScore >= existingScore) {
+        fridayRows.set(item.weekEnding, item);
+      }
+    } else {
+      nonFridayRows.push(item);
+    }
+  }
+
+  const filteredNonFriday = nonFridayRows.filter((item) => {
+    const anchorFriday = previousFridayForDate(item.weekEnding);
+    return !fridayRows.has(anchorFriday);
+  });
+
+  return [...fridayRows.values(), ...filteredNonFriday].sort((a, b) =>
+    a.weekEnding < b.weekEnding ? 1 : -1
   );
 }
 
@@ -78,46 +128,45 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    const entity = req.query.entity;
-    const mode = req.query.mode || "recent";
-    const startDate = req.query.startDate;
-    const endDate = req.query.endDate;
+    const entity = String(req.query.entity || "").trim();
+    const mode = String(req.query.mode || "recent").trim();
+    const startDate = String(req.query.startDate || "").trim();
+    const endDate = String(req.query.endDate || "").trim();
+    const weeks = Math.max(1, Math.min(52, Number(req.query.weeks || 8) || 8));
 
     if (!entity) {
       return {
         status: 400,
-        body: { ok: false, error: "Missing entity" }
+        body: {
+          ok: false,
+          error: "Missing entity"
+        }
       };
     }
 
     if (!access.isAdmin && access.entity !== entity) {
       return {
         status: 403,
-        body: { ok: false, error: "Forbidden" }
+        body: {
+          ok: false,
+          error: "Forbidden"
+        }
       };
     }
 
     const table = getTableClient(REGION_TABLE);
     const rawRows = await getRowsForEntity(table, entity);
 
-    let items = rawRows.map(mapRow);
+    let items = rawRows.map(mapRow).filter(hasRealData);
 
-    // 🚨 FILTER OUT EMPTY DRAFT ROWS
-    items = items.filter((row) => hasRealData(row));
+    items = dedupeWeeks(items);
 
     if (mode === "dateRange" && startDate && endDate) {
       items = items.filter(
         (item) => item.weekEnding >= startDate && item.weekEnding <= endDate
       );
-    }
-
-    // sort AFTER filtering
-    items = items.sort((a, b) =>
-      a.weekEnding < b.weekEnding ? 1 : -1
-    );
-
-    if (mode !== "dateRange") {
-      items = items.slice(0, 8);
+    } else {
+      items = items.slice(0, weeks);
     }
 
     return {
@@ -126,6 +175,10 @@ module.exports = async function (context, req) {
         ok: true,
         entity,
         count: items.length,
+        appliedFilter:
+          mode === "dateRange" && startDate && endDate
+            ? { mode: "dateRange", startDate, endDate }
+            : { mode: "recent", weeks },
         items
       }
     };
