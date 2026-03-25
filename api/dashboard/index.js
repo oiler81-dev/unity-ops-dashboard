@@ -3,6 +3,7 @@ const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
 const REGION_TABLE = "WeeklyRegionData";
+const TARGETS_TABLE = "ReferenceData";
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
 function toNumber(value) {
@@ -11,12 +12,12 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function parseValuesJson(valuesJson) {
-  if (!valuesJson) return {};
+function parseJson(value, fallback = {}) {
+  if (!value) return fallback;
   try {
-    return typeof valuesJson === "string" ? JSON.parse(valuesJson) : valuesJson;
+    return typeof value === "string" ? JSON.parse(value) : value;
   } catch {
-    return {};
+    return fallback;
   }
 }
 
@@ -28,36 +29,133 @@ function normalizeStatus(status) {
   return status || "draft";
 }
 
-function mapRow(entity) {
-  const values = parseValuesJson(entity.valuesJson);
+function average(values) {
+  if (!values.length) return 0;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+function pctVariance(actual, target) {
+  const a = toNumber(actual) || 0;
+  const t = toNumber(target) || 0;
+  if (!t) return null;
+  return ((a - t) / t) * 100;
+}
+
+function buildTrend(actual, previous) {
+  const a = toNumber(actual) || 0;
+  const p = toNumber(previous) || 0;
+  const diff = a - p;
 
   return {
-    entity: entity.entity || entity.partitionKey,
-    weekEnding: entity.weekEnding || entity.rowKey,
-    status: normalizeStatus(entity.status),
-    visitVolume: toNumber(values.totalVisits) ?? toNumber(entity.visitVolume) ?? 0,
-    callVolume: toNumber(values.totalCalls) ?? toNumber(entity.callVolume) ?? 0,
-    newPatients: toNumber(values.npActual) ?? toNumber(entity.newPatients) ?? 0,
-    noShowRate: toNumber(values.noShowRate) ?? toNumber(entity.noShowRate) ?? 0,
-    cancellationRate:
-      toNumber(values.cancellationRate) ?? toNumber(entity.cancellationRate) ?? 0,
-    abandonedCallRate:
-      toNumber(values.abandonmentRate) ?? toNumber(entity.abandonedCallRate) ?? 0
+    current: a,
+    previous: p,
+    diff,
+    direction: diff > 0 ? "up" : diff < 0 ? "down" : "flat"
   };
 }
 
-async function getWeekRow(table, entity, weekEnding) {
+function getPreviousWeekEnding(weekEnding) {
+  const d = new Date(`${weekEnding}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 7);
+  return d.toISOString().split("T")[0];
+}
+
+function mapRecord(record) {
+  if (!record) return null;
+
+  const values = parseJson(record.valuesJson, {});
+  const visitVolume = toNumber(values.totalVisits) ?? toNumber(record.visitVolume) ?? 0;
+  const callVolume = toNumber(values.totalCalls) ?? toNumber(record.callVolume) ?? 0;
+  const newPatients = toNumber(values.npActual) ?? toNumber(record.newPatients) ?? 0;
+  const noShowRate = toNumber(values.noShowRate) ?? toNumber(record.noShowRate) ?? 0;
+  const cancellationRate =
+    toNumber(values.cancellationRate) ?? toNumber(record.cancellationRate) ?? 0;
+  const abandonedCallRate =
+    toNumber(values.abandonmentRate) ?? toNumber(record.abandonedCallRate) ?? 0;
+
+  return {
+    entity: record.entity || record.partitionKey,
+    weekEnding: record.weekEnding || record.rowKey,
+    status: normalizeStatus(record.status),
+    visitVolume,
+    callVolume,
+    newPatients,
+    noShowRate,
+    cancellationRate,
+    abandonedCallRate,
+    source: record.source || null,
+    updatedAt: record.updatedAt || record.importedAt || record.approvedAt || null,
+    rawValues: values
+  };
+}
+
+async function getWeekRecord(table, entity, weekEnding) {
   try {
-    const row = await table.getEntity(entity, weekEnding);
-    return mapRow(row);
-  } catch {
-    return null;
+    const record = await table.getEntity(entity, weekEnding);
+    return mapRecord(record);
+  } catch (err) {
+    if (err.statusCode === 404) return null;
+    throw err;
   }
 }
 
-function average(values) {
-  if (!values.length) return 0;
-  return values.reduce((a, b) => a + b, 0) / values.length;
+async function getEntityTargets(table, entity) {
+  try {
+    const record = await table.getEntity("Targets", entity);
+    const values = parseJson(record.valuesJson, {});
+    return {
+      visitTarget: toNumber(values.visitTarget),
+      callTarget: toNumber(values.callTarget),
+      newPatientTarget: toNumber(values.newPatientTarget)
+    };
+  } catch (err) {
+    if (err.statusCode === 404) {
+      return {
+        visitTarget: null,
+        callTarget: null,
+        newPatientTarget: null
+      };
+    }
+    throw err;
+  }
+}
+
+function buildAlertRow(entityRow) {
+  const alerts = [];
+
+  if (entityRow.status !== "Approved") {
+    alerts.push({
+      entity: entityRow.entity,
+      severity: "yellow",
+      message: `${entityRow.entity} is not approved for this week`
+    });
+  }
+
+  if ((entityRow.noShowRate || 0) >= 6) {
+    alerts.push({
+      entity: entityRow.entity,
+      severity: "red",
+      message: `${entityRow.entity} no-show rate is elevated`
+    });
+  }
+
+  if ((entityRow.cancellationRate || 0) >= 8) {
+    alerts.push({
+      entity: entityRow.entity,
+      severity: "red",
+      message: `${entityRow.entity} cancellation rate is elevated`
+    });
+  }
+
+  if ((entityRow.abandonedCallRate || 0) >= 10) {
+    alerts.push({
+      entity: entityRow.entity,
+      severity: "red",
+      message: `${entityRow.entity} abandoned call rate is elevated`
+    });
+  }
+
+  return alerts;
 }
 
 module.exports = async function (context, req) {
@@ -76,28 +174,90 @@ module.exports = async function (context, req) {
       };
     }
 
-    const table = getTableClient(REGION_TABLE);
-    const rows = [];
+    const previousWeekEnding = getPreviousWeekEnding(weekEnding);
+    const regionTable = getTableClient(REGION_TABLE);
+    const targetsTable = getTableClient(TARGETS_TABLE);
+
+    const entityRows = [];
+    const alerts = [];
 
     for (const entity of ENTITIES) {
-      const row = await getWeekRow(table, entity, weekEnding);
-      if (!row) continue;
-      if (row.status !== "Approved") continue;
-      rows.push(row);
+      const current = await getWeekRecord(regionTable, entity, weekEnding);
+      const previous = await getWeekRecord(regionTable, entity, previousWeekEnding);
+      const targets = await getEntityTargets(targetsTable, entity);
+
+      if (!current) {
+        entityRows.push({
+          entity,
+          weekEnding,
+          status: "missing",
+          visitVolume: 0,
+          callVolume: 0,
+          newPatients: 0,
+          noShowRate: 0,
+          cancellationRate: 0,
+          abandonedCallRate: 0,
+          targets,
+          variance: {
+            visitVariancePct: null,
+            callVariancePct: null,
+            newPatientVariancePct: null
+          },
+          trends: {
+            visits: buildTrend(0, previous?.visitVolume || 0),
+            calls: buildTrend(0, previous?.callVolume || 0),
+            newPatients: buildTrend(0, previous?.newPatients || 0)
+          }
+        });
+
+        alerts.push({
+          entity,
+          severity: "yellow",
+          message: `${entity} has no record for ${weekEnding}`
+        });
+
+        continue;
+      }
+
+      const row = {
+        ...current,
+        targets,
+        variance: {
+          visitVariancePct: pctVariance(current.visitVolume, targets.visitTarget),
+          callVariancePct: pctVariance(current.callVolume, targets.callTarget),
+          newPatientVariancePct: pctVariance(current.newPatients, targets.newPatientTarget)
+        },
+        trends: {
+          visits: buildTrend(current.visitVolume, previous?.visitVolume || 0),
+          calls: buildTrend(current.callVolume, previous?.callVolume || 0),
+          newPatients: buildTrend(current.newPatients, previous?.newPatients || 0)
+        }
+      };
+
+      entityRows.push(row);
+      alerts.push(...buildAlertRow(row));
     }
 
+    const approvedRows = entityRows.filter((r) => r.status === "Approved");
+
     const totals = {
-      visitVolume: rows.reduce((sum, r) => sum + (r.visitVolume || 0), 0),
-      callVolume: rows.reduce((sum, r) => sum + (r.callVolume || 0), 0),
-      newPatients: rows.reduce((sum, r) => sum + (r.newPatients || 0), 0)
+      visitVolume: approvedRows.reduce((sum, r) => sum + (r.visitVolume || 0), 0),
+      callVolume: approvedRows.reduce((sum, r) => sum + (r.callVolume || 0), 0),
+      newPatients: approvedRows.reduce((sum, r) => sum + (r.newPatients || 0), 0)
+    };
+
+    const averages = {
+      noShowRate: average(approvedRows.map((r) => r.noShowRate || 0)),
+      cancellationRate: average(approvedRows.map((r) => r.cancellationRate || 0)),
+      abandonedCallRate: average(approvedRows.map((r) => r.abandonedCallRate || 0))
     };
 
     const kpis = [
       {
         key: "approvedRegions",
         label: "Approved Regions",
-        value: rows.length,
-        meta: `${rows.length} region(s) approved`
+        value: approvedRows.length,
+        meta: `${approvedRows.length} region(s) approved`
       },
       {
         key: "visitVolume",
@@ -120,19 +280,19 @@ module.exports = async function (context, req) {
       {
         key: "avgNoShowRate",
         label: "Avg No Show %",
-        value: average(rows.map((r) => r.noShowRate || 0)),
+        value: averages.noShowRate,
         format: "percent"
       },
       {
         key: "avgCancellationRate",
         label: "Avg Cancel %",
-        value: average(rows.map((r) => r.cancellationRate || 0)),
+        value: averages.cancellationRate,
         format: "percent"
       },
       {
         key: "avgAbandonedCallRate",
         label: "Avg Abandoned %",
-        value: average(rows.map((r) => r.abandonedCallRate || 0)),
+        value: averages.abandonedCallRate,
         format: "percent"
       }
     ];
@@ -142,10 +302,13 @@ module.exports = async function (context, req) {
       body: {
         ok: true,
         weekEnding,
-        entityCount: rows.length,
+        previousWeekEnding,
+        entityCount: approvedRows.length,
         totals,
-        regions: rows,
-        kpis
+        averages,
+        kpis,
+        entities: entityRows,
+        alerts
       }
     };
   } catch (error) {
