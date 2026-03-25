@@ -27,9 +27,38 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+function q(selector) {
+  return document.querySelector(selector);
+}
+
+function qa(selector) {
+  return Array.from(document.querySelectorAll(selector));
+}
+
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
+function normalizeEmail(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function emailIsAdmin(value) {
+  return ADMIN_EMAILS.includes(normalizeEmail(value));
+}
+
+function unique(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
+}
+
 function setText(id, value) {
   const el = $(id);
   if (el) el.textContent = value;
+}
+
+function setHtml(id, value) {
+  const el = $(id);
+  if (el) el.innerHTML = value;
 }
 
 function show(el) {
@@ -41,40 +70,76 @@ function hide(el) {
 }
 
 function currentWeekEnding() {
-  return $("weekEndingSelect")?.value || state.weekEnding || getDefaultWeekEnding();
+  const candidates = [
+    $("weekEndingSelect"),
+    $("anchorWeekEnding"),
+    $("anchorWeekEndingInput"),
+    q("input[type='date'][id*='week']"),
+    q("input[type='date']")
+  ].filter(Boolean);
+
+  const control = candidates[0];
+  const value = normalizeText(control?.value);
+  return value || state.weekEnding || getDefaultWeekEnding();
+}
+
+function currentPeriod() {
+  const candidates = [
+    $("periodSelect"),
+    $("dashboardPeriodSelect"),
+    q("select[id*='period']"),
+    q("select[name='period']")
+  ].filter(Boolean);
+
+  return normalizeText(candidates[0]?.value) || "Current Week";
+}
+
+function currentCompareAgainst() {
+  const candidates = [
+    $("compareAgainstSelect"),
+    $("compareAgainst"),
+    q("select[id*='compare']"),
+    q("select[name='compareAgainst']")
+  ].filter(Boolean);
+
+  return normalizeText(candidates[0]?.value) || "Prior Period";
+}
+
+function currentEntityScope() {
+  const candidates = [
+    $("entityScopeSelect"),
+    $("entityScope"),
+    q("select[id*='scope']"),
+    q("select[name='entityScope']")
+  ].filter(Boolean);
+
+  return normalizeText(candidates[0]?.value) || "All Entities";
 }
 
 function isAdmin() {
   return state.isAdmin === true || state.role === "admin";
 }
 
-function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function emailIsAdmin(value) {
-  const email = normalizeEmail(value);
-  return ADMIN_EMAILS.includes(email);
+function getNavContainer() {
+  return $("dashboardNav") || q(".sidebar-nav") || document.body;
 }
 
 function getSignInEl() {
-  return $("signInButton");
+  return $("signInButton") || q("a[href*='/.auth/login']");
 }
 
 function getSignOutEl() {
-  return $("signOutButton");
-}
-
-function getNavContainer() {
-  return $("dashboardNav");
+  return $("signOutButton") || q("a[href*='/.auth/logout']");
 }
 
 function setSignedInUserText(value) {
   setText("signedInUserText", value);
+  setText("signedInAsText", value);
 }
 
 function setAssignedEntityText(value) {
   setText("assignedEntityText", value);
+  setText("entityText", value);
 }
 
 function setRoleText(value) {
@@ -94,21 +159,35 @@ function setViewHeader(title, subtitle) {
 
 function setStatusPanelText(value) {
   setText("dashboardStatusPanel", value);
+  setText("statusMessage", value);
+  setText("dashboardStatusMessage", value);
 }
 
-function unique(values) {
-  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
+function setTopRightStatus(value) {
+  setText("headerStatusText", value);
+  setText("topRightStatusText", value);
 }
 
-function parseJsonSafely(value, fallback = {}) {
-  if (!value) return fallback;
-  if (typeof value === "object") return value;
-
+function safeJsonStringify(value) {
   try {
-    return JSON.parse(value);
+    return JSON.stringify(value, null, 2);
   } catch {
-    return fallback;
+    return String(value);
   }
+}
+
+function setDebugOutput(value) {
+  const text = typeof value === "string" ? value : safeJsonStringify(value);
+
+  [
+    "dashboardDebugOutput",
+    "debugOutput",
+    "executiveDebugOutput",
+    "trendsDebugOutput"
+  ].forEach((id) => {
+    const el = $(id);
+    if (el) el.textContent = text;
+  });
 }
 
 function normalizeApiMe(result) {
@@ -116,7 +195,9 @@ function normalizeApiMe(result) {
 
   const userDetails = result.userDetails || "";
   const roles = unique(result.roles);
-  const apiSaysAdmin = !!result.isAdmin || roles.some((r) => String(r || "").toLowerCase() === "admin");
+  const apiSaysAdmin =
+    !!result.isAdmin ||
+    roles.some((r) => normalizeText(r).toLowerCase() === "admin");
   const forcedAdmin = emailIsAdmin(userDetails);
 
   return {
@@ -134,7 +215,7 @@ function normalizeAuthMe(result) {
 
   const userDetails = principal.userDetails || principal.userId || "";
   const roles = unique(principal.userRoles || []);
-  const roleAdmin = roles.some((r) => String(r || "").toLowerCase() === "admin");
+  const roleAdmin = roles.some((r) => normalizeText(r).toLowerCase() === "admin");
   const forcedAdmin = emailIsAdmin(userDetails);
 
   return {
@@ -144,62 +225,6 @@ function normalizeAuthMe(result) {
     entity: forcedAdmin ? "Admin" : "",
     isAdmin: roleAdmin || forcedAdmin
   };
-}
-
-function normalizeRegionValues(result) {
-  if (!result || typeof result !== "object") return {};
-
-  if (result.values && typeof result.values === "object") {
-    return result.values;
-  }
-
-  if (result.valuesJson) {
-    return parseJsonSafely(result.valuesJson, {});
-  }
-
-  const directKeys = [
-    "weekNumber",
-    "monthTag",
-    "daysInPeriod",
-    "totalVisits",
-    "visitsPerDay",
-    "npActual",
-    "establishedActual",
-    "surgeryActual",
-    "totalCalls",
-    "abandonedCalls",
-    "abandonmentRate",
-    "answeredCallToNpConversion",
-    "cashActual"
-  ];
-
-  const direct = {};
-  for (const key of directKeys) {
-    if (key in result) direct[key] = result[key];
-  }
-
-  return direct;
-}
-
-function normalizeSharedValues(result) {
-  if (!result || typeof result !== "object") return {};
-
-  if (result.values && typeof result.values === "object") {
-    return result.values;
-  }
-
-  if (result.valuesJson) {
-    return parseJsonSafely(result.valuesJson, {});
-  }
-
-  const direct = {};
-  for (const [key, value] of Object.entries(result)) {
-    if (!["page", "weekEnding", "source", "updatedAt", "importedAt"].includes(key)) {
-      direct[key] = value;
-    }
-  }
-
-  return direct;
 }
 
 async function resolveAuth() {
@@ -253,14 +278,12 @@ function syncAuthUi() {
     setSignedInUserText(state.userDetails);
     setAssignedEntityText(state.entity);
     setRoleText(state.role);
-
     hide(signInEl);
     show(signOutEl);
   } else {
     setSignedInUserText("Not signed in");
     setAssignedEntityText("None");
     setRoleText("guest");
-
     show(signInEl);
     hide(signOutEl);
   }
@@ -268,9 +291,50 @@ function syncAuthUi() {
   ensureAdminImportLink();
 }
 
+function ensureAdminImportLink() {
+  const existing = $("adminImportNavItem");
+
+  if (!isAdmin()) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const nav = getNavContainer();
+  if (!nav || existing) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.id = "adminImportNavItem";
+  wrapper.className = "sidebar-admin-link-wrap";
+  wrapper.innerHTML = `<a class="nav-link" href="./admin-import.html">Admin Import</a>`;
+
+  nav.appendChild(wrapper);
+}
+
 function initWeekSelector() {
-  const select = $("weekEndingSelect");
-  if (!select) return;
+  const select =
+    $("weekEndingSelect") ||
+    $("anchorWeekEnding") ||
+    $("anchorWeekEndingInput");
+
+  if (!select || select.tagName !== "SELECT") {
+    const input =
+      $("anchorWeekEnding") ||
+      $("anchorWeekEndingInput") ||
+      q("input[type='date'][id*='week']") ||
+      q("input[type='date']");
+
+    if (input) {
+      if (!normalizeText(input.value)) {
+        input.value = state.weekEnding;
+      }
+
+      input.addEventListener("change", () => {
+        state.weekEnding = normalizeText(input.value) || getDefaultWeekEnding();
+      });
+    }
+
+    return;
+  }
 
   const today = new Date();
   const weeks = [];
@@ -293,82 +357,69 @@ function initWeekSelector() {
     state.weekEnding = weeks[0];
   }
 
-  select.addEventListener("change", async () => {
-    state.weekEnding = select.value;
-    setText("sidebarWeekEndingText", formatDate(select.value));
-    await loadCurrentView();
+  select.addEventListener("change", () => {
+    state.weekEnding = normalizeText(select.value) || getDefaultWeekEnding();
   });
-
-  setText("sidebarWeekEndingText", formatDate(select.value));
-}
-
-function ensureAdminImportLink() {
-  const existing = $("adminImportNavItem");
-
-  if (!isAdmin()) {
-    if (existing) existing.remove();
-    return;
-  }
-
-  const nav = getNavContainer();
-  if (!nav || existing) return;
-
-  const wrapper = document.createElement("div");
-  wrapper.id = "adminImportNavItem";
-  wrapper.className = "sidebar-admin-link-wrap";
-  wrapper.innerHTML = `<a class="nav-link" href="./admin-import.html">Admin Import</a>`;
-  nav.appendChild(wrapper);
 }
 
 function activateNav(link) {
-  document.querySelectorAll(".nav-link").forEach((el) => {
-    el.classList.remove("active");
-  });
+  qa(".nav-link").forEach((el) => el.classList.remove("active"));
   if (link) link.classList.add("active");
 }
 
-function formatWhole(value) {
-  const n = Number(value || 0);
-  return Number.isFinite(n) ? Math.round(n).toLocaleString() : "0";
-}
-
-function formatDecimal(value, digits = 1) {
-  const n = Number(value || 0);
-  return Number.isFinite(n) ? n.toFixed(digits) : Number(0).toFixed(digits);
-}
-
-function formatPercent(value, digits = 1) {
-  const n = Number(value || 0);
-  return `${Number.isFinite(n) ? n.toFixed(digits) : Number(0).toFixed(digits)}%`;
-}
-
-function formatCurrency(value) {
-  const n = Number(value || 0);
-  return `$${Math.round(n).toLocaleString()}`;
-}
-
-function badgeFromStatus(status) {
-  const s = String(status || "").toLowerCase();
-  if (s === "up" || s === "improved" || s === "on target") return "green";
-  if (s === "down" || s === "worse" || s === "off target") return "red";
-  return "yellow";
-}
-
-function renderCardsFromItems(items) {
-  renderKpiCards(
-    items.map((item) => ({
-      label: item.label,
-      value: item.value,
-      meta: item.meta || "",
-      status: item.status || "",
-      statusColor: item.statusColor || badgeFromStatus(item.status)
-    }))
+function findNavLinkByText(needle) {
+  const lower = normalizeText(needle).toLowerCase();
+  return qa(".nav-link").find((el) =>
+    normalizeText(el.textContent).toLowerCase().includes(lower)
   );
 }
 
+function routeFromLink(link) {
+  const explicit = normalizeText(link?.dataset?.route);
+  if (explicit) return explicit;
+
+  const dataEntity = normalizeText(link?.dataset?.entity);
+  const dataPage = normalizeText(link?.dataset?.page);
+  const text = normalizeText(link?.textContent).toLowerCase();
+
+  if (REGION_KEYS.includes(dataEntity)) return "region";
+  if (SHARED_KEYS.includes(dataPage)) return "shared";
+
+  if (text === "dashboard") return "dashboard";
+  if (text === "weekly entry") return "entry";
+  if (text === "executive summary") return "dashboard";
+  if (text === "trends") return "trends";
+  if (text === "admin import") return "admin-import";
+  if (REGION_KEYS.map((x) => x.toLowerCase()).includes(text)) return "region";
+  if (SHARED_KEYS.map((x) => x.toLowerCase()).includes(text)) return "shared";
+
+  return "dashboard";
+}
+
+function parseNumber(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatWhole(value) {
+  return Math.round(parseNumber(value)).toLocaleString();
+}
+
+function formatDecimal(value, digits = 1) {
+  return parseNumber(value).toFixed(digits);
+}
+
+function formatPercent(value, digits = 1) {
+  return `${parseNumber(value).toFixed(digits)}%`;
+}
+
+function formatCurrency(value) {
+  return `$${Math.round(parseNumber(value)).toLocaleString()}`;
+}
+
 function inferTrend(current, previous, betterDirection = "up") {
-  const c = Number(current || 0);
-  const p = Number(previous || 0);
+  const c = parseNumber(current);
+  const p = parseNumber(previous);
   const diff = c - p;
 
   if (betterDirection === "down") {
@@ -382,198 +433,42 @@ function inferTrend(current, previous, betterDirection = "up") {
   return { status: "Flat", statusColor: "yellow", diff };
 }
 
-function getPreviousWeekEnding(weekEnding) {
-  const d = new Date(`${weekEnding}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 7);
-  return d.toISOString().split("T")[0];
+function renderCardsFromItems(items) {
+  renderKpiCards(
+    (Array.isArray(items) ? items : []).map((item) => ({
+      label: item.label,
+      value: item.value,
+      meta: item.meta || "",
+      status: item.status || "",
+      statusColor: item.statusColor || "yellow"
+    }))
+  );
 }
 
-function getMonthKey(dateString) {
-  const d = new Date(`${dateString}T12:00:00Z`);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function getMonthStart(dateString) {
-  const d = new Date(`${dateString}T12:00:00Z`);
-  d.setUTCDate(1);
-  return d.toISOString().split("T")[0];
-}
-
-function getMonthEnd(dateString) {
-  const d = new Date(`${dateString}T12:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + 1, 0);
-  return d.toISOString().split("T")[0];
-}
-
-function getPreviousMonthStart(dateString) {
-  const d = new Date(`${dateString}T12:00:00Z`);
-  d.setUTCDate(1);
-  d.setUTCMonth(d.getUTCMonth() - 1);
-  return d.toISOString().split("T")[0];
-}
-
-function getPreviousMonthEnd(dateString) {
-  const d = new Date(`${dateString}T12:00:00Z`);
-  d.setUTCDate(0);
-  return d.toISOString().split("T")[0];
-}
-
-function getWeekdayCountForWeekEnding(weekEnding) {
-  const end = new Date(`${weekEnding}T12:00:00Z`);
-  const start = new Date(end);
-  start.setUTCDate(end.getUTCDate() - 6);
-
-  let count = 0;
-  const cursor = new Date(start);
-
-  while (cursor <= end) {
-    const day = cursor.getUTCDay();
-    if (day !== 0 && day !== 6) {
-      count += 1;
+function normalizeRegionValues(result) {
+  if (!result || typeof result !== "object") return {};
+  if (result.values && typeof result.values === "object") return result.values;
+  if (result.valuesJson) {
+    try {
+      return JSON.parse(result.valuesJson);
+    } catch {
+      return {};
     }
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-
-  return count;
+  return {};
 }
 
-function getCompareAgainstValue() {
-  const candidates = [
-    $("compareAgainstSelect"),
-    $("compareAgainst"),
-    document.querySelector("[data-control='compare-against']"),
-    document.querySelector("select[name='compareAgainst']")
-  ].filter(Boolean);
-
-  const control = candidates[0];
-  return String(control?.value || "priorPeriod");
-}
-
-function getSelectedPeriod() {
-  const candidates = [
-    $("periodSelect"),
-    $("dashboardPeriodSelect"),
-    $("period"),
-    document.querySelector("[data-control='period']"),
-    document.querySelector("select[name='period']")
-  ].filter(Boolean);
-
-  const control = candidates[0];
-  return String(control?.value || "currentWeek");
-}
-
-function initDashboardControls() {
-  const controls = [
-    $("compareAgainstSelect"),
-    $("compareAgainst"),
-    document.querySelector("[data-control='compare-against']"),
-    document.querySelector("select[name='compareAgainst']"),
-    $("periodSelect"),
-    $("dashboardPeriodSelect"),
-    $("period"),
-    document.querySelector("[data-control='period']"),
-    document.querySelector("select[name='period']")
-  ].filter(Boolean);
-
-  controls.forEach((control) => {
-    control.addEventListener("change", async () => {
-      await loadCurrentView();
-    });
-  });
-}
-
-function normalizeTrendItems(items) {
-  return (Array.isArray(items) ? items : []).map((item) => ({
-    weekEnding: item.weekEnding || item.rowKey || "",
-    visitVolume: Number(item.visitVolume ?? item.totalVisits ?? 0) || 0,
-    callVolume: Number(item.callVolume ?? item.totalCalls ?? 0) || 0,
-    newPatients: Number(item.newPatients ?? item.npActual ?? 0) || 0
-  }));
-}
-
-function sumTrendItems(items) {
-  return normalizeTrendItems(items).reduce(
-    (totals, item) => {
-      totals.visitVolume += item.visitVolume;
-      totals.callVolume += item.callVolume;
-      totals.newPatients += item.newPatients;
-      return totals;
-    },
-    { visitVolume: 0, callVolume: 0, newPatients: 0 }
-  );
-}
-
-async function getActualsForEntityPeriod(entity, period, weekEnding) {
-  if (period === "currentWeek") {
-    const result = await safeApiGet(
-      `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`,
-      { values: {} }
-    );
-
-    const values = normalizeRegionValues(result);
-    return {
-      visitVolume: Number(values.totalVisits || 0) || 0,
-      callVolume: Number(values.totalCalls || 0) || 0,
-      newPatients: Number(values.npActual || 0) || 0,
-      daysInPeriod: Number(values.daysInPeriod || 0) || getWeekdayCountForWeekEnding(weekEnding)
-    };
+function normalizeSharedValues(result) {
+  if (!result || typeof result !== "object") return {};
+  if (result.values && typeof result.values === "object") return result.values;
+  if (result.valuesJson) {
+    try {
+      return JSON.parse(result.valuesJson);
+    } catch {
+      return {};
+    }
   }
-
-  let startDate = weekEnding;
-  let endDate = weekEnding;
-
-  if (period === "mtd") {
-    startDate = getMonthStart(weekEnding);
-    endDate = weekEnding;
-  } else if (period === "lastMonth") {
-    startDate = getPreviousMonthStart(weekEnding);
-    endDate = getPreviousMonthEnd(weekEnding);
-  }
-
-  const result = await safeApiGet(
-    `/api/trends?entity=${encodeURIComponent(entity)}&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`,
-    { items: [] }
-  );
-
-  const totals = sumTrendItems(result.items || []);
-  return {
-    visitVolume: totals.visitVolume,
-    callVolume: totals.callVolume,
-    newPatients: totals.newPatients,
-    daysInPeriod: null
-  };
-}
-
-function buildVarianceStatus(actual, budget) {
-  const variance = actual - budget;
-  if (variance > 0) {
-    return { status: "On Target", statusColor: "green", variance };
-  }
-  if (variance < 0) {
-    return { status: "Off Target", statusColor: "red", variance };
-  }
-  return { status: "Flat", statusColor: "yellow", variance };
-}
-
-async function getBudgetForEntityPeriod(entity, period, weekEnding, daysInPeriod) {
-  const query = new URLSearchParams({
-    entity,
-    period,
-    weekEnding
-  });
-
-  if (Number.isFinite(daysInPeriod)) {
-    query.set("daysInPeriod", String(daysInPeriod));
-  }
-
-  return safeApiGet(`/api/budget?${query.toString()}`, {
-    visitBudgetProrated: 0,
-    newPatientsBudgetProrated: 0,
-    visitBudgetMonthly: 0,
-    newPatientsBudgetMonthly: 0,
-    workingDaysInMonth: 0,
-    workingDaysUsed: 0
-  });
+  return {};
 }
 
 function buildRegionCards(current, previous = {}) {
@@ -642,42 +537,6 @@ function buildRegionCards(current, previous = {}) {
       meta: `${cashTrend.diff >= 0 ? "+" : ""}$${formatWhole(cashTrend.diff)} vs prior week`,
       status: cashTrend.status,
       statusColor: cashTrend.statusColor
-    }
-  ];
-}
-
-function buildRegionBudgetCards(entity, period, actuals, budget) {
-  const visitStatus = buildVarianceStatus(actuals.visitVolume, budget.visitBudgetProrated || 0);
-  const npStatus = buildVarianceStatus(actuals.newPatients, budget.newPatientsBudgetProrated || 0);
-
-  return [
-    {
-      label: `${entity} Visits`,
-      value: formatWhole(actuals.visitVolume),
-      meta: `Budget ${formatWhole(budget.visitBudgetProrated || 0)}`,
-      status: visitStatus.status,
-      statusColor: visitStatus.statusColor
-    },
-    {
-      label: "Visit Variance",
-      value: `${visitStatus.variance >= 0 ? "+" : ""}${formatWhole(visitStatus.variance)}`,
-      meta: `${((budget.visitBudgetProrated || 0) ? (visitStatus.variance / budget.visitBudgetProrated) * 100 : 0).toFixed(1)}% vs budget`,
-      status: visitStatus.status,
-      statusColor: visitStatus.statusColor
-    },
-    {
-      label: "New Patients",
-      value: formatWhole(actuals.newPatients),
-      meta: `Budget ${formatWhole(budget.newPatientsBudgetProrated || 0)}`,
-      status: npStatus.status,
-      statusColor: npStatus.statusColor
-    },
-    {
-      label: "NP Variance",
-      value: `${npStatus.variance >= 0 ? "+" : ""}${formatWhole(npStatus.variance)}`,
-      meta: `${((budget.newPatientsBudgetProrated || 0) ? (npStatus.variance / budget.newPatientsBudgetProrated) * 100 : 0).toFixed(1)}% vs budget`,
-      status: npStatus.status,
-      statusColor: npStatus.statusColor
     }
   ];
 }
@@ -778,168 +637,73 @@ function buildSharedCards(page, current, previous = {}) {
   ];
 }
 
-function findNavLinkForRegion(entity) {
-  return Array.from(document.querySelectorAll(".nav-link")).find((el) => {
-    const dataEntity = (el.dataset.entity || "").trim();
-    const text = (el.textContent || "").trim();
-    return dataEntity === entity || text === entity;
-  });
-}
-
-function findNavLinkForShared(page) {
-  return Array.from(document.querySelectorAll(".nav-link")).find((el) => {
-    const dataPage = (el.dataset.page || "").trim();
-    const text = (el.textContent || "").trim();
-    return dataPage === page || text === page;
-  });
-}
-
-function findExecutiveNavLink() {
-  return Array.from(document.querySelectorAll(".nav-link")).find((el) =>
-    ((el.textContent || "").trim().toLowerCase().includes("executive"))
-  );
-}
-
-async function loadBudgetDashboard(period, weekEnding) {
-  const entitySummaries = [];
-
-  for (const entity of REGION_KEYS) {
-    const actuals = await getActualsForEntityPeriod(entity, period, weekEnding);
-    const budget = await getBudgetForEntityPeriod(entity, period, weekEnding, actuals.daysInPeriod);
-
-    entitySummaries.push({
-      entity,
-      actualVisitVolume: actuals.visitVolume,
-      actualNewPatients: actuals.newPatients,
-      visitBudget: Number(budget.visitBudgetProrated || 0) || 0,
-      newPatientsBudget: Number(budget.newPatientsBudgetProrated || 0) || 0
-    });
-  }
-
-  const totals = entitySummaries.reduce(
-    (acc, item) => {
-      acc.actualVisitVolume += item.actualVisitVolume;
-      acc.actualNewPatients += item.actualNewPatients;
-      acc.visitBudget += item.visitBudget;
-      acc.newPatientsBudget += item.newPatientsBudget;
-      return acc;
-    },
-    { actualVisitVolume: 0, actualNewPatients: 0, visitBudget: 0, newPatientsBudget: 0 }
-  );
-
-  const visitVariance = totals.actualVisitVolume - totals.visitBudget;
-  const npVariance = totals.actualNewPatients - totals.newPatientsBudget;
-
-  renderCardsFromItems([
-    {
-      label: "Companywide Visits",
-      value: formatWhole(totals.actualVisitVolume),
-      meta: `Budget ${formatWhole(totals.visitBudget)}`,
-      status: visitVariance >= 0 ? "On Target" : "Off Target",
-      statusColor: visitVariance >= 0 ? "green" : "red"
-    },
-    {
-      label: "Visit Variance",
-      value: `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)}`,
-      meta: `${(totals.visitBudget ? (visitVariance / totals.visitBudget) * 100 : 0).toFixed(1)}% vs budget`,
-      status: visitVariance >= 0 ? "On Target" : "Off Target",
-      statusColor: visitVariance >= 0 ? "green" : "red"
-    },
-    {
-      label: "Companywide New Patients",
-      value: formatWhole(totals.actualNewPatients),
-      meta: `Budget ${formatWhole(totals.newPatientsBudget)}`,
-      status: npVariance >= 0 ? "On Target" : "Off Target",
-      statusColor: npVariance >= 0 ? "green" : "red"
-    },
-    {
-      label: "NP Variance",
-      value: `${npVariance >= 0 ? "+" : ""}${formatWhole(npVariance)}`,
-      meta: `${(totals.newPatientsBudget ? (npVariance / totals.newPatientsBudget) * 100 : 0).toFixed(1)}% vs budget`,
-      status: npVariance >= 0 ? "On Target" : "Off Target",
-      statusColor: npVariance >= 0 ? "green" : "red"
-    }
-  ]);
-
-  const lines = entitySummaries.map((item) => {
-    const visitVar = item.actualVisitVolume - item.visitBudget;
-    const npVar = item.actualNewPatients - item.newPatientsBudget;
-    return `${item.entity}: Visits ${formatWhole(item.actualVisitVolume)} vs ${formatWhole(item.visitBudget)} (${visitVar >= 0 ? "+" : ""}${formatWhole(visitVar)}), NP ${formatWhole(item.actualNewPatients)} vs ${formatWhole(item.newPatientsBudget)} (${npVar >= 0 ? "+" : ""}${formatWhole(npVar)})`;
-  });
-
-  setStatusPanelText(lines.join(" | "));
+function getPreviousWeekEnding(weekEnding) {
+  const d = new Date(`${weekEnding}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 7);
+  return d.toISOString().split("T")[0];
 }
 
 async function loadDashboard() {
   const week = currentWeekEnding();
-  const compareAgainst = getCompareAgainstValue();
-  const period = getSelectedPeriod();
 
   setViewHeader(
-    "Executive Summary",
-    "Weekly companywide KPI overview with trends, target comparisons, and submission visibility."
+    "Dashboard",
+    "Multi-entity performance view with period and comparison controls."
   );
   setStatusPanelText("Loading dashboard...");
+  setTopRightStatus("Loading...");
 
-  if (compareAgainst === "budget") {
-    await loadBudgetDashboard(period, week);
-    return;
-  }
+  const query = new URLSearchParams({
+    weekEnding: week,
+    period: currentPeriod(),
+    compareAgainst: currentCompareAgainst(),
+    entityScope: currentEntityScope()
+  });
 
-  const result = await safeApiGet(
-    `/api/dashboard?weekEnding=${encodeURIComponent(week)}`,
-    { kpis: [] }
-  );
+  const result = await safeApiGet(`/api/dashboard?${query.toString()}`, { kpis: [] });
 
-  const kpis = Array.isArray(result?.kpis) ? result.kpis : [];
-  renderKpiCards(kpis);
-  setStatusPanelText("Executive dashboard loaded.");
+  renderKpiCards(Array.isArray(result?.kpis) ? result.kpis : []);
+  setDebugOutput(result);
+
+  setStatusPanelText("Dashboard loaded.");
+  setTopRightStatus("Ready");
 }
 
 async function loadRegionPage(entity) {
   const week = currentWeekEnding();
   const previousWeek = getPreviousWeekEnding(week);
-  const compareAgainst = getCompareAgainstValue();
-  const period = getSelectedPeriod();
 
   setViewHeader(
     `${entity} Weekly View`,
     `Weekly operational performance for ${entity}.`
   );
   setStatusPanelText(`Loading ${entity} weekly data...`);
-
-  if (compareAgainst === "budget") {
-    const actuals = await getActualsForEntityPeriod(entity, period, week);
-    const budget = await getBudgetForEntityPeriod(entity, period, week, actuals.daysInPeriod);
-
-    const cards = buildRegionBudgetCards(entity, period, actuals, budget);
-    renderCardsFromItems(cards);
-    setStatusPanelText(`${entity} ${period} budget comparison loaded.`);
-    return;
-  }
+  setTopRightStatus("Loading...");
 
   const currentResponse = await safeApiGet(
     `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
-    { values: {} }
+    {}
   );
 
   const previousResponse = await safeApiGet(
     `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(previousWeek)}`,
-    { values: {} }
+    {}
   );
 
   const currentValues = normalizeRegionValues(currentResponse);
   const previousValues = normalizeRegionValues(previousResponse);
 
-  const cards = buildRegionCards(currentValues, previousValues);
-  renderCardsFromItems(cards);
+  renderCardsFromItems(buildRegionCards(currentValues, previousValues));
+  setDebugOutput({
+    currentRoute: state.currentRoute,
+    entity,
+    weekEnding: week,
+    current: currentResponse,
+    previous: previousResponse
+  });
 
-  const hasAnyCurrentValue = Object.values(currentValues).some((v) => v !== null && v !== undefined && v !== "");
-  setStatusPanelText(
-    hasAnyCurrentValue
-      ? `${entity} weekly data loaded.`
-      : `${entity} has no saved data for ${formatDate(week)}.`
-  );
+  setStatusPanelText(`${entity} weekly data loaded.`);
+  setTopRightStatus("Ready");
 }
 
 async function loadSharedPage(page) {
@@ -951,18 +715,13 @@ async function loadSharedPage(page) {
     `Weekly metrics for ${page}.`
   );
   setStatusPanelText(`Loading ${page} data...`);
+  setTopRightStatus("Loading...");
 
   if (page === "Capacity" || page === "Productivity Builder") {
-    renderCardsFromItems([
-      {
-        label: page,
-        value: "Coming Soon",
-        meta: "This section is not fully wired yet.",
-        status: "Flat",
-        statusColor: "yellow"
-      }
-    ]);
+    renderCardsFromItems(buildSharedCards(page, {}, {}));
+    setDebugOutput({ page, message: "Not fully wired yet." });
     setStatusPanelText(`${page} is not fully wired yet.`);
+    setTopRightStatus("Ready");
     return;
   }
 
@@ -979,15 +738,61 @@ async function loadSharedPage(page) {
   const currentValues = normalizeSharedValues(currentResponse);
   const previousValues = normalizeSharedValues(previousResponse);
 
-  const cards = buildSharedCards(page, currentValues, previousValues);
-  renderCardsFromItems(cards);
+  renderCardsFromItems(buildSharedCards(page, currentValues, previousValues));
+  setDebugOutput({
+    currentRoute: state.currentRoute,
+    page,
+    weekEnding: week,
+    current: currentResponse,
+    previous: previousResponse
+  });
 
-  const hasAnyCurrentValue = Object.values(currentValues).some((v) => v !== null && v !== undefined && v !== "");
-  setStatusPanelText(
-    hasAnyCurrentValue
-      ? `${page} weekly data loaded.`
-      : `${page} has no saved data for ${formatDate(week)}.`
+  setStatusPanelText(`${page} weekly data loaded.`);
+  setTopRightStatus("Ready");
+}
+
+async function loadExecutiveSummary() {
+  const week = currentWeekEnding();
+
+  setViewHeader(
+    "Executive Summary",
+    "Weekly companywide KPI overview with trends, target comparisons, and submission visibility."
   );
+  setStatusPanelText("Loading executive summary...");
+  setTopRightStatus("Loading...");
+
+  const result = await safeApiGet(
+    `/api/executive-summary?weekEnding=${encodeURIComponent(week)}`,
+    { kpis: [] }
+  );
+
+  renderKpiCards(Array.isArray(result?.kpis) ? result.kpis : []);
+  setDebugOutput(result);
+
+  setStatusPanelText("Executive summary loaded.");
+  setTopRightStatus("Ready");
+}
+
+async function loadTrends() {
+  const week = currentWeekEnding();
+
+  setViewHeader(
+    "Trends",
+    "Historical trend view for the selected entity and date range."
+  );
+  setStatusPanelText("Loading trends...");
+  setTopRightStatus("Loading...");
+
+  const query = new URLSearchParams({
+    weekEnding: week,
+    entity: state.currentRegion
+  });
+
+  const result = await safeApiGet(`/api/trends?${query.toString()}`, { items: [] });
+
+  setDebugOutput(result);
+  setStatusPanelText("Trends loaded.");
+  setTopRightStatus("Ready");
 }
 
 async function loadCurrentView() {
@@ -1002,29 +807,30 @@ async function loadCurrentView() {
       return;
     }
 
+    if (state.currentRoute === "trends") {
+      await loadTrends();
+      return;
+    }
+
+    if (state.currentRoute === "entry") {
+      await loadRegionPage(state.currentRegion);
+      return;
+    }
+
+    if (state.currentRoute === "executive") {
+      await loadExecutiveSummary();
+      return;
+    }
+
     await loadDashboard();
-  } catch (err) {
-    handleFatalError(err);
+  } catch (error) {
+    setTopRightStatus("Error");
+    setDebugOutput({
+      error: error?.message || String(error),
+      stack: error?.stack || null
+    });
+    handleFatalError(error);
   }
-}
-
-function routeFromLink(link) {
-  const explicit = link.dataset.route;
-  if (explicit) return explicit;
-
-  const dataEntity = (link.dataset.entity || "").trim();
-  const dataPage = (link.dataset.page || "").trim();
-
-  if (REGION_KEYS.includes(dataEntity)) return "region";
-  if (SHARED_KEYS.includes(dataPage)) return "shared";
-
-  const text = (link.textContent || "").trim();
-
-  if (REGION_KEYS.includes(text)) return "region";
-  if (SHARED_KEYS.includes(text)) return "shared";
-  if (text.toLowerCase().includes("executive")) return "dashboard";
-
-  return "dashboard";
 }
 
 function initNavigation() {
@@ -1035,22 +841,42 @@ function initNavigation() {
     const link = e.target.closest(".nav-link");
     if (!link) return;
 
-    const href = link.getAttribute("href") || "";
-    if (href.includes("admin-import.html")) return;
+    const href = normalizeText(link.getAttribute("href"));
+    if (href.includes("admin-import.html")) {
+      return;
+    }
 
     e.preventDefault();
 
     const route = routeFromLink(link);
-    state.currentRoute = route;
+    const text = normalizeText(link.textContent);
+
+    if (route === "dashboard") {
+      state.currentRoute = text.toLowerCase().includes("executive") ? "executive" : "dashboard";
+    } else {
+      state.currentRoute = route;
+    }
 
     if (route === "region") {
-      const clickedEntity = (link.dataset.entity || link.textContent || "").trim();
-      state.currentRegion = REGION_KEYS.includes(clickedEntity) ? clickedEntity : state.currentRegion;
+      const clickedEntity = normalizeText(link.dataset.entity || text);
+      if (REGION_KEYS.includes(clickedEntity)) {
+        state.currentRegion = clickedEntity;
+      }
     }
 
     if (route === "shared") {
-      const clickedPage = (link.dataset.page || link.textContent || "").trim();
-      state.currentSharedPage = SHARED_KEYS.includes(clickedPage) ? clickedPage : state.currentSharedPage;
+      const clickedPage = normalizeText(link.dataset.page || text);
+      if (SHARED_KEYS.includes(clickedPage)) {
+        state.currentSharedPage = clickedPage;
+      }
+    }
+
+    if (route === "trends") {
+      state.currentRoute = "trends";
+    }
+
+    if (route === "entry") {
+      state.currentRoute = "entry";
     }
 
     activateNav(link);
@@ -1073,9 +899,11 @@ async function saveRegion() {
 
   if (!result || result.error) {
     alert("Save failed.");
+    setDebugOutput(result || { error: "Save failed." });
     return;
   }
 
+  setDebugOutput(result);
   alert("Saved successfully.");
   await loadCurrentView();
 }
@@ -1095,50 +923,73 @@ async function saveShared() {
 
   if (!result || result.error) {
     alert("Save failed.");
+    setDebugOutput(result || { error: "Save failed." });
     return;
   }
 
+  setDebugOutput(result);
   alert("Saved successfully.");
   await loadCurrentView();
 }
 
 function initButtons() {
-  const saveBtn = $("saveButton");
-  const submitBtn = $("submitWeekButton");
+  const saveBtn = $("saveButton") || $("saveBtn");
+  const submitBtn = $("submitWeekButton") || $("submitBtn");
+  const loadDashboardBtn = $("loadDashboardButton") || $("loadDashboardBtn");
 
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
-      if (state.currentRoute === "region") {
-        await saveRegion();
-        return;
-      }
-
       if (state.currentRoute === "shared") {
         await saveShared();
         return;
       }
 
-      alert("Nothing to save on this page.");
+      await saveRegion();
     });
   }
 
   if (submitBtn) {
     submitBtn.addEventListener("click", async () => {
-      if (state.currentRoute === "region") {
-        await saveRegion();
-        alert("Week submitted.");
-        return;
-      }
-
       if (state.currentRoute === "shared") {
         await saveShared();
         alert("Week submitted.");
         return;
       }
 
-      alert("Nothing to submit on this page.");
+      await saveRegion();
+      alert("Week submitted.");
     });
   }
+
+  if (loadDashboardBtn) {
+    loadDashboardBtn.addEventListener("click", async () => {
+      state.currentRoute = "dashboard";
+      activateNav(findNavLinkByText("dashboard"));
+      await loadCurrentView();
+    });
+  }
+}
+
+function initControlReloads() {
+  [
+    $("periodSelect"),
+    $("dashboardPeriodSelect"),
+    $("compareAgainstSelect"),
+    $("compareAgainst"),
+    $("entityScopeSelect"),
+    $("entityScope"),
+    $("weekEndingSelect"),
+    $("anchorWeekEnding"),
+    $("anchorWeekEndingInput")
+  ]
+    .filter(Boolean)
+    .forEach((el) => {
+      el.addEventListener("change", async () => {
+        if (el.type === "date" || el.tagName === "SELECT") {
+          state.weekEnding = currentWeekEnding();
+        }
+      });
+    });
 }
 
 function initHeroButtons() {
@@ -1152,47 +1003,52 @@ function initHeroButtons() {
         ? "LAOSS"
         : (state.entity === "Admin" ? "LAOSS" : state.entity);
 
-      activateNav(findNavLinkForRegion(state.currentRegion));
+      activateNav(findNavLinkByText(state.currentRegion));
       await loadCurrentView();
     });
   }
 
   if (executiveBtn) {
     executiveBtn.addEventListener("click", async () => {
-      state.currentRoute = "dashboard";
-      activateNav(findExecutiveNavLink());
+      state.currentRoute = "executive";
+      activateNav(findNavLinkByText("executive"));
       await loadCurrentView();
     });
   }
 }
 
 function activateInitialNav() {
-  if (state.currentRoute === "region") {
-    activateNav(findNavLinkForRegion(state.currentRegion));
-    return;
+  const dashboardLink = findNavLinkByText("dashboard");
+  if (dashboardLink) {
+    activateNav(dashboardLink);
   }
-
-  if (state.currentRoute === "shared") {
-    activateNav(findNavLinkForShared(state.currentSharedPage));
-    return;
-  }
-
-  activateNav(findExecutiveNavLink());
 }
 
 async function init() {
   try {
     setLoadingHeader();
+    setStatusPanelText("Initializing...");
+    setTopRightStatus("Loading...");
+    setDebugOutput("App booting...");
+
     initWeekSelector();
     initButtons();
+    initControlReloads();
     initHeroButtons();
-    initDashboardControls();
+
     await resolveAuth();
+
     initNavigation();
     activateInitialNav();
+
     await loadCurrentView();
-  } catch (err) {
-    handleFatalError(err);
+  } catch (error) {
+    setTopRightStatus("Error");
+    setDebugOutput({
+      error: error?.message || String(error),
+      stack: error?.stack || null
+    });
+    handleFatalError(error);
   }
 }
 
