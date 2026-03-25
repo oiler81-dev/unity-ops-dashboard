@@ -34,9 +34,13 @@ module.exports = async function (context, req) {
       return badRequest("No data found to submit");
     }
 
+    const now = new Date().toISOString();
+
     record.status = "submitted";
     record.submittedBy = access.email;
-    record.submittedAt = new Date().toISOString();
+    record.submittedAt = now;
+    record.updatedBy = access.email;
+    record.updatedAt = now;
 
     await client.upsertEntity(record, "Replace");
 
