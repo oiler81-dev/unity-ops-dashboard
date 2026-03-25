@@ -276,17 +276,40 @@
           <div class="panel">
             <div class="sectionHeader">
               <h3>Admin Workbook Import</h3>
-              <p>Upload the locked workbook to backfill historical weekly data into the dashboard.</p>
+              <p>Upload workbooks to backfill historical weekly data and benchmark budget data into the dashboard.</p>
             </div>
 
-            <div class="fieldRow">
-              <div style="min-width:320px;">
-                <label for="importFile">Workbook File</label>
-                <input type="file" id="importFile" accept=".xlsx,.xls" />
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <h3>Historical Weekly Import</h3>
               </div>
 
-              <div class="buttonAlignBottom">
-                <button id="runImportBtn" type="button">Run Import</button>
+              <div class="fieldRow">
+                <div style="min-width:320px;">
+                  <label for="importFile">Workbook File</label>
+                  <input type="file" id="importFile" accept=".xlsx,.xls" />
+                </div>
+
+                <div class="buttonAlignBottom">
+                  <button id="runImportBtn" type="button">Run Weekly Import</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <h3>Budget Import</h3>
+              </div>
+
+              <div class="fieldRow">
+                <div style="min-width:320px;">
+                  <label for="budgetImportFile">Budget Workbook File</label>
+                  <input type="file" id="budgetImportFile" accept=".xlsx,.xls" />
+                </div>
+
+                <div class="buttonAlignBottom">
+                  <button id="runBudgetImportBtn" type="button">Run Budget Import</button>
+                </div>
               </div>
             </div>
 
