@@ -13,6 +13,7 @@
       <button id="navEntryBtn" type="button">Weekly Entry</button>
       <button id="navExecutiveBtn" type="button">Executive Summary</button>
       <button id="navTrendsBtn" type="button">Trends</button>
+      <button id="navImportBtn" type="button">Admin Import</button>
     </aside>
 
     <div id="mainContent">
@@ -131,6 +132,31 @@
             <details class="debugPanel">
               <summary>Trends Debug Output</summary>
               <pre id="trendsDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="importView" style="display:none;">
+          <div class="panel">
+            <h3>Admin Workbook Import</h3>
+            <p>Upload the locked workbook to backfill historical weekly data into the dashboard.</p>
+
+            <div class="fieldRow">
+              <div style="min-width:320px;">
+                <label for="importFile">Workbook File</label>
+                <input type="file" id="importFile" accept=".xlsx,.xls" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="runImportBtn" type="button">Run Import</button>
+              </div>
+            </div>
+
+            <div id="importStatusMessage" class="statusMessage"></div>
+
+            <details class="debugPanel">
+              <summary>Import Debug Output</summary>
+              <pre id="importDebugOutput" class="debugOutput"></pre>
             </details>
           </div>
         </section>
