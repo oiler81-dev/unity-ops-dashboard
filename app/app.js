@@ -74,6 +74,12 @@ function getDefaultWeekEnding() {
   return d.toISOString().slice(0, 10);
 }
 
+function getDateWeeksAgo(weeksAgo) {
+  const d = new Date();
+  d.setDate(d.getDate() - (weeksAgo * 7));
+  return d.toISOString().slice(0, 10);
+}
+
 function renderUser(userData) {
   document.getElementById("userInfo").innerText =
     `${userData.user.userDetails} (${userData.access.role})`;
@@ -186,7 +192,7 @@ function updateButtonState() {
   const status = currentWeekData?.status || "draft";
   const isAdmin = !!currentUser?.access?.isAdmin;
 
-  saveBtn.disabled = status === "approved";
+  saveBtn.disabled = status === "approved" && !isAdmin;
   submitBtn.disabled = status === "submitted" || status === "approved";
   approveBtn.disabled = !isAdmin || status !== "submitted";
 }
@@ -259,6 +265,24 @@ async function approveWeek() {
   setDebug(result);
 
   await loadWeek();
+}
+
+async function deleteWeek(entity, weekEnding) {
+  if (!confirm(`Delete ${entity} for ${weekEnding}? This cannot be undone.`)) {
+    return;
+  }
+
+  const result = await apiPost("/api/delete-week", { entity, weekEnding });
+  setTrendsDebug(result);
+  await loadTrends();
+}
+
+async function openOverride(entity, weekEnding) {
+  showEntryView();
+  document.getElementById("entitySelect").value = entity;
+  document.getElementById("weekEnding").value = weekEnding;
+  await loadWeek();
+  setStatus(`Admin override mode: ${entity} ${weekEnding}`);
 }
 
 function showEntryView() {
@@ -391,22 +415,10 @@ function renderTrendsCards(result) {
   };
 
   const cardData = [
-    {
-      label: "Weeks Loaded",
-      value: items.length
-    },
-    {
-      label: "Latest Visit Volume",
-      value: latest ? formatDelta(latest.visitVolume, previous?.visitVolume) : "-"
-    },
-    {
-      label: "Latest Call Volume",
-      value: latest ? formatDelta(latest.callVolume, previous?.callVolume) : "-"
-    },
-    {
-      label: "Latest New Patients",
-      value: latest ? formatDelta(latest.newPatients, previous?.newPatients) : "-"
-    }
+    { label: "Weeks Loaded", value: items.length },
+    { label: "Latest Visit Volume", value: latest ? formatDelta(latest.visitVolume, previous?.visitVolume) : "-" },
+    { label: "Latest Call Volume", value: latest ? formatDelta(latest.callVolume, previous?.callVolume) : "-" },
+    { label: "Latest New Patients", value: latest ? formatDelta(latest.newPatients, previous?.newPatients) : "-" }
   ];
 
   cardData.forEach((item) => {
@@ -429,6 +441,8 @@ function renderTrendsTable(result) {
     return;
   }
 
+  const isAdmin = !!currentUser?.access?.isAdmin;
+
   const rows = items.slice().reverse().map((item) => `
     <tr>
       <td>${item.weekEnding}</td>
@@ -439,6 +453,12 @@ function renderTrendsTable(result) {
       <td>${item.cancellationRate}%</td>
       <td>${item.abandonedCallRate}%</td>
       <td>${item.status}</td>
+      ${isAdmin ? `
+        <td>
+          <button class="actionBtn" data-action="override" data-entity="${item.entity}" data-week="${item.weekEnding}">Override</button>
+          <button class="actionBtn" data-action="delete" data-entity="${item.entity}" data-week="${item.weekEnding}">Delete</button>
+        </td>
+      ` : ""}
     </tr>
   `).join("");
 
@@ -454,20 +474,56 @@ function renderTrendsTable(result) {
           <th>Cancellation Rate</th>
           <th>Abandoned Call Rate</th>
           <th>Status</th>
+          ${isAdmin ? "<th>Actions</th>" : ""}
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
   `;
+
+  if (isAdmin) {
+    wrap.querySelectorAll("button[data-action='override']").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await openOverride(btn.dataset.entity, btn.dataset.week);
+      });
+    });
+
+    wrap.querySelectorAll("button[data-action='delete']").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await deleteWeek(btn.dataset.entity, btn.dataset.week);
+      });
+    });
+  }
+}
+
+function syncTrendsRangeUi() {
+  const mode = document.getElementById("trendsRangeMode").value;
+  document.getElementById("trendsWeeksWrap").style.display = mode === "recent" ? "" : "none";
+  document.getElementById("trendsStartWrap").style.display = mode === "dates" ? "" : "none";
+  document.getElementById("trendsEndWrap").style.display = mode === "dates" ? "" : "none";
 }
 
 async function loadTrends() {
   const entity = getSelectedTrendsEntity();
+  const mode = document.getElementById("trendsRangeMode").value;
   const limit = document.getElementById("trendsLimit").value;
+  const startDate = document.getElementById("trendsStartDate").value;
+  const endDate = document.getElementById("trendsEndDate").value;
 
-  const result = await apiGet(
-    `/api/trends?entity=${encodeURIComponent(entity)}&limit=${encodeURIComponent(limit)}`
-  );
+  let url = `/api/trends?entity=${encodeURIComponent(entity)}`;
+
+  if (mode === "dates") {
+    if (startDate) {
+      url += `&startDate=${encodeURIComponent(startDate)}`;
+    }
+    if (endDate) {
+      url += `&endDate=${encodeURIComponent(endDate)}`;
+    }
+  } else {
+    url += `&limit=${encodeURIComponent(limit)}`;
+  }
+
+  const result = await apiGet(url);
 
   renderTrendsCards(result);
   renderTrendsTable(result);
@@ -489,6 +545,11 @@ async function loadTrends() {
     const defaultWeek = getDefaultWeekEnding();
     weekInput.value = defaultWeek;
     executiveWeekInput.value = defaultWeek;
+
+    document.getElementById("trendsStartDate").value = getDateWeeksAgo(12);
+    document.getElementById("trendsEndDate").value = defaultWeek;
+
+    syncTrendsRangeUi();
 
     document.getElementById("entitySelect").addEventListener("change", async () => {
       try {
@@ -584,6 +645,30 @@ async function loadTrends() {
         await loadTrends();
       } catch (error) {
         setTrendsDebug(String(error));
+      }
+    });
+
+    document.getElementById("trendsRangeMode").addEventListener("change", () => {
+      syncTrendsRangeUi();
+    });
+
+    document.getElementById("trendsStartDate").addEventListener("change", async () => {
+      if (document.getElementById("trendsRangeMode").value === "dates") {
+        try {
+          await loadTrends();
+        } catch (error) {
+          setTrendsDebug(String(error));
+        }
+      }
+    });
+
+    document.getElementById("trendsEndDate").addEventListener("change", async () => {
+      if (document.getElementById("trendsRangeMode").value === "dates") {
+        try {
+          await loadTrends();
+        } catch (error) {
+          setTrendsDebug(String(error));
+        }
       }
     });
 
