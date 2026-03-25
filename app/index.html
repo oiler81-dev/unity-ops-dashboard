@@ -7,35 +7,71 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div id="app">
-    <header>
-      <h1>UnityMSK Ops Dashboard</h1>
-      <div id="userInfo"></div>
-    </header>
+  <div id="appShell">
+    <aside id="sidebar">
+      <h2>UnityMSK</h2>
+      <button id="navEntryBtn" type="button">Weekly Entry</button>
+      <button id="navExecutiveBtn" type="button">Executive Summary</button>
+    </aside>
 
-    <main>
-      <section style="margin-bottom: 16px;">
-        <label for="entitySelect" style="display:block;margin-bottom:4px;">Entity</label>
-        <select id="entitySelect"></select>
-      </section>
+    <div id="mainContent">
+      <header id="topbar">
+        <h1>UnityMSK Ops Dashboard</h1>
+        <div id="userInfo"></div>
+      </header>
 
-      <section style="margin-bottom: 16px;">
-        <label for="weekEnding" style="display:block;margin-bottom:4px;">Week Ending</label>
-        <input type="date" id="weekEnding" />
-      </section>
+      <main>
+        <section id="entryView">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
+                <label for="entitySelect">Entity</label>
+                <select id="entitySelect"></select>
+              </div>
 
-      <section id="kpiForm"></section>
+              <div>
+                <label for="weekEnding">Week Ending</label>
+                <input type="date" id="weekEnding" />
+              </div>
+            </div>
 
-      <div style="margin-top: 16px;">
-        <button id="saveBtn" type="button">Save</button>
-        <button id="submitBtn" type="button">Submit</button>
-        <button id="approveBtn" type="button">Approve</button>
-      </div>
+            <section id="kpiForm"></section>
 
-      <div id="statusMessage" style="margin-top:16px;font-weight:bold;"></div>
+            <div class="buttonRow">
+              <button id="saveBtn" type="button">Save</button>
+              <button id="submitBtn" type="button">Submit</button>
+              <button id="approveBtn" type="button">Approve</button>
+            </div>
 
-      <pre id="debugOutput" style="margin-top:16px; white-space:pre-wrap; background:#0f2a3d; padding:12px;"></pre>
-    </main>
+            <div id="statusMessage" class="statusMessage"></div>
+            <pre id="debugOutput" class="debugOutput"></pre>
+          </div>
+        </section>
+
+        <section id="executiveView" style="display:none;">
+          <div class="panel">
+            <div class="fieldRow">
+              <div>
+                <label for="executiveWeekEnding">Week Ending</label>
+                <input type="date" id="executiveWeekEnding" />
+              </div>
+              <div class="buttonAlignBottom">
+                <button id="loadExecutiveBtn" type="button">Load Summary</button>
+              </div>
+            </div>
+
+            <div id="executiveCards" class="cardGrid"></div>
+
+            <div class="panel" style="margin-top:16px;">
+              <h3>Approved Regions</h3>
+              <div id="executiveRegions"></div>
+            </div>
+
+            <pre id="executiveDebugOutput" class="debugOutput"></pre>
+          </div>
+        </section>
+      </main>
+    </div>
   </div>
 
   <script src="/app.js"></script>
