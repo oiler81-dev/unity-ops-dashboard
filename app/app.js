@@ -1277,11 +1277,11 @@ async function runBudgetImport() {
 
   setImportStatus("Importing budget workbook...");
   setImportDebug({
-    route: "/api/import-budget",
+    route: "/api/import-budget-post",
     fileName: payload.fileName
   });
 
-  const result = await apiPost("/api/import-budget", payload);
+  const result = await apiPost("/api/import-budget-post", payload);
 
   setImportStatus(result.message || "Budget import completed");
   setImportDebug(result);
