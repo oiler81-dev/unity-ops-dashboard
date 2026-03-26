@@ -2,10 +2,18 @@ const XLSX = require("xlsx");
 const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
+const {
+  normalizeMonthLabel,
+  monthLabelToMonthKey,
+  getWorkingDaysForMonth,
+  normalizeEntityLabel,
+  safeNumber
+} = require("../shared/budget");
 
 const REGION_TABLE = "WeeklyRegionData";
 const SHARED_TABLE = "SharedPageData";
 const REFERENCE_TABLE = "ReferenceData";
+const BUDGET_TABLE = "BudgetData";
 const WORKBOOK_YEAR = 2026;
 
 const REGION_SHEET_TO_ENTITY = {
@@ -14,6 +22,18 @@ const REGION_SHEET_TO_ENTITY = {
   Denver: "SpineOne",
   Chicago: "MRO"
 };
+
+const BUDGET_VISIT_SHEET_NAMES = [
+  "Volume_Revenue Budget",
+  "Volume Revenue Budget",
+  "Budget V. Monthly Results"
+];
+
+const BUDGET_NP_SHEET_NAMES = [
+  "New Patient Budget",
+  "New Patients Budget",
+  "Budget V. Monthly Results"
+];
 
 function sheetRows(ws) {
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
@@ -94,7 +114,6 @@ function excelDateToIso(value) {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
-
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
 
     const d = new Date(trimmed);
@@ -173,6 +192,23 @@ async function upsertReferenceRecord(table, kind, rowKey, values, meta = {}) {
     kind,
     valuesJson: JSON.stringify(values),
     source: "workbook-import",
+    importedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...meta
+  });
+}
+
+async function upsertBudgetRecord(table, entity, monthKey, values, meta = {}) {
+  await table.upsertEntity({
+    partitionKey: entity,
+    rowKey: monthKey,
+    entity,
+    monthKey,
+    monthLabel: values.monthLabel,
+    visitBudgetMonthly: values.visitBudgetMonthly ?? 0,
+    newPatientsBudgetMonthly: values.newPatientsBudgetMonthly ?? 0,
+    workingDaysInMonth: values.workingDaysInMonth ?? getWorkingDaysForMonth(monthKey),
+    source: "budget-import",
     importedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...meta
@@ -281,12 +317,8 @@ function buildRegionValues(sheetName, rowIndex, row) {
     totalCalls,
     abandonedCalls,
     abandonmentRate: percentToDisplay(sheetName === "Denver" ? row[11] : row[10]),
-    npToEstablishedConversion: percentToDisplay(
-      sheetName === "Denver" ? row[12] : row[11]
-    ),
-    npToSurgeryConversion: percentToDisplay(
-      sheetName === "Denver" ? row[13] : row[12]
-    ),
+    npToEstablishedConversion: percentToDisplay(sheetName === "Denver" ? row[12] : row[11]),
+    npToSurgeryConversion: percentToDisplay(sheetName === "Denver" ? row[13] : row[12]),
     cashActual
   };
 
@@ -440,9 +472,7 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
     portlandUnits
   ]);
 
-  const alignedWeek =
-    chicagoWeek === denverWeek && chicagoWeek === portlandWeek;
-
+  const alignedWeek = chicagoWeek === denverWeek && chicagoWeek === portlandWeek;
   const alignedMonthTag =
     !!chicagoMonthTag &&
     chicagoMonthTag === denverMonthTag &&
@@ -796,6 +826,387 @@ async function importHolidaysSheet(referenceTable, ws) {
   return { imported, acceptedRows, rejectedRows };
 }
 
+function workbookLooksLikeWeekly(workbook) {
+  return ["LA", "Portland", "Denver", "Chicago"].some((name) => !!workbook.Sheets[name]);
+}
+
+function workbookLooksLikeBudget(workbook) {
+  return workbook.SheetNames.some((name) =>
+    [...BUDGET_VISIT_SHEET_NAMES, ...BUDGET_NP_SHEET_NAMES].includes(name)
+  );
+}
+
+function detectHeaderMap(headerRow) {
+  const map = {};
+  for (let i = 0; i < headerRow.length; i += 1) {
+    const key = safeText(headerRow[i]).toLowerCase().replace(/\s+/g, " ");
+    if (key) {
+      map[key] = i;
+    }
+  }
+  return map;
+}
+
+function pickFirstSheet(workbook, names) {
+  for (const name of names) {
+    if (workbook.Sheets[name]) {
+      return { name, sheet: workbook.Sheets[name] };
+    }
+  }
+  return { name: null, sheet: null };
+}
+
+function parseBudgetCombinedVisitRows(sheet) {
+  const rows = sheetRows(sheet);
+  const items = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i] || [];
+    const monthLabel = normalizeMonthLabel(row[0]);
+    const entity = normalizeEntityLabel(row[1]);
+
+    if (!monthLabel || !entity) {
+      continue;
+    }
+
+    const monthKey = monthLabelToMonthKey(monthLabel);
+    if (!monthKey) continue;
+
+    const np = safeNumber(row[2]) || 0;
+    const established = safeNumber(row[3]) || 0;
+    const pt = safeNumber(row[4]) || 0;
+    const surgery = safeNumber(row[5]) || 0;
+    const visitBudgetMonthly = np + established + pt + surgery;
+
+    items.push({
+      entity,
+      monthKey,
+      monthLabel,
+      visitBudgetMonthly,
+      workingDaysInMonth: getWorkingDaysForMonth(monthKey)
+    });
+  }
+
+  return items;
+}
+
+function parseBudgetCombinedNpRows(sheet) {
+  const rows = sheetRows(sheet);
+  const items = [];
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i] || [];
+    const monthLabel = normalizeMonthLabel(row[0]);
+    const entity = normalizeEntityLabel(row[1]);
+
+    if (!monthLabel || !entity) {
+      continue;
+    }
+
+    const monthKey = monthLabelToMonthKey(monthLabel);
+    if (!monthKey) continue;
+
+    const newPatientsBudgetMonthly = safeNumber(row[2]);
+    if (!Number.isFinite(newPatientsBudgetMonthly)) {
+      continue;
+    }
+
+    items.push({
+      entity,
+      monthKey,
+      monthLabel,
+      newPatientsBudgetMonthly,
+      workingDaysInMonth: getWorkingDaysForMonth(monthKey)
+    });
+  }
+
+  return items;
+}
+
+function parseHeaderBasedVisitBudgetRows(sheet) {
+  const rows = sheetRows(sheet);
+  let headerIndex = -1;
+  let headerMap = null;
+
+  for (let i = 0; i < Math.min(rows.length, 20); i += 1) {
+    const map = detectHeaderMap(rows[i] || []);
+    const hasMonth = map.month != null;
+    const hasEntity = map.entity != null || map.region != null || map.practice != null;
+    const hasBudget = Object.keys(map).some((k) => k.includes("budget"));
+
+    if (hasMonth && hasEntity && hasBudget) {
+      headerIndex = i;
+      headerMap = map;
+      break;
+    }
+  }
+
+  if (headerIndex < 0 || !headerMap) return [];
+
+  const monthIdx = headerMap.month;
+  const entityIdx = headerMap.entity ?? headerMap.region ?? headerMap.practice;
+  const categoryIdx = headerMap.category ?? headerMap["visit category"] ?? headerMap["volume category"];
+  const budgetIdx =
+    headerMap.budget ??
+    headerMap["volume budget"] ??
+    headerMap["visit budget"] ??
+    headerMap["monthly budget"] ??
+    headerMap["budget amount"];
+
+  if (monthIdx == null || entityIdx == null || budgetIdx == null) {
+    return [];
+  }
+
+  const grouped = new Map();
+
+  for (let i = headerIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i] || [];
+    const monthLabel = normalizeMonthLabel(row[monthIdx]);
+    const entity = normalizeEntityLabel(row[entityIdx]);
+    const category = safeText(row[categoryIdx]).toLowerCase();
+    const budget = safeNumber(row[budgetIdx]);
+
+    if (!monthLabel || !entity || !Number.isFinite(budget)) {
+      continue;
+    }
+
+    const monthKey = monthLabelToMonthKey(monthLabel);
+    if (!monthKey) continue;
+
+    const key = `${entity}|${monthKey}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        entity,
+        monthKey,
+        monthLabel,
+        visitBudgetMonthly: 0,
+        workingDaysInMonth: getWorkingDaysForMonth(monthKey)
+      });
+    }
+
+    const current = grouped.get(key);
+    if (!category || category === "total" || category === "total visits") {
+      current.visitBudgetMonthly = budget;
+    } else {
+      current.visitBudgetMonthly += budget;
+    }
+  }
+
+  return Array.from(grouped.values());
+}
+
+function parseHeaderBasedNpBudgetRows(sheet) {
+  const rows = sheetRows(sheet);
+  let headerIndex = -1;
+  let headerMap = null;
+
+  for (let i = 0; i < Math.min(rows.length, 20); i += 1) {
+    const map = detectHeaderMap(rows[i] || []);
+    const hasMonth = map.month != null;
+    const hasEntity = map.entity != null || map.region != null || map.practice != null;
+    const hasBudget = Object.keys(map).some((k) => k.includes("budget"));
+
+    if (hasMonth && hasEntity && hasBudget) {
+      headerIndex = i;
+      headerMap = map;
+      break;
+    }
+  }
+
+  if (headerIndex < 0 || !headerMap) return [];
+
+  const monthIdx = headerMap.month;
+  const entityIdx = headerMap.entity ?? headerMap.region ?? headerMap.practice;
+  const budgetIdx =
+    headerMap.budget ??
+    headerMap["new patient budget"] ??
+    headerMap["np budget"] ??
+    headerMap["monthly budget"] ??
+    headerMap["budget amount"];
+
+  if (monthIdx == null || entityIdx == null || budgetIdx == null) {
+    return [];
+  }
+
+  const items = [];
+
+  for (let i = headerIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i] || [];
+    const monthLabel = normalizeMonthLabel(row[monthIdx]);
+    const entity = normalizeEntityLabel(row[entityIdx]);
+    const newPatientsBudgetMonthly = safeNumber(row[budgetIdx]);
+
+    if (!monthLabel || !entity || !Number.isFinite(newPatientsBudgetMonthly)) {
+      continue;
+    }
+
+    const monthKey = monthLabelToMonthKey(monthLabel);
+    if (!monthKey) continue;
+
+    items.push({
+      entity,
+      monthKey,
+      monthLabel,
+      newPatientsBudgetMonthly,
+      workingDaysInMonth: getWorkingDaysForMonth(monthKey)
+    });
+  }
+
+  return items;
+}
+
+async function importBudgetWorkbook(budgetTable, workbook, fileName) {
+  const visitSheetInfo = pickFirstSheet(workbook, BUDGET_VISIT_SHEET_NAMES);
+  const npSheetInfo = pickFirstSheet(workbook, BUDGET_NP_SHEET_NAMES);
+
+  if (!visitSheetInfo.sheet && !npSheetInfo.sheet) {
+    throw new Error("No recognized budget sheets found in workbook");
+  }
+
+  let visitRows = [];
+  let npRows = [];
+
+  if (visitSheetInfo.sheet) {
+    visitRows =
+      visitSheetInfo.name === "Budget V. Monthly Results"
+        ? parseBudgetCombinedVisitRows(visitSheetInfo.sheet)
+        : parseHeaderBasedVisitBudgetRows(visitSheetInfo.sheet);
+  }
+
+  if (npSheetInfo.sheet) {
+    npRows =
+      npSheetInfo.name === "Budget V. Monthly Results"
+        ? parseBudgetCombinedNpRows(npSheetInfo.sheet)
+        : parseHeaderBasedNpBudgetRows(npSheetInfo.sheet);
+  }
+
+  const merged = new Map();
+
+  for (const row of visitRows) {
+    const key = `${row.entity}|${row.monthKey}`;
+    merged.set(key, {
+      entity: row.entity,
+      monthKey: row.monthKey,
+      monthLabel: row.monthLabel,
+      visitBudgetMonthly: row.visitBudgetMonthly ?? 0,
+      newPatientsBudgetMonthly: 0,
+      workingDaysInMonth: row.workingDaysInMonth ?? getWorkingDaysForMonth(row.monthKey)
+    });
+  }
+
+  for (const row of npRows) {
+    const key = `${row.entity}|${row.monthKey}`;
+    const existing = merged.get(key) || {
+      entity: row.entity,
+      monthKey: row.monthKey,
+      monthLabel: row.monthLabel,
+      visitBudgetMonthly: 0,
+      newPatientsBudgetMonthly: 0,
+      workingDaysInMonth: row.workingDaysInMonth ?? getWorkingDaysForMonth(row.monthKey)
+    };
+
+    existing.newPatientsBudgetMonthly = row.newPatientsBudgetMonthly ?? 0;
+    merged.set(key, existing);
+  }
+
+  let imported = 0;
+
+  for (const item of merged.values()) {
+    await upsertBudgetRecord(
+      budgetTable,
+      item.entity,
+      item.monthKey,
+      item,
+      {
+        importSourceSheet: [visitSheetInfo.name, npSheetInfo.name].filter(Boolean).join(" + "),
+        importFileName: fileName
+      }
+    );
+    imported += 1;
+  }
+
+  return {
+    workbookFile: fileName,
+    workbookSheets: workbook.SheetNames,
+    budget: {
+      imported,
+      visitRowsParsed: visitRows.length,
+      newPatientRowsParsed: npRows.length,
+      visitBudgetSheet: visitSheetInfo.name,
+      newPatientBudgetSheet: npSheetInfo.name,
+      acceptedRows: Array.from(merged.values())
+    }
+  };
+}
+
+async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, workbook, fileName) {
+  const workingDaysMap = buildWorkingDaysMapFromRegionSheets(workbook);
+
+  const results = {
+    workbookFile: fileName,
+    workbookSheets: workbook.SheetNames,
+    workingDaysMap,
+    regions: [],
+    shared: [],
+    reference: []
+  };
+
+  for (const sheetName of ["LA", "Portland", "Denver", "Chicago"]) {
+    const ws = workbook.Sheets[sheetName];
+    if (!ws) continue;
+
+    const result = await importRegionSheet(regionTable, ws, sheetName);
+    results.regions.push({
+      sheet: sheetName,
+      entity: result.entity,
+      imported: result.imported,
+      weekEndings: result.weekEndings,
+      acceptedRows: result.acceptedRows,
+      rejectedRows: result.rejectedRows.slice(0, 15)
+    });
+  }
+
+  if (workbook.Sheets.PT) {
+    const ptResult = await importPtSheet(sharedTable, workbook.Sheets.PT, workingDaysMap);
+
+    results.shared.push({
+      sheet: "PT",
+      page: "PT",
+      imported: ptResult.imported,
+      weekEndings: ptResult.weekEndings,
+      acceptedRows: ptResult.acceptedRows,
+      rejectedRows: ptResult.rejectedRows.slice(0, 15)
+    });
+  }
+
+  if (workbook.Sheets.CXNS) {
+    const cxnsResult = await importCxnsSheet(sharedTable, workbook.Sheets.CXNS, workingDaysMap);
+
+    results.shared.push({
+      sheet: "CXNS",
+      page: "CXNS",
+      imported: cxnsResult.imported,
+      weekEndings: cxnsResult.weekEndings,
+      acceptedRows: cxnsResult.acceptedRows,
+      rejectedRows: cxnsResult.rejectedRows.slice(0, 15)
+    });
+  }
+
+  if (workbook.Sheets.Holidays) {
+    const holidaysResult = await importHolidaysSheet(referenceTable, workbook.Sheets.Holidays);
+
+    results.reference.push({
+      sheet: "Holidays",
+      kind: "holidays",
+      imported: holidaysResult.imported,
+      acceptedRows: holidaysResult.acceptedRows,
+      rejectedRows: holidaysResult.rejectedRows.slice(0, 15)
+    });
+  }
+
+  return results;
+}
+
 module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
@@ -814,6 +1225,7 @@ module.exports = async function (context, req) {
     const body = req.body || {};
     const fileBase64 = body.fileBase64;
     const fileName = body.fileName || "workbook.xlsx";
+    const importType = safeText(body.importType).toLowerCase();
 
     if (!fileBase64) {
       return {
@@ -835,81 +1247,35 @@ module.exports = async function (context, req) {
     const regionTable = getTableClient(REGION_TABLE);
     const sharedTable = getTableClient(SHARED_TABLE);
     const referenceTable = getTableClient(REFERENCE_TABLE);
+    const budgetTable = getTableClient(BUDGET_TABLE);
 
-    const workingDaysMap = buildWorkingDaysMapFromRegionSheets(workbook);
+    const looksWeekly = workbookLooksLikeWeekly(workbook);
+    const looksBudget = workbookLooksLikeBudget(workbook);
 
-    const results = {
-      workbookFile: fileName,
-      workbookSheets: workbook.SheetNames,
-      workingDaysMap,
-      regions: [],
-      shared: [],
-      reference: []
-    };
+    let result;
 
-    for (const sheetName of ["LA", "Portland", "Denver", "Chicago"]) {
-      const ws = workbook.Sheets[sheetName];
-      if (!ws) continue;
+    if (importType === "budget" || (!looksWeekly && looksBudget)) {
+      result = await importBudgetWorkbook(budgetTable, workbook, fileName);
 
-      const result = await importRegionSheet(regionTable, ws, sheetName);
-      results.regions.push({
-        sheet: sheetName,
-        entity: result.entity,
-        imported: result.imported,
-        weekEndings: result.weekEndings,
-        acceptedRows: result.acceptedRows,
-        rejectedRows: result.rejectedRows.slice(0, 15)
-      });
+      return {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+        body: {
+          ok: true,
+          message: "Budget import completed",
+          importType: "budget",
+          ...result
+        }
+      };
     }
 
-    if (workbook.Sheets.PT) {
-      const ptResult = await importPtSheet(
-        sharedTable,
-        workbook.Sheets.PT,
-        workingDaysMap
-      );
-
-      results.shared.push({
-        sheet: "PT",
-        page: "PT",
-        imported: ptResult.imported,
-        weekEndings: ptResult.weekEndings,
-        acceptedRows: ptResult.acceptedRows,
-        rejectedRows: ptResult.rejectedRows.slice(0, 15)
-      });
-    }
-
-    if (workbook.Sheets.CXNS) {
-      const cxnsResult = await importCxnsSheet(
-        sharedTable,
-        workbook.Sheets.CXNS,
-        workingDaysMap
-      );
-
-      results.shared.push({
-        sheet: "CXNS",
-        page: "CXNS",
-        imported: cxnsResult.imported,
-        weekEndings: cxnsResult.weekEndings,
-        acceptedRows: cxnsResult.acceptedRows,
-        rejectedRows: cxnsResult.rejectedRows.slice(0, 15)
-      });
-    }
-
-    if (workbook.Sheets.Holidays) {
-      const holidaysResult = await importHolidaysSheet(
-        referenceTable,
-        workbook.Sheets.Holidays
-      );
-
-      results.reference.push({
-        sheet: "Holidays",
-        kind: "holidays",
-        imported: holidaysResult.imported,
-        acceptedRows: holidaysResult.acceptedRows,
-        rejectedRows: holidaysResult.rejectedRows.slice(0, 15)
-      });
-    }
+    result = await importWeeklyWorkbook(
+      regionTable,
+      sharedTable,
+      referenceTable,
+      workbook,
+      fileName
+    );
 
     return {
       status: 200,
@@ -917,7 +1283,8 @@ module.exports = async function (context, req) {
       body: {
         ok: true,
         message: "Import completed",
-        ...results
+        importType: "weekly",
+        ...result
       }
     };
   } catch (error) {
