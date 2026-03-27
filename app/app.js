@@ -29,7 +29,6 @@ const ENTITY_BRANDING = {
 
 let currentUser = null;
 let currentWeekData = null;
-const budgetCache = new Map();
 
 async function parseApiResponse(res) {
   const text = await res.text();
@@ -181,38 +180,26 @@ function formatWhole(value) {
   return Math.round(normalizeNumber(value)).toLocaleString();
 }
 
-function formatPctValue(value) {
-  return `${normalizeNumber(value).toFixed(1)}%`;
+function formatPercent(value, digits = 1) {
+  return `${normalizeNumber(value).toFixed(digits)}%`;
 }
 
-function formatVariance(current, target) {
-  const diff = normalizeNumber(current) - normalizeNumber(target);
+function formatVariance(actual, target) {
+  const diff = normalizeNumber(actual) - normalizeNumber(target);
   return `${diff >= 0 ? "+" : ""}${Math.round(diff).toLocaleString()}`;
 }
 
-function formatPercentToGoal(actual, target) {
+function formatVariancePct(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return "n/a";
+  const pct = ((normalizeNumber(actual) - t) / t) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+function formatToGoal(actual, target) {
   const t = normalizeNumber(target);
   if (!t) return "n/a";
   return `${((normalizeNumber(actual) / t) * 100).toFixed(1)}%`;
-}
-
-function monthKeyFromWeekEnding(weekEnding) {
-  return String(weekEnding || "").slice(0, 7);
-}
-
-async function fetchBudgetRow(entity, weekEnding) {
-  const key = `${entity}|${monthKeyFromWeekEnding(weekEnding)}`;
-  if (budgetCache.has(key)) {
-    return budgetCache.get(key);
-  }
-
-  const result = await apiGet(
-    `/api/budget?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
-  );
-
-  const row = result?.item || (Array.isArray(result?.items) && result.items.length ? result.items[0] : null) || null;
-  budgetCache.set(key, row);
-  return row;
 }
 
 function renderUser(userData) {
@@ -674,7 +661,8 @@ async function fetchExecutiveSummaryByWeek(weekEnding) {
   return apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
 }
 
-function aggregateExecutiveSummaries(summaries, entityScope) {
+function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
+  const includeBudget = !!options.includeBudget;
   const map = new Map();
 
   summaries.forEach((summary) => {
@@ -691,7 +679,9 @@ function aggregateExecutiveSummaries(summaries, entityScope) {
           noShowRateTotal: 0,
           cancellationRateTotal: 0,
           abandonedCallRateTotal: 0,
-          weekCount: 0
+          weekCount: 0,
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0
         });
       }
 
@@ -703,6 +693,11 @@ function aggregateExecutiveSummaries(summaries, entityScope) {
       row.cancellationRateTotal += normalizeNumber(region.cancellationRate);
       row.abandonedCallRateTotal += normalizeNumber(region.abandonedCallRate);
       row.weekCount += 1;
+
+      if (includeBudget) {
+        row.visitVolumeBudget += normalizeNumber(region.budget?.visitVolumeBudget);
+        row.newPatientsBudget += normalizeNumber(region.budget?.newPatientsBudget);
+      }
     });
   });
 
@@ -714,7 +709,9 @@ function aggregateExecutiveSummaries(summaries, entityScope) {
     newPatients: row.newPatients,
     noShowRate: row.weekCount ? row.noShowRateTotal / row.weekCount : 0,
     cancellationRate: row.weekCount ? row.cancellationRateTotal / row.weekCount : 0,
-    abandonedCallRate: row.weekCount ? row.abandonedCallRateTotal / row.weekCount : 0
+    abandonedCallRate: row.weekCount ? row.abandonedCallRateTotal / row.weekCount : 0,
+    visitVolumeBudget: row.visitVolumeBudget,
+    newPatientsBudget: row.newPatientsBudget
   }));
 
   const totals = {
@@ -723,144 +720,43 @@ function aggregateExecutiveSummaries(summaries, entityScope) {
     newPatients: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatients), 0)
   };
 
+  const budgetTotals = includeBudget
+    ? {
+        visitVolumeBudget: regions.reduce((sum, r) => sum + normalizeNumber(r.visitVolumeBudget), 0),
+        newPatientsBudget: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatientsBudget), 0)
+      }
+    : {
+        visitVolumeBudget: 0,
+        newPatientsBudget: 0
+      };
+
   return {
     entityCount: regions.length,
     totals,
+    budgetTotals,
     regions
   };
 }
 
-async function loadDashboardDataForWeeks(weeks, entityScope) {
+async function loadDashboardDataForWeeks(weeks, entityScope, options = {}) {
   const validWeeks = (weeks || []).filter(Boolean);
 
   if (!validWeeks.length) {
     return {
       entityCount: 0,
       totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
+      budgetTotals: { visitVolumeBudget: 0, newPatientsBudget: 0 },
       regions: []
     };
   }
 
   const summaries = await Promise.all(validWeeks.map((week) => fetchExecutiveSummaryByWeek(week)));
-  return aggregateExecutiveSummaries(summaries, entityScope);
-}
-
-function mapWeeklyActual(result, entity, weekEnding) {
-  const values = result?.values || result?.data || {};
-  return {
-    entity,
-    weekEnding,
-    status: result?.status || "draft",
-    daysInPeriod: normalizeNumber(values.daysInPeriod || values.workingDaysInWeek || 0),
-    visitVolume: normalizeNumber(values.visitVolume ?? values.totalVisits),
-    callVolume: normalizeNumber(values.callVolume ?? values.totalCalls),
-    newPatients: normalizeNumber(values.newPatients ?? values.npActual),
-    noShowRate: normalizeNumber(values.noShowRate),
-    cancellationRate: normalizeNumber(values.cancellationRate),
-    abandonedCallRate: normalizeNumber(values.abandonedCallRate ?? values.abandonmentRate)
-  };
-}
-
-async function fetchWeeklyActual(entity, weekEnding) {
-  const result = await apiGet(
-    `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
-  );
-  return mapWeeklyActual(result, entity, weekEnding);
+  return aggregateExecutiveSummaries(summaries, entityScope, options);
 }
 
 function averageMetric(rows, key) {
   if (!rows || !rows.length) return 0;
   return rows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0) / rows.length;
-}
-
-function emptySummaryForEntities(entities) {
-  return {
-    entityCount: entities.length,
-    totals: {
-      visitVolume: 0,
-      callVolume: 0,
-      newPatients: 0
-    },
-    regions: entities.map((entity) => ({
-      entity,
-      status: "missing",
-      visitVolume: 0,
-      callVolume: 0,
-      newPatients: 0,
-      noShowRate: 0,
-      cancellationRate: 0,
-      abandonedCallRate: 0
-    }))
-  };
-}
-
-async function loadDashboardDataForWeeksWithBudget(weeks, entityScope) {
-  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
-  const current = emptySummaryForEntities(entities);
-  const budget = emptySummaryForEntities(entities);
-
-  const currentMap = new Map(current.regions.map((r) => [r.entity, r]));
-  const budgetMap = new Map(budget.regions.map((r) => [r.entity, r]));
-
-  for (const entity of entities) {
-    for (const weekEnding of weeks || []) {
-      let actual;
-      try {
-        actual = await fetchWeeklyActual(entity, weekEnding);
-      } catch {
-        actual = null;
-      }
-
-      if (actual) {
-        const row = currentMap.get(entity);
-        row.status = actual.status || row.status;
-        row.visitVolume += normalizeNumber(actual.visitVolume);
-        row.callVolume += normalizeNumber(actual.callVolume);
-        row.newPatients += normalizeNumber(actual.newPatients);
-
-        if (normalizeNumber(actual.visitVolume) > 0 || normalizeNumber(actual.callVolume) > 0 || normalizeNumber(actual.newPatients) > 0) {
-          row.noShowRate += normalizeNumber(actual.noShowRate);
-          row.cancellationRate += normalizeNumber(actual.cancellationRate);
-          row.abandonedCallRate += normalizeNumber(actual.abandonedCallRate);
-          row._weekCount = (row._weekCount || 0) + 1;
-        }
-
-        current.totals.visitVolume += normalizeNumber(actual.visitVolume);
-        current.totals.callVolume += normalizeNumber(actual.callVolume);
-        current.totals.newPatients += normalizeNumber(actual.newPatients);
-
-        const budgetRow = await fetchBudgetRow(entity, weekEnding);
-        if (budgetRow) {
-          const daysInPeriod = normalizeNumber(actual.daysInPeriod) || 5;
-          const workingDaysInMonth = normalizeNumber(budgetRow.workingDaysInMonth) || 20;
-
-          const visitBudgetWeekly =
-            (normalizeNumber(budgetRow.visitBudgetMonthly) / workingDaysInMonth) * daysInPeriod;
-
-          const npBudgetWeekly =
-            (normalizeNumber(budgetRow.newPatientsBudgetMonthly) / workingDaysInMonth) * daysInPeriod;
-
-          const budgetEntity = budgetMap.get(entity);
-          budgetEntity.status = "budget";
-          budgetEntity.visitVolume += visitBudgetWeekly;
-          budgetEntity.newPatients += npBudgetWeekly;
-
-          budget.totals.visitVolume += visitBudgetWeekly;
-          budget.totals.newPatients += npBudgetWeekly;
-        }
-      }
-    }
-  }
-
-  current.regions.forEach((row) => {
-    const count = row._weekCount || 0;
-    row.noShowRate = count ? row.noShowRate / count : 0;
-    row.cancellationRate = count ? row.cancellationRate / count : 0;
-    row.abandonedCallRate = count ? row.abandonedCallRate / count : 0;
-    delete row._weekCount;
-  });
-
-  return { current, budget };
 }
 
 function getEntityMap(summary) {
@@ -878,22 +774,20 @@ function buildVariancePct(current, comparison) {
   return ((c - p) / p) * 100;
 }
 
-function buildBudgetMeta(actual, target) {
-  return `Budget ${formatWhole(target)}\nVariance ${formatVariance(actual, target)}\nTo Goal ${formatPercentToGoal(actual, target)}`;
-}
-
 function renderDashboardCards(current, comparison, compareAgainst) {
   if (compareAgainst === "budget") {
+    const visitActual = normalizeNumber(current.totals?.visitVolume);
+    const visitBudget = normalizeNumber(current.budgetTotals?.visitVolumeBudget);
+    const npActual = normalizeNumber(current.totals?.newPatients);
+    const npBudget = normalizeNumber(current.budgetTotals?.newPatientsBudget);
+
     const cards = [
       {
         label: "Visit Volume",
-        value: formatWhole(current.totals?.visitVolume || 0),
-        meta: buildBudgetMeta(current.totals?.visitVolume || 0, comparison.totals?.visitVolume || 0)
-      },
-      {
-        label: "New Patients",
-        value: formatWhole(current.totals?.newPatients || 0),
-        meta: buildBudgetMeta(current.totals?.newPatients || 0, comparison.totals?.newPatients || 0)
+        value: formatWhole(visitActual),
+        meta: `Budget ${formatWhole(visitBudget)}
+Variance ${formatVariance(visitActual, visitBudget)} (${formatVariancePct(visitActual, visitBudget)})
+To Goal ${formatToGoal(visitActual, visitBudget)}`
       },
       {
         label: "Call Volume",
@@ -901,18 +795,25 @@ function renderDashboardCards(current, comparison, compareAgainst) {
         meta: "Budget n/a\nVariance n/a\nTo Goal n/a"
       },
       {
+        label: "New Patients",
+        value: formatWhole(npActual),
+        meta: `Budget ${formatWhole(npBudget)}
+Variance ${formatVariance(npActual, npBudget)} (${formatVariancePct(npActual, npBudget)})
+To Goal ${formatToGoal(npActual, npBudget)}`
+      },
+      {
         label: "Avg No Show %",
-        value: formatPctValue(averageMetric(current.regions, "noShowRate")),
+        value: formatPercent(averageMetric(current.regions, "noShowRate")),
         meta: "Actual only"
       },
       {
         label: "Avg Cancel %",
-        value: formatPctValue(averageMetric(current.regions, "cancellationRate")),
+        value: formatPercent(averageMetric(current.regions, "cancellationRate")),
         meta: "Actual only"
       },
       {
         label: "Avg Abandoned %",
-        value: formatPctValue(averageMetric(current.regions, "abandonedCallRate")),
+        value: formatPercent(averageMetric(current.regions, "abandonedCallRate")),
         meta: "Actual only"
       }
     ];
@@ -990,43 +891,38 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           newPatients: 0,
           noShowRate: 0,
           cancellationRate: 0,
-          abandonedCallRate: 0
+          abandonedCallRate: 0,
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0
         };
-        const benchmark = comparisonMap[entity] || {
+        const prior = comparisonMap[entity] || {
           visitVolume: 0,
           callVolume: 0,
-          newPatients: 0
+          newPatients: 0,
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0
         };
 
-        const visitPct = buildVariancePct(row.visitVolume, benchmark.visitVolume);
-        const callPct = buildVariancePct(row.callVolume, benchmark.callVolume);
-        const npPct = buildVariancePct(row.newPatients, benchmark.newPatients);
+        const visitPct = buildVariancePct(row.visitVolume, prior.visitVolume);
+        const callPct = buildVariancePct(row.callVolume, prior.callVolume);
+        const npPct = buildVariancePct(row.newPatients, prior.newPatients);
 
         const fmtPct = (value) => value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 
         const budgetModeHtml = compareAgainst === "budget"
           ? `
-            <div style="display:grid; gap:8px; margin-top:12px;">
+            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:12px;">
               <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:6px;">Visits</div>
-                <div style="font-weight:bold;">Actual ${formatWhole(row.visitVolume)}</div>
-                <div style="font-size:12px; opacity:0.9;">Budget ${formatWhole(benchmark.visitVolume)}</div>
-                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.visitVolume, benchmark.visitVolume)}</div>
-                <div style="font-size:12px; opacity:0.9;">To Goal ${formatPercentToGoal(row.visitVolume, benchmark.visitVolume)}</div>
+                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Visits</div>
+                <div style="font-weight:bold;">Budget ${formatWhole(row.visitVolumeBudget)}</div>
+                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.visitVolume, row.visitVolumeBudget)}</div>
+                <div style="font-size:12px; opacity:0.9;">To Goal ${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</div>
               </div>
               <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:6px;">New Patients</div>
-                <div style="font-weight:bold;">Actual ${formatWhole(row.newPatients)}</div>
-                <div style="font-size:12px; opacity:0.9;">Budget ${formatWhole(benchmark.newPatients)}</div>
-                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.newPatients, benchmark.newPatients)}</div>
-                <div style="font-size:12px; opacity:0.9;">To Goal ${formatPercentToGoal(row.newPatients, benchmark.newPatients)}</div>
-              </div>
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:6px;">Call Volume</div>
-                <div style="font-weight:bold;">Actual ${formatWhole(row.callVolume)}</div>
-                <div style="font-size:12px; opacity:0.9;">Budget n/a</div>
-                <div style="font-size:12px; opacity:0.9;">Variance n/a</div>
-                <div style="font-size:12px; opacity:0.9;">To Goal n/a</div>
+                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">New Patients</div>
+                <div style="font-weight:bold;">Budget ${formatWhole(row.newPatientsBudget)}</div>
+                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.newPatients, row.newPatientsBudget)}</div>
+                <div style="font-size:12px; opacity:0.9;">To Goal ${formatToGoal(row.newPatients, row.newPatientsBudget)}</div>
               </div>
             </div>
           `
@@ -1077,15 +973,15 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px;">
                 <span>No Show</span>
-                <strong>${formatPctValue(row.noShowRate)}</strong>
+                <strong>${formatPercent(row.noShowRate)}</strong>
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px;">
                 <span>Cancel</span>
-                <strong>${formatPctValue(row.cancellationRate)}</strong>
+                <strong>${formatPercent(row.cancellationRate)}</strong>
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px;">
                 <span>Abandoned</span>
-                <strong>${formatPctValue(row.abandonedCallRate)}</strong>
+                <strong>${formatPercent(row.abandonedCallRate)}</strong>
               </div>
             </div>
 
@@ -1135,14 +1031,14 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
     }
 
     if (compareAgainst === "budget") {
-      const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
-      const npGap = normalizeNumber(row.newPatients) - normalizeNumber(prior.newPatients);
+      const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+      const npGap = normalizeNumber(row.newPatients) - normalizeNumber(row.newPatientsBudget);
 
-      if (normalizeNumber(prior.visitVolume) > 0 && visitGap < 0) {
+      if (normalizeNumber(row.visitVolumeBudget) > 0 && visitGap < 0) {
         alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(visitGap))} visits below budget.` });
       }
 
-      if (normalizeNumber(prior.newPatients) > 0 && npGap < 0) {
+      if (normalizeNumber(row.newPatientsBudget) > 0 && npGap < 0) {
         alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(npGap))} new patients below budget.` });
       }
     }
@@ -1159,7 +1055,7 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
   `).join("");
 }
 
-function renderDashboardSnapshot(current, entityScope) {
+function renderDashboardSnapshot(current, entityScope, compareAgainst) {
   const container = byId("dashboardSnapshot");
   if (!container) return;
 
@@ -1167,6 +1063,40 @@ function renderDashboardSnapshot(current, entityScope) {
 
   if (!rows.length) {
     container.innerHTML = "<p>No approved entities found for the selected period.</p>";
+    return;
+  }
+
+  if (compareAgainst === "budget") {
+    container.innerHTML = `
+      <table class="regionTable">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Visits</th>
+            <th>Visit Budget</th>
+            <th>Visit Var</th>
+            <th>New</th>
+            <th>New Budget</th>
+            <th>New Var</th>
+            <th>Calls</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r) => `
+            <tr>
+              <td>${r.entity}</td>
+              <td>${formatWhole(r.visitVolume)}</td>
+              <td>${formatWhole(r.visitVolumeBudget)}</td>
+              <td>${formatVariance(r.visitVolume, r.visitVolumeBudget)}</td>
+              <td>${formatWhole(r.newPatients)}</td>
+              <td>${formatWhole(r.newPatientsBudget)}</td>
+              <td>${formatVariance(r.newPatients, r.newPatientsBudget)}</td>
+              <td>${formatWhole(r.callVolume)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
     return;
   }
 
@@ -1191,9 +1121,9 @@ function renderDashboardSnapshot(current, entityScope) {
             <td>${formatWhole(r.visitVolume)}</td>
             <td>${formatWhole(r.callVolume)}</td>
             <td>${formatWhole(r.newPatients)}</td>
-            <td>${formatPctValue(r.noShowRate)}</td>
-            <td>${formatPctValue(r.cancellationRate)}</td>
-            <td>${formatPctValue(r.abandonedCallRate)}</td>
+            <td>${formatPercent(r.noShowRate)}</td>
+            <td>${formatPercent(r.cancellationRate)}</td>
+            <td>${formatPercent(r.abandonedCallRate)}</td>
             <td>${r.status}</td>
           </tr>
         `).join("")}
@@ -1211,18 +1141,32 @@ async function loadDashboardLanding() {
   let comparison;
 
   if (compareAgainst === "budget") {
-    const budgetMode = await loadDashboardDataForWeeksWithBudget(weekSets.primaryWeeks, entityScope);
-    current = budgetMode.current;
-    comparison = budgetMode.budget;
+    current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope, { includeBudget: true });
+    comparison = {
+      entityCount: current.entityCount,
+      totals: {
+        visitVolume: current.budgetTotals.visitVolumeBudget,
+        callVolume: 0,
+        newPatients: current.budgetTotals.newPatientsBudget
+      },
+      budgetTotals: current.budgetTotals,
+      regions: (current.regions || []).map((r) => ({
+        entity: r.entity,
+        visitVolume: r.visitVolumeBudget,
+        callVolume: 0,
+        newPatients: r.newPatientsBudget
+      }))
+    };
   } else {
-    current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope);
+    current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope, { includeBudget: false });
 
     if (compareAgainst === "priorPeriod") {
-      comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, entityScope);
+      comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, entityScope, { includeBudget: false });
     } else {
       comparison = {
         entityCount: 0,
         totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
+        budgetTotals: { visitVolumeBudget: 0, newPatientsBudget: 0 },
         regions: []
       };
     }
@@ -1255,7 +1199,7 @@ async function loadDashboardLanding() {
   renderDashboardCards(current, comparison, compareAgainst);
   renderDashboardEntities(current, comparison, compareAgainst, entityScope);
   renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
-  renderDashboardSnapshot(current, entityScope);
+  renderDashboardSnapshot(current, entityScope, compareAgainst);
 
   setDashboardDebug({
     compareAgainst,
