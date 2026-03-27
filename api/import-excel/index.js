@@ -3,11 +3,9 @@ const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 const {
-  normalizeMonthLabel,
   monthLabelToMonthKey,
   getWorkingDaysForMonth,
-  normalizeEntityLabel,
-  safeNumber
+  normalizeEntityLabel
 } = require("../shared/budget");
 
 const REGION_TABLE = "WeeklyRegionData";
@@ -15,6 +13,7 @@ const SHARED_TABLE = "SharedPageData";
 const REFERENCE_TABLE = "ReferenceData";
 const BUDGET_TABLE = "BudgetData";
 const WORKBOOK_YEAR = 2026;
+const MAIN_BUDGET_SHEET = "Budget V. Monthly Results";
 
 const REGION_SHEET_TO_ENTITY = {
   LA: "LAOSS",
@@ -22,18 +21,6 @@ const REGION_SHEET_TO_ENTITY = {
   Denver: "SpineOne",
   Chicago: "MRO"
 };
-
-const BUDGET_VISIT_SHEET_NAMES = [
-  "Volume_Revenue Budget",
-  "Volume Revenue Budget",
-  "Budget V. Monthly Results"
-];
-
-const BUDGET_NP_SHEET_NAMES = [
-  "New Patient Budget",
-  "New Patients Budget",
-  "Budget V. Monthly Results"
-];
 
 function sheetRows(ws) {
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
@@ -51,7 +38,7 @@ function toNumber(value) {
   }
 
   const text = String(value).replace(/,/g, "").trim();
-  if (!text || text === "#N/A" || text === "#VALUE!" || text === "#DIV/0!") {
+  if (!text || text === "#N/A" || text === "#VALUE!" || text === "#DIV/0!" || text === "N/A") {
     return null;
   }
 
@@ -147,6 +134,29 @@ function monthTagFromIsoDate(isoDate) {
   return map[month] || null;
 }
 
+function normalizeMonthFromBudgetSheet(value) {
+  const text = safeText(value);
+  if (!text) return "";
+
+  const normalized = text.slice(0, 3).toLowerCase();
+  const map = {
+    jan: "Jan",
+    feb: "Feb",
+    mar: "Mar",
+    apr: "Apr",
+    may: "May",
+    jun: "Jun",
+    jul: "Jul",
+    aug: "Aug",
+    sep: "Sep",
+    oct: "Oct",
+    nov: "Nov",
+    dec: "Dec"
+  };
+
+  return map[normalized] || "";
+}
+
 async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) {
   await table.upsertEntity({
     partitionKey: entity,
@@ -208,7 +218,7 @@ async function upsertBudgetRecord(table, entity, monthKey, values, meta = {}) {
     visitBudgetMonthly: values.visitBudgetMonthly ?? 0,
     newPatientsBudgetMonthly: values.newPatientsBudgetMonthly ?? 0,
     workingDaysInMonth: values.workingDaysInMonth ?? getWorkingDaysForMonth(monthKey),
-    source: "budget-import",
+    source: "workbook-import",
     importedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...meta
@@ -826,43 +836,24 @@ async function importHolidaysSheet(referenceTable, ws) {
   return { imported, acceptedRows, rejectedRows };
 }
 
-function workbookLooksLikeWeekly(workbook) {
-  return ["LA", "Portland", "Denver", "Chicago"].some((name) => !!workbook.Sheets[name]);
-}
-
-function workbookLooksLikeBudget(workbook) {
-  return workbook.SheetNames.some((name) =>
-    [...BUDGET_VISIT_SHEET_NAMES, ...BUDGET_NP_SHEET_NAMES].includes(name)
-  );
-}
-
-function detectHeaderMap(headerRow) {
-  const map = {};
-  for (let i = 0; i < headerRow.length; i += 1) {
-    const key = safeText(headerRow[i]).toLowerCase().replace(/\s+/g, " ");
-    if (key) {
-      map[key] = i;
-    }
+function parseBudgetTargetsFromMainWorkbook(workbook) {
+  const ws = workbook.Sheets[MAIN_BUDGET_SHEET];
+  if (!ws) {
+    return {
+      imported: 0,
+      acceptedRows: [],
+      budgetSheet: null
+    };
   }
-  return map;
-}
 
-function pickFirstSheet(workbook, names) {
-  for (const name of names) {
-    if (workbook.Sheets[name]) {
-      return { name, sheet: workbook.Sheets[name] };
-    }
-  }
-  return { name: null, sheet: null };
-}
+  const rows = sheetRows(ws);
+  const acceptedRows = [];
+  const merged = new Map();
 
-function parseBudgetCombinedVisitRows(sheet) {
-  const rows = sheetRows(sheet);
-  const items = [];
+  for (let r = 2; r < rows.length; r += 1) {
+    const row = rows[r] || [];
 
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i] || [];
-    const monthLabel = normalizeMonthLabel(row[0]);
+    const monthLabel = normalizeMonthFromBudgetSheet(row[0]);
     const entity = normalizeEntityLabel(row[1]);
 
     if (!monthLabel || !entity) {
@@ -870,239 +861,51 @@ function parseBudgetCombinedVisitRows(sheet) {
     }
 
     const monthKey = monthLabelToMonthKey(monthLabel);
-    if (!monthKey) continue;
+    if (!monthKey) {
+      continue;
+    }
 
-    const np = safeNumber(row[2]) || 0;
-    const established = safeNumber(row[3]) || 0;
-    const pt = safeNumber(row[4]) || 0;
-    const surgery = safeNumber(row[5]) || 0;
-    const visitBudgetMonthly = np + established + pt + surgery;
+    const npTarget = toNumber(row[2]) ?? 0;
+    const establishedTarget = toNumber(row[3]) ?? 0;
+    const ptTarget = toNumber(row[4]) ?? 0;
+    const surgeryTarget = toNumber(row[5]) ?? 0;
 
-    items.push({
+    const visitBudgetMonthly = npTarget + establishedTarget + ptTarget + surgeryTarget;
+    const newPatientsBudgetMonthly = npTarget;
+
+    const key = `${entity}|${monthKey}`;
+    merged.set(key, {
       entity,
       monthKey,
       monthLabel,
       visitBudgetMonthly,
-      workingDaysInMonth: getWorkingDaysForMonth(monthKey)
-    });
-  }
-
-  return items;
-}
-
-function parseBudgetCombinedNpRows(sheet) {
-  const rows = sheetRows(sheet);
-  const items = [];
-
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i] || [];
-    const monthLabel = normalizeMonthLabel(row[0]);
-    const entity = normalizeEntityLabel(row[1]);
-
-    if (!monthLabel || !entity) {
-      continue;
-    }
-
-    const monthKey = monthLabelToMonthKey(monthLabel);
-    if (!monthKey) continue;
-
-    const newPatientsBudgetMonthly = safeNumber(row[2]);
-    if (!Number.isFinite(newPatientsBudgetMonthly)) {
-      continue;
-    }
-
-    items.push({
-      entity,
-      monthKey,
-      monthLabel,
       newPatientsBudgetMonthly,
       workingDaysInMonth: getWorkingDaysForMonth(monthKey)
     });
   }
 
-  return items;
+  for (const item of merged.values()) {
+    acceptedRows.push(item);
+  }
+
+  return {
+    imported: acceptedRows.length,
+    acceptedRows,
+    budgetSheet: MAIN_BUDGET_SHEET
+  };
 }
 
-function parseHeaderBasedVisitBudgetRows(sheet) {
-  const rows = sheetRows(sheet);
-  const items = [];
-
-  if (!rows.length) return items;
-
-  let headerRowIndex = -1;
-  let monthIndexes = [];
-
-  for (let r = 0; r < Math.min(rows.length, 15); r += 1) {
-    const row = rows[r] || [];
-    const detected = [];
-
-    for (let c = 0; c < row.length; c += 1) {
-      const monthLabel = normalizeMonthLabel(row[c]);
-      if (monthLabel) {
-        const monthKey = monthLabelToMonthKey(monthLabel);
-        if (monthKey) {
-          detected.push({ col: c, monthLabel, monthKey });
-        }
-      }
-    }
-
-    if (detected.length >= 2) {
-      headerRowIndex = r;
-      monthIndexes = detected;
-      break;
-    }
-  }
-
-  if (headerRowIndex < 0 || !monthIndexes.length) {
-    return [];
-  }
-
-  for (let r = headerRowIndex + 1; r < rows.length; r += 1) {
-    const row = rows[r] || [];
-    const entity = normalizeEntityLabel(row[0] || row[1]);
-
-    if (!entity) continue;
-
-    for (const m of monthIndexes) {
-      const value = safeNumber(row[m.col]);
-
-      if (!Number.isFinite(value)) continue;
-
-      items.push({
-        entity,
-        monthKey: m.monthKey,
-        monthLabel: m.monthLabel,
-        visitBudgetMonthly: value,
-        workingDaysInMonth: getWorkingDaysForMonth(m.monthKey)
-      });
-    }
-  }
-
-  return items;
-}
-
-function parseHeaderBasedNpBudgetRows(sheet) {
-  const rows = sheetRows(sheet);
-  const items = [];
-
-  if (!rows.length) return items;
-
-  let headerRowIndex = -1;
-  let monthIndexes = [];
-
-  for (let r = 0; r < Math.min(rows.length, 15); r += 1) {
-    const row = rows[r] || [];
-    const detected = [];
-
-    for (let c = 0; c < row.length; c += 1) {
-      const monthLabel = normalizeMonthLabel(row[c]);
-      if (monthLabel) {
-        const monthKey = monthLabelToMonthKey(monthLabel);
-        if (monthKey) {
-          detected.push({ col: c, monthLabel, monthKey });
-        }
-      }
-    }
-
-    if (detected.length >= 2) {
-      headerRowIndex = r;
-      monthIndexes = detected;
-      break;
-    }
-  }
-
-  if (headerRowIndex < 0 || !monthIndexes.length) {
-    return [];
-  }
-
-  for (let r = headerRowIndex + 1; r < rows.length; r += 1) {
-    const row = rows[r] || [];
-    const entity = normalizeEntityLabel(row[0] || row[1]);
-
-    if (!entity) continue;
-
-    for (const m of monthIndexes) {
-      const value = safeNumber(row[m.col]);
-
-      if (!Number.isFinite(value)) continue;
-
-      items.push({
-        entity,
-        monthKey: m.monthKey,
-        monthLabel: m.monthLabel,
-        newPatientsBudgetMonthly: value,
-        workingDaysInMonth: getWorkingDaysForMonth(m.monthKey)
-      });
-    }
-  }
-
-  return items;
-}
-
-async function importBudgetWorkbook(budgetTable, workbook, fileName) {
-  const visitSheetInfo = pickFirstSheet(workbook, BUDGET_VISIT_SHEET_NAMES);
-  const npSheetInfo = pickFirstSheet(workbook, BUDGET_NP_SHEET_NAMES);
-
-  if (!visitSheetInfo.sheet && !npSheetInfo.sheet) {
-    throw new Error("No recognized budget sheets found in workbook");
-  }
-
-  let visitRows = [];
-  let npRows = [];
-
-  if (visitSheetInfo.sheet) {
-    visitRows =
-      visitSheetInfo.name === "Budget V. Monthly Results"
-        ? parseBudgetCombinedVisitRows(visitSheetInfo.sheet)
-        : parseHeaderBasedVisitBudgetRows(visitSheetInfo.sheet);
-  }
-
-  if (npSheetInfo.sheet) {
-    npRows =
-      npSheetInfo.name === "Budget V. Monthly Results"
-        ? parseBudgetCombinedNpRows(npSheetInfo.sheet)
-        : parseHeaderBasedNpBudgetRows(npSheetInfo.sheet);
-  }
-
-  const merged = new Map();
-
-  for (const row of visitRows) {
-    const key = `${row.entity}|${row.monthKey}`;
-    merged.set(key, {
-      entity: row.entity,
-      monthKey: row.monthKey,
-      monthLabel: row.monthLabel,
-      visitBudgetMonthly: row.visitBudgetMonthly ?? 0,
-      newPatientsBudgetMonthly: 0,
-      workingDaysInMonth: row.workingDaysInMonth ?? getWorkingDaysForMonth(row.monthKey)
-    });
-  }
-
-  for (const row of npRows) {
-    const key = `${row.entity}|${row.monthKey}`;
-    const existing = merged.get(key) || {
-      entity: row.entity,
-      monthKey: row.monthKey,
-      monthLabel: row.monthLabel,
-      visitBudgetMonthly: 0,
-      newPatientsBudgetMonthly: 0,
-      workingDaysInMonth: row.workingDaysInMonth ?? getWorkingDaysForMonth(row.monthKey)
-    };
-
-    existing.newPatientsBudgetMonthly = row.newPatientsBudgetMonthly ?? 0;
-    merged.set(key, existing);
-  }
-
+async function writeBudgetTargets(budgetTable, parsedBudget, fileName) {
   let imported = 0;
 
-  for (const item of merged.values()) {
+  for (const item of parsedBudget.acceptedRows || []) {
     await upsertBudgetRecord(
       budgetTable,
       item.entity,
       item.monthKey,
       item,
       {
-        importSourceSheet: [visitSheetInfo.name, npSheetInfo.name].filter(Boolean).join(" + "),
+        importSourceSheet: parsedBudget.budgetSheet || MAIN_BUDGET_SHEET,
         importFileName: fileName
       }
     );
@@ -1110,20 +913,13 @@ async function importBudgetWorkbook(budgetTable, workbook, fileName) {
   }
 
   return {
-    workbookFile: fileName,
-    workbookSheets: workbook.SheetNames,
-    budget: {
-      imported,
-      visitRowsParsed: visitRows.length,
-      newPatientRowsParsed: npRows.length,
-      visitBudgetSheet: visitSheetInfo.name,
-      newPatientBudgetSheet: npSheetInfo.name,
-      acceptedRows: Array.from(merged.values())
-    }
+    imported,
+    acceptedRows: parsedBudget.acceptedRows || [],
+    budgetSheet: parsedBudget.budgetSheet || MAIN_BUDGET_SHEET
   };
 }
 
-async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, workbook, fileName) {
+async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, budgetTable, workbook, fileName) {
   const workingDaysMap = buildWorkingDaysMapFromRegionSheets(workbook);
 
   const results = {
@@ -1132,7 +928,12 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, wo
     workingDaysMap,
     regions: [],
     shared: [],
-    reference: []
+    reference: [],
+    budget: {
+      imported: 0,
+      acceptedRows: [],
+      budgetSheet: null
+    }
   };
 
   for (const sheetName of ["LA", "Portland", "Denver", "Chicago"]) {
@@ -1188,6 +989,17 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, wo
     });
   }
 
+  if (workbook.Sheets[MAIN_BUDGET_SHEET]) {
+    const parsedBudget = parseBudgetTargetsFromMainWorkbook(workbook);
+    const writtenBudget = await writeBudgetTargets(budgetTable, parsedBudget, fileName);
+
+    results.budget = {
+      imported: writtenBudget.imported,
+      acceptedRows: writtenBudget.acceptedRows,
+      budgetSheet: writtenBudget.budgetSheet
+    };
+  }
+
   return results;
 }
 
@@ -1209,7 +1021,6 @@ module.exports = async function (context, req) {
     const body = req.body || {};
     const fileBase64 = body.fileBase64;
     const fileName = body.fileName || "workbook.xlsx";
-    const importType = safeText(body.importType).toLowerCase();
 
     if (!fileBase64) {
       return {
@@ -1233,30 +1044,11 @@ module.exports = async function (context, req) {
     const referenceTable = getTableClient(REFERENCE_TABLE);
     const budgetTable = getTableClient(BUDGET_TABLE);
 
-    const looksWeekly = workbookLooksLikeWeekly(workbook);
-    const looksBudget = workbookLooksLikeBudget(workbook);
-
-    let result;
-
-    if (importType === "budget" || (!looksWeekly && looksBudget)) {
-      result = await importBudgetWorkbook(budgetTable, workbook, fileName);
-
-      return {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-        body: {
-          ok: true,
-          message: "Budget import completed",
-          importType: "budget",
-          ...result
-        }
-      };
-    }
-
-    result = await importWeeklyWorkbook(
+    const result = await importWeeklyWorkbook(
       regionTable,
       sharedTable,
       referenceTable,
+      budgetTable,
       workbook,
       fileName
     );
