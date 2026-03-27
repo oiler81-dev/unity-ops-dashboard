@@ -3,6 +3,7 @@ const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
 const REGION_TABLE = "WeeklyRegionData";
+const BUDGET_TABLE = "BudgetData";
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
 function toNumber(value) {
@@ -27,6 +28,12 @@ function normalizeStatus(status) {
   return "draft";
 }
 
+function monthKeyFromWeekEnding(weekEnding) {
+  const text = String(weekEnding || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
+  return text.slice(0, 7);
+}
+
 function mapRecord(record) {
   const values = parseJson(record.valuesJson);
 
@@ -34,6 +41,11 @@ function mapRecord(record) {
     entity: record.partitionKey,
     weekEnding: record.rowKey,
     status: normalizeStatus(record.status),
+
+    daysInPeriod:
+      toNumber(values.daysInPeriod) ||
+      toNumber(values.workingDaysInWeek) ||
+      0,
 
     visitVolume:
       toNumber(values.totalVisits) || toNumber(record.visitVolume),
@@ -52,7 +64,38 @@ function mapRecord(record) {
 
     abandonedCallRate:
       toNumber(values.abandonmentRate) ||
+      toNumber(values.abandonedCallRate) ||
       toNumber(record.abandonedCallRate)
+  };
+}
+
+function buildWeeklyBudget(budgetRow, daysInPeriod) {
+  if (!budgetRow) {
+    return {
+      visitVolumeBudget: 0,
+      newPatientsBudget: 0,
+      workingDaysInMonth: 0,
+      monthKey: null,
+      monthLabel: null
+    };
+  }
+
+  const workingDaysInMonth = toNumber(budgetRow.workingDaysInMonth);
+  const safeWorkingDays = workingDaysInMonth > 0 ? workingDaysInMonth : 20;
+  const safeDaysInPeriod = toNumber(daysInPeriod) > 0 ? toNumber(daysInPeriod) : 5;
+
+  const visitVolumeBudget =
+    (toNumber(budgetRow.visitBudgetMonthly) / safeWorkingDays) * safeDaysInPeriod;
+
+  const newPatientsBudget =
+    (toNumber(budgetRow.newPatientsBudgetMonthly) / safeWorkingDays) * safeDaysInPeriod;
+
+  return {
+    visitVolumeBudget,
+    newPatientsBudget,
+    workingDaysInMonth: safeWorkingDays,
+    monthKey: budgetRow.rowKey || budgetRow.monthKey || null,
+    monthLabel: budgetRow.monthLabel || null
   };
 }
 
@@ -70,18 +113,34 @@ module.exports = async function (context, req) {
       };
     }
 
-    const table = getTableClient(REGION_TABLE);
+    const regionTable = getTableClient(REGION_TABLE);
+    const budgetTable = getTableClient(BUDGET_TABLE);
+    const monthKey = monthKeyFromWeekEnding(weekEnding);
 
     const rows = [];
 
     for (const entity of ENTITIES) {
       try {
-        const record = await table.getEntity(entity, weekEnding);
+        const record = await regionTable.getEntity(entity, weekEnding);
         const mapped = mapRecord(record);
 
-        if (mapped.status === "approved") {
-          rows.push(mapped);
+        if (mapped.status !== "approved") {
+          continue;
         }
+
+        let budgetRecord = null;
+        try {
+          budgetRecord = await budgetTable.getEntity(entity, monthKey);
+        } catch (err) {
+          if (err.statusCode !== 404) throw err;
+        }
+
+        const budget = buildWeeklyBudget(budgetRecord, mapped.daysInPeriod);
+
+        rows.push({
+          ...mapped,
+          budget
+        });
       } catch (err) {
         if (err.statusCode !== 404) throw err;
       }
@@ -91,6 +150,16 @@ module.exports = async function (context, req) {
       visitVolume: rows.reduce((s, r) => s + r.visitVolume, 0),
       callVolume: rows.reduce((s, r) => s + r.callVolume, 0),
       newPatients: rows.reduce((s, r) => s + r.newPatients, 0)
+    };
+
+    const budgetTotals = {
+      visitVolumeBudget: rows.reduce((s, r) => s + toNumber(r.budget?.visitVolumeBudget), 0),
+      newPatientsBudget: rows.reduce((s, r) => s + toNumber(r.budget?.newPatientsBudget), 0)
+    };
+
+    const variances = {
+      visitVolumeVariance: totals.visitVolume - budgetTotals.visitVolumeBudget,
+      newPatientsVariance: totals.newPatients - budgetTotals.newPatientsBudget
     };
 
     const avg = (arr) =>
@@ -107,8 +176,11 @@ module.exports = async function (context, req) {
       body: {
         ok: true,
         weekEnding,
+        monthKey,
         entityCount: rows.length,
         totals,
+        budgetTotals,
+        variances,
         averages,
         regions: rows
       }
