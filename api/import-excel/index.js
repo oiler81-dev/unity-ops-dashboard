@@ -925,131 +925,115 @@ function parseBudgetCombinedNpRows(sheet) {
 
 function parseHeaderBasedVisitBudgetRows(sheet) {
   const rows = sheetRows(sheet);
-  let headerIndex = -1;
-  let headerMap = null;
+  const items = [];
 
-  for (let i = 0; i < Math.min(rows.length, 20); i += 1) {
-    const map = detectHeaderMap(rows[i] || []);
-    const hasMonth = map.month != null;
-    const hasEntity = map.entity != null || map.region != null || map.practice != null;
-    const hasBudget = Object.keys(map).some((k) => k.includes("budget"));
+  if (!rows.length) return items;
 
-    if (hasMonth && hasEntity && hasBudget) {
-      headerIndex = i;
-      headerMap = map;
+  let headerRowIndex = -1;
+  let monthIndexes = [];
+
+  for (let r = 0; r < Math.min(rows.length, 15); r += 1) {
+    const row = rows[r] || [];
+    const detected = [];
+
+    for (let c = 0; c < row.length; c += 1) {
+      const monthLabel = normalizeMonthLabel(row[c]);
+      if (monthLabel) {
+        const monthKey = monthLabelToMonthKey(monthLabel);
+        if (monthKey) {
+          detected.push({ col: c, monthLabel, monthKey });
+        }
+      }
+    }
+
+    if (detected.length >= 2) {
+      headerRowIndex = r;
+      monthIndexes = detected;
       break;
     }
   }
 
-  if (headerIndex < 0 || !headerMap) return [];
-
-  const monthIdx = headerMap.month;
-  const entityIdx = headerMap.entity ?? headerMap.region ?? headerMap.practice;
-  const categoryIdx = headerMap.category ?? headerMap["visit category"] ?? headerMap["volume category"];
-  const budgetIdx =
-    headerMap.budget ??
-    headerMap["volume budget"] ??
-    headerMap["visit budget"] ??
-    headerMap["monthly budget"] ??
-    headerMap["budget amount"];
-
-  if (monthIdx == null || entityIdx == null || budgetIdx == null) {
+  if (headerRowIndex < 0 || !monthIndexes.length) {
     return [];
   }
 
-  const grouped = new Map();
+  for (let r = headerRowIndex + 1; r < rows.length; r += 1) {
+    const row = rows[r] || [];
+    const entity = normalizeEntityLabel(row[0] || row[1]);
 
-  for (let i = headerIndex + 1; i < rows.length; i += 1) {
-    const row = rows[i] || [];
-    const monthLabel = normalizeMonthLabel(row[monthIdx]);
-    const entity = normalizeEntityLabel(row[entityIdx]);
-    const category = safeText(row[categoryIdx]).toLowerCase();
-    const budget = safeNumber(row[budgetIdx]);
+    if (!entity) continue;
 
-    if (!monthLabel || !entity || !Number.isFinite(budget)) {
-      continue;
-    }
+    for (const m of monthIndexes) {
+      const value = safeNumber(row[m.col]);
 
-    const monthKey = monthLabelToMonthKey(monthLabel);
-    if (!monthKey) continue;
+      if (!Number.isFinite(value)) continue;
 
-    const key = `${entity}|${monthKey}`;
-    if (!grouped.has(key)) {
-      grouped.set(key, {
+      items.push({
         entity,
-        monthKey,
-        monthLabel,
-        visitBudgetMonthly: 0,
-        workingDaysInMonth: getWorkingDaysForMonth(monthKey)
+        monthKey: m.monthKey,
+        monthLabel: m.monthLabel,
+        visitBudgetMonthly: value,
+        workingDaysInMonth: getWorkingDaysForMonth(m.monthKey)
       });
-    }
-
-    const current = grouped.get(key);
-    if (!category || category === "total" || category === "total visits") {
-      current.visitBudgetMonthly = budget;
-    } else {
-      current.visitBudgetMonthly += budget;
     }
   }
 
-  return Array.from(grouped.values());
+  return items;
 }
 
 function parseHeaderBasedNpBudgetRows(sheet) {
   const rows = sheetRows(sheet);
-  let headerIndex = -1;
-  let headerMap = null;
+  const items = [];
 
-  for (let i = 0; i < Math.min(rows.length, 20); i += 1) {
-    const map = detectHeaderMap(rows[i] || []);
-    const hasMonth = map.month != null;
-    const hasEntity = map.entity != null || map.region != null || map.practice != null;
-    const hasBudget = Object.keys(map).some((k) => k.includes("budget"));
+  if (!rows.length) return items;
 
-    if (hasMonth && hasEntity && hasBudget) {
-      headerIndex = i;
-      headerMap = map;
+  let headerRowIndex = -1;
+  let monthIndexes = [];
+
+  for (let r = 0; r < Math.min(rows.length, 15); r += 1) {
+    const row = rows[r] || [];
+    const detected = [];
+
+    for (let c = 0; c < row.length; c += 1) {
+      const monthLabel = normalizeMonthLabel(row[c]);
+      if (monthLabel) {
+        const monthKey = monthLabelToMonthKey(monthLabel);
+        if (monthKey) {
+          detected.push({ col: c, monthLabel, monthKey });
+        }
+      }
+    }
+
+    if (detected.length >= 2) {
+      headerRowIndex = r;
+      monthIndexes = detected;
       break;
     }
   }
 
-  if (headerIndex < 0 || !headerMap) return [];
-
-  const monthIdx = headerMap.month;
-  const entityIdx = headerMap.entity ?? headerMap.region ?? headerMap.practice;
-  const budgetIdx =
-    headerMap.budget ??
-    headerMap["new patient budget"] ??
-    headerMap["np budget"] ??
-    headerMap["monthly budget"] ??
-    headerMap["budget amount"];
-
-  if (monthIdx == null || entityIdx == null || budgetIdx == null) {
+  if (headerRowIndex < 0 || !monthIndexes.length) {
     return [];
   }
 
-  const items = [];
+  for (let r = headerRowIndex + 1; r < rows.length; r += 1) {
+    const row = rows[r] || [];
+    const entity = normalizeEntityLabel(row[0] || row[1]);
 
-  for (let i = headerIndex + 1; i < rows.length; i += 1) {
-    const row = rows[i] || [];
-    const monthLabel = normalizeMonthLabel(row[monthIdx]);
-    const entity = normalizeEntityLabel(row[entityIdx]);
-    const newPatientsBudgetMonthly = safeNumber(row[budgetIdx]);
+    if (!entity) continue;
 
-    if (!monthLabel || !entity || !Number.isFinite(newPatientsBudgetMonthly)) {
-      continue;
+    for (const m of monthIndexes) {
+      const value = safeNumber(row[m.col]);
+
+      if (!Number.isFinite(value)) continue;
+
+      items.push({
+        entity,
+        monthKey: m.monthKey,
+        monthLabel: m.monthLabel,
+        newPatientsBudgetMonthly: value,
+        workingDaysInMonth: getWorkingDaysForMonth(m.monthKey)
+      });
     }
-
-    const monthKey = monthLabelToMonthKey(monthLabel);
-    if (!monthKey) continue;
-
-    items.push({
-      entity,
-      monthKey,
-      monthLabel,
-      newPatientsBudgetMonthly,
-      workingDaysInMonth: getWorkingDaysForMonth(monthKey)
-    });
   }
 
   return items;
