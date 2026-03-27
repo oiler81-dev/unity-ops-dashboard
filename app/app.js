@@ -202,6 +202,62 @@ function formatToGoal(actual, target) {
   return `${((normalizeNumber(actual) / t) * 100).toFixed(1)}%`;
 }
 
+function getGoalStatus(actual, target, inverse = false) {
+  const a = normalizeNumber(actual);
+  const t = normalizeNumber(target);
+
+  if (!t && !inverse) return "neutral";
+  if (inverse) {
+    if (a <= t) return "good";
+    if (a <= t * 1.15) return "warning";
+    return "bad";
+  }
+
+  const pct = t ? a / t : 0;
+  if (pct >= 1) return "good";
+  if (pct >= 0.92) return "warning";
+  return "bad";
+}
+
+function getMetricChipClass(status) {
+  if (status === "good") return "metricChip metricChipGood";
+  if (status === "warning") return "metricChip metricChipWarning";
+  if (status === "bad") return "metricChip metricChipBad";
+  return "metricChip";
+}
+
+function getPerformanceSummary(row, compareAgainst) {
+  if (compareAgainst !== "budget") {
+    const abandoned = normalizeNumber(row.abandonedCallRate);
+    if (abandoned >= 10) return { text: "Call access needs attention", tone: "bad" };
+    if (normalizeNumber(row.visitVolume) > 0 && normalizeNumber(row.newPatients) > 0) {
+      return { text: "Operating normally", tone: "good" };
+    }
+    return { text: "Review actuals", tone: "warning" };
+  }
+
+  const visitDelta = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+  const npDelta = normalizeNumber(row.newPatients) - normalizeNumber(row.newPatientsBudget);
+
+  if (visitDelta >= 0 && npDelta >= 0) {
+    return { text: "Above budget on visits and NP", tone: "good" };
+  }
+
+  if (visitDelta < 0 && npDelta < 0) {
+    return { text: "Below budget on visits and NP", tone: "bad" };
+  }
+
+  if (visitDelta >= 0 && npDelta < 0) {
+    return { text: "Visits strong, NP below budget", tone: "warning" };
+  }
+
+  if (visitDelta < 0 && npDelta >= 0) {
+    return { text: "NP strong, visits below budget", tone: "warning" };
+  }
+
+  return { text: "Mixed performance", tone: "warning" };
+}
+
 function renderUser(userData) {
   const label = `${userData.user.userDetails} (${userData.access.role})`;
   const el = byId("userInfo");
@@ -880,7 +936,7 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
   const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
 
   container.innerHTML = `
-    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px;">
+    <div class="entityCardGrid">
       ${entities.map((entity) => {
         const brand = getBranding(entity);
         const row = currentMap[entity] || {
@@ -907,85 +963,122 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
         const callPct = buildVariancePct(row.callVolume, prior.callVolume);
         const npPct = buildVariancePct(row.newPatients, prior.newPatients);
 
+        const visitBudgetStatus = getGoalStatus(row.visitVolume, row.visitVolumeBudget);
+        const npBudgetStatus = getGoalStatus(row.newPatients, row.newPatientsBudget);
+        const callStatus = getGoalStatus(row.abandonedCallRate, 10, true);
+        const summary = getPerformanceSummary(row, compareAgainst);
+
         const fmtPct = (value) => value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 
-        const budgetModeHtml = compareAgainst === "budget"
+        const comparisonBlock = compareAgainst === "budget"
           ? `
-            <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:12px;">
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Visits</div>
-                <div style="font-weight:bold;">Budget ${formatWhole(row.visitVolumeBudget)}</div>
-                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.visitVolume, row.visitVolumeBudget)}</div>
-                <div style="font-size:12px; opacity:0.9;">To Goal ${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</div>
+            <div class="entityBudgetGrid">
+              <div class="entityBudgetTile">
+                <div class="entityBudgetLabel">Visit Budget</div>
+                <div class="entityBudgetValue">${formatWhole(row.visitVolumeBudget)}</div>
+                <div class="${getMetricChipClass(visitBudgetStatus)}">
+                  ${visitBudgetStatus === "good" ? "Above Goal" : visitBudgetStatus === "warning" ? "Near Goal" : "Below Goal"}
+                </div>
+                <div class="entityBudgetMeta">Variance ${formatVariance(row.visitVolume, row.visitVolumeBudget)}</div>
+                <div class="entityBudgetMeta">To Goal ${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</div>
               </div>
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">New Patients</div>
-                <div style="font-weight:bold;">Budget ${formatWhole(row.newPatientsBudget)}</div>
-                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.newPatients, row.newPatientsBudget)}</div>
-                <div style="font-size:12px; opacity:0.9;">To Goal ${formatToGoal(row.newPatients, row.newPatientsBudget)}</div>
+
+              <div class="entityBudgetTile">
+                <div class="entityBudgetLabel">NP Budget</div>
+                <div class="entityBudgetValue">${formatWhole(row.newPatientsBudget)}</div>
+                <div class="${getMetricChipClass(npBudgetStatus)}">
+                  ${npBudgetStatus === "good" ? "Above Goal" : npBudgetStatus === "warning" ? "Near Goal" : "Below Goal"}
+                </div>
+                <div class="entityBudgetMeta">Variance ${formatVariance(row.newPatients, row.newPatientsBudget)}</div>
+                <div class="entityBudgetMeta">To Goal ${formatToGoal(row.newPatients, row.newPatientsBudget)}</div>
               </div>
             </div>
           `
           : `
-            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px;">
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Visits ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
-                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(visitPct) : normalizeNumber(row.visitVolume)}</div>
+            <div class="entityCompareGrid">
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Visits ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
+                <strong>${compareAgainst === "priorPeriod" ? fmtPct(visitPct) : formatWhole(row.visitVolume)}</strong>
               </div>
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Calls ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
-                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(callPct) : normalizeNumber(row.callVolume)}</div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Calls ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
+                <strong>${compareAgainst === "priorPeriod" ? fmtPct(callPct) : formatWhole(row.callVolume)}</strong>
               </div>
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">NP ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
-                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(npPct) : normalizeNumber(row.newPatients)}</div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">NP ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
+                <strong>${compareAgainst === "priorPeriod" ? fmtPct(npPct) : formatWhole(row.newPatients)}</strong>
               </div>
             </div>
           `;
 
         return `
-          <div style="background:#123851; border:1px solid #285a77; border-top:4px solid ${brand.accent}; border-radius:10px; padding:16px;">
-            <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:12px;">
-              <div>
-                <div style="display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:bold; background:rgba(124,252,152,0.14); color:#7CFC98; margin-bottom:8px;">
-                  ${row.status || "missing"}
+          <div class="entityCard" style="border-top:4px solid ${brand.accent};">
+            <div class="entityCardHeader">
+              <div class="entityHeaderLeft">
+                <div class="entityStatusRow">
+                  <span class="entityStatusPill">${row.status || "missing"}</span>
+                  <span class="${summary.tone === "good" ? "metricChip metricChipGood" : summary.tone === "warning" ? "metricChip metricChipWarning" : "metricChip metricChipBad"}">${summary.text}</span>
                 </div>
-                <div style="font-size:18px; font-weight:bold;">${entity}</div>
-                <div style="font-size:12px; opacity:0.85;">${brand.fullName}</div>
+                <div class="entityTitle">${entity}</div>
+                <div class="entitySubtitle">${brand.fullName}</div>
               </div>
-              <div style="width:84px; height:42px; background:#fff; border-radius:8px; padding:6px; display:flex; align-items:center; justify-content:center;">
-                <img src="${brand.logo}" alt="${brand.label}" style="max-width:100%; max-height:100%; object-fit:contain;" />
+
+              <div class="entityLogoWrap">
+                <img src="${brand.logo}" alt="${brand.label}" class="entityLogo" />
               </div>
             </div>
 
-            <div style="display:grid; gap:10px;">
-              <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid #1d435b; padding-bottom:8px;">
-                <span>Visits</span>
+            <div class="entityTopMetrics">
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Visits</span>
                 <strong>${formatWhole(row.visitVolume)}</strong>
               </div>
-              <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid #1d435b; padding-bottom:8px;">
-                <span>Calls</span>
-                <strong>${formatWhole(row.callVolume)}</strong>
-              </div>
-              <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid #1d435b; padding-bottom:8px;">
-                <span>New Patients</span>
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">New Patients</span>
                 <strong>${formatWhole(row.newPatients)}</strong>
               </div>
-              <div style="display:flex; justify-content:space-between; gap:10px;">
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Calls</span>
+                <strong>${formatWhole(row.callVolume)}</strong>
+              </div>
+            </div>
+
+            ${comparisonBlock}
+
+            <div class="entityHealthRow">
+              <div class="entityHealthItem">
                 <span>No Show</span>
                 <strong>${formatPercent(row.noShowRate)}</strong>
               </div>
-              <div style="display:flex; justify-content:space-between; gap:10px;">
+              <div class="entityHealthItem">
                 <span>Cancel</span>
                 <strong>${formatPercent(row.cancellationRate)}</strong>
               </div>
-              <div style="display:flex; justify-content:space-between; gap:10px;">
+              <div class="entityHealthItem">
                 <span>Abandoned</span>
                 <strong>${formatPercent(row.abandonedCallRate)}</strong>
               </div>
             </div>
 
-            ${budgetModeHtml}
+            <details class="entityDetailDrawer">
+              <summary>More detail</summary>
+              <div class="entityDetailGrid">
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">Visit Variance</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.visitVolume, row.visitVolumeBudget) : compareAgainst === "priorPeriod" ? fmtPct(visitPct) : "n/a"}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">NP Variance</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.newPatients, row.newPatientsBudget) : compareAgainst === "priorPeriod" ? fmtPct(npPct) : "n/a"}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">Access Signal</div>
+                  <div class="${getMetricChipClass(callStatus)}">
+                    ${callStatus === "good" ? "Healthy" : callStatus === "warning" ? "Watch" : "Needs Action"}
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
         `;
       }).join("")}
@@ -1040,6 +1133,10 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
 
       if (normalizeNumber(row.newPatientsBudget) > 0 && npGap < 0) {
         alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(npGap))} new patients below budget.` });
+      }
+
+      if (visitGap > 0 && npGap > 0) {
+        alerts.push({ severity: "good", text: `${entity} is above budget on visits and new patients.` });
       }
     }
   });
@@ -1478,6 +1575,257 @@ async function runImport() {
 async function runBudgetImport() {
   throw new Error("Standalone budget import is retired. Use the main workbook import.");
 }
+
+(function injectDashboardCardStyles() {
+  if (document.getElementById("dashboard-entity-card-style-block")) return;
+
+  const style = document.createElement("style");
+  style.id = "dashboard-entity-card-style-block";
+  style.textContent = `
+    .entityCardGrid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+      gap:18px;
+    }
+    .entityCard {
+      background:linear-gradient(180deg, rgba(18,56,81,0.98) 0%, rgba(13,43,63,0.98) 100%);
+      border:1px solid rgba(108,182,255,0.12);
+      border-radius:18px;
+      padding:18px;
+      box-shadow:0 12px 24px rgba(0,0,0,0.14);
+      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .entityCard:hover {
+      transform:translateY(-3px);
+      box-shadow:0 18px 34px rgba(0,0,0,0.2);
+      border-color:rgba(108,182,255,0.24);
+    }
+    .entityCardHeader {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+      margin-bottom:14px;
+    }
+    .entityHeaderLeft {
+      min-width:0;
+      flex:1;
+    }
+    .entityStatusRow {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+    .entityStatusPill {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(124,252,152,0.14);
+      color:#7CFC98;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    .metricChip {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.07);
+      color:#dcebf8;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.03em;
+    }
+    .metricChipGood {
+      background:rgba(124,252,152,0.12);
+      color:#7CFC98;
+    }
+    .metricChipWarning {
+      background:rgba(247,198,47,0.14);
+      color:#f7c62f;
+    }
+    .metricChipBad {
+      background:rgba(255,125,125,0.14);
+      color:#ff9a9a;
+    }
+    .entityTitle {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:6px;
+    }
+    .entitySubtitle {
+      font-size:12px;
+      color:#b8d3e6;
+      line-height:1.45;
+    }
+    .entityLogoWrap {
+      width:88px;
+      height:46px;
+      background:#fff;
+      border-radius:10px;
+      padding:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-shrink:0;
+    }
+    .entityLogo {
+      max-width:100%;
+      max-height:100%;
+      object-fit:contain;
+    }
+    .entityTopMetrics {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .entityMetricHero {
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;
+      padding:12px;
+    }
+    .entityMetricLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityMetricHero strong {
+      font-size:24px;
+      font-weight:900;
+      line-height:1;
+      letter-spacing:-.03em;
+    }
+    .entityBudgetGrid,
+    .entityCompareGrid {
+      display:grid;
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .entityBudgetGrid {
+      grid-template-columns:repeat(2,1fr);
+    }
+    .entityCompareGrid {
+      grid-template-columns:repeat(3,1fr);
+    }
+    .entityBudgetTile,
+    .entityMiniStat {
+      background:linear-gradient(180deg, rgba(20,67,97,0.96) 0%, rgba(17,54,79,0.96) 100%);
+      border:1px solid rgba(108,182,255,0.12);
+      border-radius:14px;
+      padding:12px;
+    }
+    .entityBudgetLabel,
+    .entityMiniLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityBudgetValue,
+    .entityMiniStat strong {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:8px;
+      display:block;
+    }
+    .entityBudgetMeta {
+      margin-top:6px;
+      font-size:12px;
+      color:#b8d3e6;
+    }
+    .entityHealthRow {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .entityHealthItem {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+      color:#b8d3e6;
+      font-size:13px;
+    }
+    .entityHealthItem strong {
+      color:#fff;
+      font-size:14px;
+    }
+    .entityDetailDrawer {
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:12px;
+      background:rgba(7,31,51,0.34);
+      overflow:hidden;
+    }
+    .entityDetailDrawer summary {
+      cursor:pointer;
+      list-style:none;
+      padding:12px 14px;
+      font-weight:800;
+      font-size:13px;
+      color:#dcebf8;
+    }
+    .entityDetailDrawer summary::-webkit-details-marker {
+      display:none;
+    }
+    .entityDetailGrid {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      padding:0 14px 14px;
+    }
+    .entityDetailTile {
+      padding:12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+    .entityDetailLabel {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityDetailValue {
+      font-size:18px;
+      font-weight:900;
+      line-height:1.1;
+    }
+    @media (max-width: 820px) {
+      .entityTopMetrics,
+      .entityCompareGrid,
+      .entityHealthRow,
+      .entityDetailGrid {
+        grid-template-columns:1fr;
+      }
+      .entityBudgetGrid {
+        grid-template-columns:1fr;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+})();
 
 (async function init() {
   try {
