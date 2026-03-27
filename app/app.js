@@ -29,6 +29,7 @@ const ENTITY_BRANDING = {
 
 let currentUser = null;
 let currentWeekData = null;
+const budgetCache = new Map();
 
 async function parseApiResponse(res) {
   const text = await res.text();
@@ -174,6 +175,44 @@ function normalizeNumber(value) {
   if (value === null || value === undefined || value === "") return 0;
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function formatWhole(value) {
+  return Math.round(normalizeNumber(value)).toLocaleString();
+}
+
+function formatPctValue(value) {
+  return `${normalizeNumber(value).toFixed(1)}%`;
+}
+
+function formatVariance(current, target) {
+  const diff = normalizeNumber(current) - normalizeNumber(target);
+  return `${diff >= 0 ? "+" : ""}${Math.round(diff).toLocaleString()}`;
+}
+
+function formatPercentToGoal(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return "n/a";
+  return `${((normalizeNumber(actual) / t) * 100).toFixed(1)}%`;
+}
+
+function monthKeyFromWeekEnding(weekEnding) {
+  return String(weekEnding || "").slice(0, 7);
+}
+
+async function fetchBudgetRow(entity, weekEnding) {
+  const key = `${entity}|${monthKeyFromWeekEnding(weekEnding)}`;
+  if (budgetCache.has(key)) {
+    return budgetCache.get(key);
+  }
+
+  const result = await apiGet(
+    `/api/budget?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
+  );
+
+  const row = result?.item || (Array.isArray(result?.items) && result.items.length ? result.items[0] : null) || null;
+  budgetCache.set(key, row);
+  return row;
 }
 
 function renderUser(userData) {
@@ -358,7 +397,7 @@ function renderMetricCards(containerId, items) {
     <div class="summaryCard">
       <h3>${item.label}</h3>
       <div class="value">${item.value}</div>
-      ${item.meta ? `<div style="margin-top:6px; font-size:12px; opacity:0.85;">${item.meta}</div>` : ""}
+      ${item.meta ? `<div style="margin-top:6px; font-size:12px; opacity:0.85; white-space:pre-line;">${item.meta}</div>` : ""}
     </div>
   `).join("");
 }
@@ -706,7 +745,182 @@ async function loadDashboardDataForWeeks(weeks, entityScope) {
   return aggregateExecutiveSummaries(summaries, entityScope);
 }
 
+function mapWeeklyActual(result, entity, weekEnding) {
+  const values = result?.values || result?.data || {};
+  return {
+    entity,
+    weekEnding,
+    status: result?.status || "draft",
+    daysInPeriod: normalizeNumber(values.daysInPeriod || values.workingDaysInWeek || 0),
+    visitVolume: normalizeNumber(values.visitVolume ?? values.totalVisits),
+    callVolume: normalizeNumber(values.callVolume ?? values.totalCalls),
+    newPatients: normalizeNumber(values.newPatients ?? values.npActual),
+    noShowRate: normalizeNumber(values.noShowRate),
+    cancellationRate: normalizeNumber(values.cancellationRate),
+    abandonedCallRate: normalizeNumber(values.abandonedCallRate ?? values.abandonmentRate)
+  };
+}
+
+async function fetchWeeklyActual(entity, weekEnding) {
+  const result = await apiGet(
+    `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
+  );
+  return mapWeeklyActual(result, entity, weekEnding);
+}
+
+function averageMetric(rows, key) {
+  if (!rows || !rows.length) return 0;
+  return rows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0) / rows.length;
+}
+
+function emptySummaryForEntities(entities) {
+  return {
+    entityCount: entities.length,
+    totals: {
+      visitVolume: 0,
+      callVolume: 0,
+      newPatients: 0
+    },
+    regions: entities.map((entity) => ({
+      entity,
+      status: "missing",
+      visitVolume: 0,
+      callVolume: 0,
+      newPatients: 0,
+      noShowRate: 0,
+      cancellationRate: 0,
+      abandonedCallRate: 0
+    }))
+  };
+}
+
+async function loadDashboardDataForWeeksWithBudget(weeks, entityScope) {
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
+  const current = emptySummaryForEntities(entities);
+  const budget = emptySummaryForEntities(entities);
+
+  const currentMap = new Map(current.regions.map((r) => [r.entity, r]));
+  const budgetMap = new Map(budget.regions.map((r) => [r.entity, r]));
+
+  for (const entity of entities) {
+    for (const weekEnding of weeks || []) {
+      let actual;
+      try {
+        actual = await fetchWeeklyActual(entity, weekEnding);
+      } catch {
+        actual = null;
+      }
+
+      if (actual) {
+        const row = currentMap.get(entity);
+        row.status = actual.status || row.status;
+        row.visitVolume += normalizeNumber(actual.visitVolume);
+        row.callVolume += normalizeNumber(actual.callVolume);
+        row.newPatients += normalizeNumber(actual.newPatients);
+
+        if (normalizeNumber(actual.visitVolume) > 0 || normalizeNumber(actual.callVolume) > 0 || normalizeNumber(actual.newPatients) > 0) {
+          row.noShowRate += normalizeNumber(actual.noShowRate);
+          row.cancellationRate += normalizeNumber(actual.cancellationRate);
+          row.abandonedCallRate += normalizeNumber(actual.abandonedCallRate);
+          row._weekCount = (row._weekCount || 0) + 1;
+        }
+
+        current.totals.visitVolume += normalizeNumber(actual.visitVolume);
+        current.totals.callVolume += normalizeNumber(actual.callVolume);
+        current.totals.newPatients += normalizeNumber(actual.newPatients);
+
+        const budgetRow = await fetchBudgetRow(entity, weekEnding);
+        if (budgetRow) {
+          const daysInPeriod = normalizeNumber(actual.daysInPeriod) || 5;
+          const workingDaysInMonth = normalizeNumber(budgetRow.workingDaysInMonth) || 20;
+
+          const visitBudgetWeekly =
+            (normalizeNumber(budgetRow.visitBudgetMonthly) / workingDaysInMonth) * daysInPeriod;
+
+          const npBudgetWeekly =
+            (normalizeNumber(budgetRow.newPatientsBudgetMonthly) / workingDaysInMonth) * daysInPeriod;
+
+          const budgetEntity = budgetMap.get(entity);
+          budgetEntity.status = "budget";
+          budgetEntity.visitVolume += visitBudgetWeekly;
+          budgetEntity.newPatients += npBudgetWeekly;
+
+          budget.totals.visitVolume += visitBudgetWeekly;
+          budget.totals.newPatients += npBudgetWeekly;
+        }
+      }
+    }
+  }
+
+  current.regions.forEach((row) => {
+    const count = row._weekCount || 0;
+    row.noShowRate = count ? row.noShowRate / count : 0;
+    row.cancellationRate = count ? row.cancellationRate / count : 0;
+    row.abandonedCallRate = count ? row.abandonedCallRate / count : 0;
+    delete row._weekCount;
+  });
+
+  return { current, budget };
+}
+
+function getEntityMap(summary) {
+  const map = {};
+  (summary.regions || []).forEach((r) => {
+    map[r.entity] = r;
+  });
+  return map;
+}
+
+function buildVariancePct(current, comparison) {
+  const c = normalizeNumber(current);
+  const p = normalizeNumber(comparison);
+  if (!p) return null;
+  return ((c - p) / p) * 100;
+}
+
+function buildBudgetMeta(actual, target) {
+  return `Budget ${formatWhole(target)}\nVariance ${formatVariance(actual, target)}\nTo Goal ${formatPercentToGoal(actual, target)}`;
+}
+
 function renderDashboardCards(current, comparison, compareAgainst) {
+  if (compareAgainst === "budget") {
+    const cards = [
+      {
+        label: "Visit Volume",
+        value: formatWhole(current.totals?.visitVolume || 0),
+        meta: buildBudgetMeta(current.totals?.visitVolume || 0, comparison.totals?.visitVolume || 0)
+      },
+      {
+        label: "New Patients",
+        value: formatWhole(current.totals?.newPatients || 0),
+        meta: buildBudgetMeta(current.totals?.newPatients || 0, comparison.totals?.newPatients || 0)
+      },
+      {
+        label: "Call Volume",
+        value: formatWhole(current.totals?.callVolume || 0),
+        meta: "Budget n/a\nVariance n/a\nTo Goal n/a"
+      },
+      {
+        label: "Avg No Show %",
+        value: formatPctValue(averageMetric(current.regions, "noShowRate")),
+        meta: "Actual only"
+      },
+      {
+        label: "Avg Cancel %",
+        value: formatPctValue(averageMetric(current.regions, "cancellationRate")),
+        meta: "Actual only"
+      },
+      {
+        label: "Avg Abandoned %",
+        value: formatPctValue(averageMetric(current.regions, "abandonedCallRate")),
+        meta: "Actual only"
+      }
+    ];
+
+    renderMetricCards("dashboardCards", cards);
+    return;
+  }
+
   const cards = [
     {
       label: "Approved Regions",
@@ -756,26 +970,6 @@ function renderDashboardCards(current, comparison, compareAgainst) {
   renderMetricCards("dashboardCards", cards);
 }
 
-function averageMetric(rows, key) {
-  if (!rows || !rows.length) return 0;
-  return rows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0) / rows.length;
-}
-
-function getEntityMap(summary) {
-  const map = {};
-  (summary.regions || []).forEach((r) => {
-    map[r.entity] = r;
-  });
-  return map;
-}
-
-function buildVariancePct(current, comparison) {
-  const c = normalizeNumber(current);
-  const p = normalizeNumber(comparison);
-  if (!p) return null;
-  return ((c - p) / p) * 100;
-}
-
 function renderDashboardEntities(current, comparison, compareAgainst, entityScope) {
   const container = byId("dashboardEntities");
   if (!container) return;
@@ -798,17 +992,60 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           cancellationRate: 0,
           abandonedCallRate: 0
         };
-        const prior = comparisonMap[entity] || {
+        const benchmark = comparisonMap[entity] || {
           visitVolume: 0,
           callVolume: 0,
           newPatients: 0
         };
 
-        const visitPct = buildVariancePct(row.visitVolume, prior.visitVolume);
-        const callPct = buildVariancePct(row.callVolume, prior.callVolume);
-        const npPct = buildVariancePct(row.newPatients, prior.newPatients);
+        const visitPct = buildVariancePct(row.visitVolume, benchmark.visitVolume);
+        const callPct = buildVariancePct(row.callVolume, benchmark.callVolume);
+        const npPct = buildVariancePct(row.newPatients, benchmark.newPatients);
 
         const fmtPct = (value) => value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+
+        const budgetModeHtml = compareAgainst === "budget"
+          ? `
+            <div style="display:grid; gap:8px; margin-top:12px;">
+              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
+                <div style="font-size:11px; opacity:0.8; margin-bottom:6px;">Visits</div>
+                <div style="font-weight:bold;">Actual ${formatWhole(row.visitVolume)}</div>
+                <div style="font-size:12px; opacity:0.9;">Budget ${formatWhole(benchmark.visitVolume)}</div>
+                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.visitVolume, benchmark.visitVolume)}</div>
+                <div style="font-size:12px; opacity:0.9;">To Goal ${formatPercentToGoal(row.visitVolume, benchmark.visitVolume)}</div>
+              </div>
+              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
+                <div style="font-size:11px; opacity:0.8; margin-bottom:6px;">New Patients</div>
+                <div style="font-weight:bold;">Actual ${formatWhole(row.newPatients)}</div>
+                <div style="font-size:12px; opacity:0.9;">Budget ${formatWhole(benchmark.newPatients)}</div>
+                <div style="font-size:12px; opacity:0.9;">Variance ${formatVariance(row.newPatients, benchmark.newPatients)}</div>
+                <div style="font-size:12px; opacity:0.9;">To Goal ${formatPercentToGoal(row.newPatients, benchmark.newPatients)}</div>
+              </div>
+              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:10px;">
+                <div style="font-size:11px; opacity:0.8; margin-bottom:6px;">Call Volume</div>
+                <div style="font-weight:bold;">Actual ${formatWhole(row.callVolume)}</div>
+                <div style="font-size:12px; opacity:0.9;">Budget n/a</div>
+                <div style="font-size:12px; opacity:0.9;">Variance n/a</div>
+                <div style="font-size:12px; opacity:0.9;">To Goal n/a</div>
+              </div>
+            </div>
+          `
+          : `
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px;">
+              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
+                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Visits ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
+                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(visitPct) : normalizeNumber(row.visitVolume)}</div>
+              </div>
+              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
+                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Calls ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
+                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(callPct) : normalizeNumber(row.callVolume)}</div>
+              </div>
+              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
+                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">NP ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
+                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(npPct) : normalizeNumber(row.newPatients)}</div>
+              </div>
+            </div>
+          `;
 
         return `
           <div style="background:#123851; border:1px solid #285a77; border-top:4px solid ${brand.accent}; border-radius:10px; padding:16px;">
@@ -828,44 +1065,31 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
             <div style="display:grid; gap:10px;">
               <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid #1d435b; padding-bottom:8px;">
                 <span>Visits</span>
-                <strong>${normalizeNumber(row.visitVolume)}</strong>
+                <strong>${formatWhole(row.visitVolume)}</strong>
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid #1d435b; padding-bottom:8px;">
                 <span>Calls</span>
-                <strong>${normalizeNumber(row.callVolume)}</strong>
+                <strong>${formatWhole(row.callVolume)}</strong>
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid #1d435b; padding-bottom:8px;">
                 <span>New Patients</span>
-                <strong>${normalizeNumber(row.newPatients)}</strong>
+                <strong>${formatWhole(row.newPatients)}</strong>
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px;">
                 <span>No Show</span>
-                <strong>${normalizeNumber(row.noShowRate).toFixed(1)}%</strong>
+                <strong>${formatPctValue(row.noShowRate)}</strong>
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px;">
                 <span>Cancel</span>
-                <strong>${normalizeNumber(row.cancellationRate).toFixed(1)}%</strong>
+                <strong>${formatPctValue(row.cancellationRate)}</strong>
               </div>
               <div style="display:flex; justify-content:space-between; gap:10px;">
                 <span>Abandoned</span>
-                <strong>${normalizeNumber(row.abandonedCallRate).toFixed(1)}%</strong>
+                <strong>${formatPctValue(row.abandonedCallRate)}</strong>
               </div>
             </div>
 
-            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px;">
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Visits ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
-                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(visitPct) : normalizeNumber(row.visitVolume)}</div>
-              </div>
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">Calls ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
-                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(callPct) : normalizeNumber(row.callVolume)}</div>
-              </div>
-              <div style="background:#1a4361; border:1px solid #285a77; border-radius:8px; padding:8px;">
-                <div style="font-size:11px; opacity:0.8; margin-bottom:4px;">NP ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</div>
-                <div style="font-weight:bold;">${compareAgainst === "priorPeriod" ? fmtPct(npPct) : normalizeNumber(row.newPatients)}</div>
-              </div>
-            </div>
+            ${budgetModeHtml}
           </div>
         `;
       }).join("")}
@@ -873,7 +1097,7 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
   `;
 }
 
-function renderDashboardAlerts(current, comparison, entityScope) {
+function renderDashboardAlerts(current, comparison, entityScope, compareAgainst) {
   const container = byId("dashboardAlerts");
   if (!container) return;
 
@@ -903,9 +1127,24 @@ function renderDashboardAlerts(current, comparison, entityScope) {
       alerts.push({ severity: "bad", text: `${entity} abandoned call rate is elevated at ${normalizeNumber(row.abandonedCallRate).toFixed(1)}%.` });
     }
 
-    const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
-    if (compareAgainst === "priorPeriod" && visitDiff < -100) {
-      alerts.push({ severity: "warning", text: `${entity} visit volume is down ${Math.abs(visitDiff)} vs comparison period.` });
+    if (compareAgainst === "priorPeriod") {
+      const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
+      if (visitDiff < -100) {
+        alerts.push({ severity: "warning", text: `${entity} visit volume is down ${Math.abs(visitDiff)} vs comparison period.` });
+      }
+    }
+
+    if (compareAgainst === "budget") {
+      const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
+      const npGap = normalizeNumber(row.newPatients) - normalizeNumber(prior.newPatients);
+
+      if (normalizeNumber(prior.visitVolume) > 0 && visitGap < 0) {
+        alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(visitGap))} visits below budget.` });
+      }
+
+      if (normalizeNumber(prior.newPatients) > 0 && npGap < 0) {
+        alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(npGap))} new patients below budget.` });
+      }
     }
   });
 
@@ -949,12 +1188,12 @@ function renderDashboardSnapshot(current, entityScope) {
         ${rows.map((r) => `
           <tr>
             <td>${r.entity}</td>
-            <td>${normalizeNumber(r.visitVolume)}</td>
-            <td>${normalizeNumber(r.callVolume)}</td>
-            <td>${normalizeNumber(r.newPatients)}</td>
-            <td>${normalizeNumber(r.noShowRate).toFixed(1)}%</td>
-            <td>${normalizeNumber(r.cancellationRate).toFixed(1)}%</td>
-            <td>${normalizeNumber(r.abandonedCallRate).toFixed(1)}%</td>
+            <td>${formatWhole(r.visitVolume)}</td>
+            <td>${formatWhole(r.callVolume)}</td>
+            <td>${formatWhole(r.newPatients)}</td>
+            <td>${formatPctValue(r.noShowRate)}</td>
+            <td>${formatPctValue(r.cancellationRate)}</td>
+            <td>${formatPctValue(r.abandonedCallRate)}</td>
             <td>${r.status}</td>
           </tr>
         `).join("")}
@@ -968,17 +1207,25 @@ async function loadDashboardLanding() {
   const entityScope = byId("dashboardEntityScope")?.value || "ALL";
   const weekSets = buildWeekSets();
 
-  const current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope);
-
+  let current;
   let comparison;
-  if (compareAgainst === "priorPeriod") {
-    comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, entityScope);
+
+  if (compareAgainst === "budget") {
+    const budgetMode = await loadDashboardDataForWeeksWithBudget(weekSets.primaryWeeks, entityScope);
+    current = budgetMode.current;
+    comparison = budgetMode.budget;
   } else {
-    comparison = {
-      entityCount: 0,
-      totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
-      regions: []
-    };
+    current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope);
+
+    if (compareAgainst === "priorPeriod") {
+      comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, entityScope);
+    } else {
+      comparison = {
+        entityCount: 0,
+        totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
+        regions: []
+      };
+    }
   }
 
   const summaryEl = byId("dashboardSummaryText");
@@ -988,7 +1235,13 @@ async function loadDashboardLanding() {
 
   const noticeEl = byId("dashboardBenchmarkNotice");
   if (noticeEl) {
-    if (["budget", "target", "forecast"].includes(compareAgainst)) {
+    if (compareAgainst === "budget") {
+      noticeEl.innerHTML = `
+        <div class="good" style="padding:10px 12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
+          Budget comparison is live for Visit Volume and New Patients. Call Volume and percentage metrics remain actual-only.
+        </div>
+      `;
+    } else if (["target", "forecast"].includes(compareAgainst)) {
       noticeEl.innerHTML = `
         <div class="warning" style="padding:10px 12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
           ${compareAgainst.charAt(0).toUpperCase() + compareAgainst.slice(1)} comparison structure is in place, but the benchmark data layer is not wired into this front-end yet. Current view is showing actuals cleanly so the site stays stable.
@@ -1001,7 +1254,7 @@ async function loadDashboardLanding() {
 
   renderDashboardCards(current, comparison, compareAgainst);
   renderDashboardEntities(current, comparison, compareAgainst, entityScope);
-  renderDashboardAlerts(current, comparison, entityScope);
+  renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
   renderDashboardSnapshot(current, entityScope);
 
   setDashboardDebug({
@@ -1255,63 +1508,31 @@ async function runImport() {
   const file = fileInput?.files && fileInput.files[0];
 
   if (!file) {
-    throw new Error("Select a weekly workbook file first");
+    throw new Error("Select a workbook file first");
   }
 
-  setImportStatus("Reading weekly workbook...");
+  setImportStatus("Reading workbook...");
   const fileBase64 = await readFileAsBase64(file);
 
   const payload = {
     fileName: file.name,
-    fileBase64,
-    importType: "weekly"
+    fileBase64
   };
 
-  setImportStatus("Importing weekly workbook...");
+  setImportStatus("Importing workbook...");
   setImportDebug({
     route: "/api/import-excel",
-    importType: payload.importType,
     fileName: payload.fileName
   });
 
   const result = await apiPost("/api/import-excel", payload);
 
-  setImportStatus(result.message || "Weekly import completed");
+  setImportStatus(result.message || "Import completed");
   setImportDebug(result);
 }
 
 async function runBudgetImport() {
-  if (!currentUser?.access?.isAdmin) {
-    throw new Error("Admin only");
-  }
-
-  const fileInput = getBudgetImportFileInput();
-  const file = fileInput?.files && fileInput.files[0];
-
-  if (!file) {
-    throw new Error("Select a budget workbook file first");
-  }
-
-  setImportStatus("Reading budget workbook...");
-  const fileBase64 = await readFileAsBase64(file);
-
-  const payload = {
-    fileName: file.name,
-    fileBase64,
-    importType: "budget"
-  };
-
-  setImportStatus("Importing budget workbook...");
-  setImportDebug({
-    route: "/api/import-excel",
-    importType: payload.importType,
-    fileName: payload.fileName
-  });
-
-  const result = await apiPost("/api/import-excel", payload);
-
-  setImportStatus(result.message || "Budget import completed");
-  setImportDebug(result);
+  throw new Error("Standalone budget import is retired. Use the main workbook import.");
 }
 
 (async function init() {
