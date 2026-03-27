@@ -29,104 +29,149 @@
     <div id="mainContent">
       <header id="topbar">
         <div class="pageHeading">
+          <div class="eyebrow">UnityMSK Operations</div>
           <h1>UnityMSK Ops Dashboard</h1>
           <p class="pageSubheading">
             Weekly operating visibility across LAOSS, NES, SpineOne, and MRO.
           </p>
         </div>
-        <div id="userInfo">Loading...</div>
+
+        <div class="topbarMeta">
+          <div class="topbarPill">
+            <span class="pillLabel">Signed in as</span>
+            <span id="userInfo">Loading...</span>
+          </div>
+        </div>
       </header>
 
       <main>
         <section id="dashboardView">
-          <div class="panel heroPanel">
-            <div class="sectionHeader compact">
-              <h3>Dashboard</h3>
-              <p>Multi-entity performance view with period and comparison controls.</p>
+          <div class="panel heroPanel dashboardHeroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Performance Command Center</div>
+                <h3>Dashboard</h3>
+                <p>Multi-entity performance view with period and comparison controls.</p>
+              </div>
+
+              <div class="heroHighlights">
+                <div class="heroHighlightCard">
+                  <span class="heroHighlightLabel">Mode</span>
+                  <strong>Actuals + Benchmarks</strong>
+                </div>
+                <div class="heroHighlightCard">
+                  <span class="heroHighlightLabel">Scope</span>
+                  <strong>Ops Leadership View</strong>
+                </div>
+              </div>
             </div>
 
-            <div class="fieldRow">
-              <div>
-                <label for="dashboardPeriodType">Period</label>
-                <select id="dashboardPeriodType">
-                  <option value="currentWeek" selected>Current Week</option>
-                  <option value="lastWeek">Last Week</option>
-                  <option value="mtd">Month to Date</option>
-                  <option value="lastMonth">Last Month</option>
-                  <option value="rolling4">Rolling 4 Weeks</option>
-                  <option value="custom">Custom Range</option>
-                </select>
+            <div class="filterShell">
+              <div class="fieldRow dashboardControlRow">
+                <div>
+                  <label for="dashboardPeriodType">Period</label>
+                  <select id="dashboardPeriodType">
+                    <option value="currentWeek" selected>Current Week</option>
+                    <option value="lastWeek">Last Week</option>
+                    <option value="mtd">Month to Date</option>
+                    <option value="lastMonth">Last Month</option>
+                    <option value="rolling4">Rolling 4 Weeks</option>
+                    <option value="custom">Custom Range</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="dashboardCompareAgainst">Compare Against</label>
+                  <select id="dashboardCompareAgainst">
+                    <option value="priorPeriod" selected>Prior Period</option>
+                    <option value="budget">Budget</option>
+                    <option value="target">Target</option>
+                    <option value="forecast">Forecast</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="dashboardEntityScope">Entity Scope</label>
+                  <select id="dashboardEntityScope">
+                    <option value="ALL" selected>All Entities</option>
+                    <option value="LAOSS">LAOSS</option>
+                    <option value="NES">NES</option>
+                    <option value="SpineOne">SpineOne</option>
+                    <option value="MRO">MRO</option>
+                  </select>
+                </div>
+
+                <div id="dashboardWeekWrap">
+                  <label for="dashboardWeekEnding">Anchor Week Ending</label>
+                  <input type="date" id="dashboardWeekEnding" />
+                </div>
+
+                <div id="dashboardCustomStartWrap" style="display:none;">
+                  <label for="dashboardCustomStart">Custom Start</label>
+                  <input type="date" id="dashboardCustomStart" />
+                </div>
+
+                <div id="dashboardCustomEndWrap" style="display:none;">
+                  <label for="dashboardCustomEnd">Custom End</label>
+                  <input type="date" id="dashboardCustomEnd" />
+                </div>
+
+                <div class="buttonAlignBottom dashboardButtonWrap">
+                  <button id="loadDashboardBtn" type="button">Load Dashboard</button>
+                </div>
               </div>
 
-              <div>
-                <label for="dashboardCompareAgainst">Compare Against</label>
-                <select id="dashboardCompareAgainst">
-                  <option value="priorPeriod" selected>Prior Period</option>
-                  <option value="budget">Budget</option>
-                  <option value="target">Target</option>
-                  <option value="forecast">Forecast</option>
-                </select>
-              </div>
-
-              <div>
-                <label for="dashboardEntityScope">Entity Scope</label>
-                <select id="dashboardEntityScope">
-                  <option value="ALL" selected>All Entities</option>
-                  <option value="LAOSS">LAOSS</option>
-                  <option value="NES">NES</option>
-                  <option value="SpineOne">SpineOne</option>
-                  <option value="MRO">MRO</option>
-                </select>
-              </div>
-
-              <div id="dashboardWeekWrap">
-                <label for="dashboardWeekEnding">Anchor Week Ending</label>
-                <input type="date" id="dashboardWeekEnding" />
-              </div>
-
-              <div id="dashboardCustomStartWrap" style="display:none;">
-                <label for="dashboardCustomStart">Custom Start</label>
-                <input type="date" id="dashboardCustomStart" />
-              </div>
-
-              <div id="dashboardCustomEndWrap" style="display:none;">
-                <label for="dashboardCustomEnd">Custom End</label>
-                <input type="date" id="dashboardCustomEnd" />
-              </div>
-
-              <div class="buttonAlignBottom">
-                <button id="loadDashboardBtn" type="button">Load Dashboard</button>
+              <div class="quickPresetBar">
+                <span class="quickPresetLabel">Quick presets</span>
+                <div class="quickPresetPills">
+                  <span class="quickPresetPill">Current Week</span>
+                  <span class="quickPresetPill">Last Week</span>
+                  <span class="quickPresetPill">MTD</span>
+                  <span class="quickPresetPill">Rolling 4</span>
+                </div>
               </div>
             </div>
 
             <div id="dashboardSummaryText" class="subtleBanner"></div>
             <div id="dashboardBenchmarkNotice"></div>
 
+            <div class="dashboardSectionTitleRow">
+              <div>
+                <div class="sectionEyebrow">Executive Snapshot</div>
+                <h4 class="sectionMiniTitle">Top-Line Metrics</h4>
+              </div>
+            </div>
+
             <div id="dashboardCards" class="cardGrid"></div>
           </div>
 
           <div class="panel sectionPanel">
             <div class="sectionHeader">
+              <div class="sectionEyebrow">Operating Units</div>
               <h3>Entity Performance</h3>
               <p>How each operating unit is performing in the selected period.</p>
             </div>
             <div id="dashboardEntities"></div>
           </div>
 
-          <div class="panel sectionPanel">
-            <div class="sectionHeader">
-              <h3>Alerts</h3>
-              <p>Items that need attention based on current thresholds.</p>
+          <div class="dashboardTwoUp">
+            <div class="panel sectionPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Watchlist</div>
+                <h3>Alerts</h3>
+                <p>Items that need attention based on current thresholds.</p>
+              </div>
+              <div id="dashboardAlerts"></div>
             </div>
-            <div id="dashboardAlerts"></div>
-          </div>
 
-          <div class="panel sectionPanel">
-            <div class="sectionHeader">
-              <h3>Entity Snapshot</h3>
-              <p>Quick tabular view of actuals for the selected scope.</p>
+            <div class="panel sectionPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Detail View</div>
+                <h3>Entity Snapshot</h3>
+                <p>Quick tabular view of actuals for the selected scope.</p>
+              </div>
+              <div id="dashboardSnapshot"></div>
             </div>
-            <div id="dashboardSnapshot"></div>
           </div>
 
           <details class="debugPanel">
@@ -138,6 +183,7 @@
         <section id="entryView" style="display:none;">
           <div class="panel">
             <div class="sectionHeader">
+              <div class="sectionEyebrow">Weekly Capture</div>
               <h3>Weekly Entry</h3>
               <p>Update weekly operational metrics for the selected entity.</p>
             </div>
@@ -176,6 +222,7 @@
         <section id="executiveView" style="display:none;">
           <div class="panel">
             <div class="sectionHeader">
+              <div class="sectionEyebrow">Leadership Rollup</div>
               <h3>Executive Summary</h3>
               <p>Roll-up of approved regional performance for the selected week.</p>
             </div>
@@ -195,6 +242,7 @@
 
             <div class="panel innerPanel">
               <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Approved Data</div>
                 <h3>Approved Regions</h3>
               </div>
               <div id="executiveRegions"></div>
@@ -210,6 +258,7 @@
         <section id="trendsView" style="display:none;">
           <div class="panel">
             <div class="sectionHeader">
+              <div class="sectionEyebrow">History + Movement</div>
               <h3>Trends</h3>
               <p>Review historical movement and manage overrides when needed.</p>
             </div>
@@ -260,6 +309,7 @@
 
             <div class="panel innerPanel">
               <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Historical Detail</div>
                 <h3>Trend History</h3>
               </div>
               <div id="trendsTableWrap"></div>
@@ -275,12 +325,14 @@
         <section id="importView" style="display:none;">
           <div class="panel">
             <div class="sectionHeader">
+              <div class="sectionEyebrow">Admin Tools</div>
               <h3>Admin Workbook Import</h3>
               <p>Upload workbooks to backfill historical weekly data and benchmark budget data into the dashboard.</p>
             </div>
 
             <div class="panel innerPanel">
               <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Primary Pipeline</div>
                 <h3>Historical Weekly Import</h3>
               </div>
 
@@ -298,6 +350,7 @@
 
             <div class="panel innerPanel">
               <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Retired Path</div>
                 <h3>Budget Import</h3>
               </div>
 
