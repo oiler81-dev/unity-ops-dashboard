@@ -1,692 +1,2277 @@
-import {
-  safeApiGet,
-  apiPost,
-  getDefaultWeekEnding,
-  formatDate,
-  handleFatalError,
-  collectRegionFormValues,
-  collectSharedFormValues,
-  renderKpiCards
-} from "./helpers.js";
+const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
-const state = {
-  authenticated: false,
-  userDetails: "",
-  role: "guest",
-  entity: "None",
-  isAdmin: false,
-  weekEnding: getDefaultWeekEnding(),
-  currentRoute: "dashboard",
-  currentRegion: "LAOSS",
-  currentSharedPage: "PT"
+const ENTITY_BRANDING = {
+  LAOSS: {
+    label: "LAOSS",
+    fullName: "Los Angeles Orthopedic Surgery Specialists",
+    logo: "./assets/logos/laoss.png",
+    accent: "#F28C28"
+  },
+  NES: {
+    label: "NES",
+    fullName: "Northwest Extremity Specialists",
+    logo: "./assets/logos/nes.png",
+    accent: "#2E5B88"
+  },
+  SpineOne: {
+    label: "SpineOne",
+    fullName: "SpineOne",
+    logo: "./assets/logos/spineone.png",
+    accent: "#5A6F95"
+  },
+  MRO: {
+    label: "MRO",
+    fullName: "Midland & Riverside Orthopedics",
+    logo: "./assets/logos/mro.png",
+    accent: "#6B7E99"
+  }
 };
 
-const $ = (id) => document.getElementById(id);
+let currentUser = null;
+let currentWeekData = null;
 
-function setText(id, value) {
-  const el = $(id);
-  if (el) el.textContent = value;
-}
+async function parseApiResponse(res) {
+  const text = await res.text();
+  let data = null;
 
-function show(el) {
-  if (el) el.style.display = "";
-}
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
 
-function hide(el) {
-  if (el) el.style.display = "none";
-}
+  if (!res.ok) {
+    const message =
+      data?.details ||
+      data?.error ||
+      text ||
+      `Request failed with status ${res.status}`;
 
-function currentWeekEnding() {
-  return $("weekEndingSelect")?.value || state.weekEnding || getDefaultWeekEnding();
-}
+    throw new Error(message);
+  }
 
-function isAdmin() {
-  return state.isAdmin === true || state.role === "admin";
-}
-
-function getSignInEl() {
-  return $("signInButton");
-}
-
-function getSignOutEl() {
-  return $("signOutButton");
-}
-
-function getNavContainer() {
-  return $("dashboardNav");
-}
-
-function setSignedInUserText(value) {
-  setText("signedInUserText", value);
-}
-
-function setAssignedEntityText(value) {
-  setText("assignedEntityText", value);
-}
-
-function setRoleText(value) {
-  setText("roleText", value);
-}
-
-function setLoadingHeader() {
-  setSignedInUserText("Loading...");
-  setAssignedEntityText("Loading...");
-  setRoleText("Loading...");
-}
-
-function setViewHeader(title, subtitle) {
-  setText("dashboardTitle", title);
-  setText("dashboardSubtitle", subtitle);
-}
-
-function setStatusPanelText(value) {
-  setText("dashboardStatusPanel", value);
-}
-
-function unique(values) {
-  return Array.from(new Set((Array.isArray(values) ? values : []).filter(Boolean)));
-}
-
-function normalizeApiMe(result) {
-  if (!result || !result.authenticated) return null;
+  if (data !== null) {
+    return data;
+  }
 
   return {
-    authenticated: !!result.authenticated,
-    userDetails: result.userDetails || "",
-    roles: unique(result.roles),
-    entity: result.entity || "",
-    isAdmin: !!result.isAdmin
+    ok: true,
+    raw: text
   };
 }
 
-async function resolveAuth() {
-  setLoadingHeader();
-
-  const me = normalizeApiMe(await safeApiGet("/api/me", null));
-
-  if (!me || !me.authenticated) {
-    state.authenticated = false;
-    state.userDetails = "";
-    state.role = "guest";
-    state.entity = "None";
-    state.isAdmin = false;
-    state.currentRegion = "LAOSS";
-    syncAuthUi();
-    return;
-  }
-
-  state.authenticated = true;
-  state.userDetails = me.userDetails || "Unknown User";
-  state.isAdmin = !!me.isAdmin;
-  state.role = state.isAdmin ? "admin" : "user";
-  state.entity = state.isAdmin ? "Admin" : (me.entity || "LAOSS");
-  state.currentRegion = state.isAdmin ? "LAOSS" : (me.entity || "LAOSS");
-
-  syncAuthUi();
-}
-
-function syncAuthUi() {
-  const signInEl = getSignInEl();
-  const signOutEl = getSignOutEl();
-
-  if (state.authenticated) {
-    setSignedInUserText(state.userDetails);
-    setAssignedEntityText(state.entity);
-    setRoleText(state.role);
-
-    hide(signInEl);
-    show(signOutEl);
-  } else {
-    setSignedInUserText("Not signed in");
-    setAssignedEntityText("None");
-    setRoleText("guest");
-
-    show(signInEl);
-    hide(signOutEl);
-  }
-
-  ensureAdminImportLink();
-}
-
-function initWeekSelector() {
-  const select = $("weekEndingSelect");
-  if (!select) return;
-
-  const today = new Date();
-  const weeks = [];
-
-  for (let i = 0; i < 20; i += 1) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - today.getDay() - i * 7);
-    const iso = d.toISOString().split("T")[0];
-    weeks.push(iso);
-  }
-
-  select.innerHTML = weeks
-    .map((w) => `<option value="${w}">${formatDate(w)}</option>`)
-    .join("");
-
-  select.value = state.weekEnding;
-
-  select.addEventListener("change", async () => {
-    state.weekEnding = select.value;
-    setText("sidebarWeekEndingText", formatDate(select.value));
-    await loadCurrentView();
+async function apiGet(url) {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "application/json" }
   });
-
-  setText("sidebarWeekEndingText", formatDate(select.value));
+  return parseApiResponse(res);
 }
 
-function ensureAdminImportLink() {
-  const existing = $("adminImportNavItem");
-
-  if (!isAdmin()) {
-    if (existing) existing.remove();
-    return;
-  }
-
-  const nav = getNavContainer();
-  if (!nav || existing) return;
-
-  const wrapper = document.createElement("div");
-  wrapper.id = "adminImportNavItem";
-  wrapper.className = "sidebar-admin-link-wrap";
-  wrapper.innerHTML = `<a class="nav-link" href="./admin-import.html">Admin Import</a>`;
-  nav.appendChild(wrapper);
-}
-
-function activateNav(link) {
-  document.querySelectorAll(".nav-link").forEach((el) => {
-    el.classList.remove("active");
+async function apiPost(url, payload) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify(payload)
   });
-  if (link) link.classList.add("active");
+  return parseApiResponse(res);
 }
 
-function formatWhole(value) {
-  return Math.round(Number(value || 0)).toLocaleString();
+function byId(id) {
+  return document.getElementById(id);
 }
 
-function formatDecimal(value, digits = 1) {
-  return Number(value || 0).toFixed(digits);
-}
-
-function formatPercent(value, digits = 1) {
-  return `${Number(value || 0).toFixed(digits)}%`;
-}
-
-function badgeFromStatus(status) {
-  const s = String(status || "").toLowerCase();
-  if (s === "up" || s === "improved") return "green";
-  if (s === "down" || s === "worse") return "red";
-  return "yellow";
-}
-
-function renderCardsFromItems(items) {
-  renderKpiCards(
-    items.map((item) => ({
-      label: item.label,
-      value: item.value,
-      meta: item.meta || "",
-      status: item.status || "",
-      statusColor: item.statusColor || badgeFromStatus(item.status)
-    }))
-  );
-}
-
-function inferTrend(current, previous, betterDirection = "up") {
-  const c = Number(current || 0);
-  const p = Number(previous || 0);
-  const diff = c - p;
-
-  if (betterDirection === "down") {
-    if (diff < 0) return { status: "Improved", statusColor: "green", diff };
-    if (diff > 0) return { status: "Worse", statusColor: "red", diff };
-    return { status: "Flat", statusColor: "yellow", diff };
+function firstExistingId(ids) {
+  for (const id of ids) {
+    const el = byId(id);
+    if (el) return el;
   }
-
-  if (diff > 0) return { status: "Up", statusColor: "green", diff };
-  if (diff < 0) return { status: "Down", statusColor: "red", diff };
-  return { status: "Flat", statusColor: "yellow", diff };
+  return null;
 }
 
-function buildRegionCards(current, previous = {}) {
-  const visitTrend = inferTrend(current.totalVisits, previous.totalVisits, "up");
-  const vpdTrend = inferTrend(current.visitsPerDay, previous.visitsPerDay, "up");
-  const npTrend = inferTrend(current.npActual, previous.npActual, "up");
-  const surgTrend = inferTrend(current.surgeryActual, previous.surgeryActual, "up");
-  const callTrend = inferTrend(current.totalCalls, previous.totalCalls, "up");
-  const abdTrend = inferTrend(current.abandonmentRate, previous.abandonmentRate, "down");
-  const convTrend = inferTrend(current.answeredCallToNpConversion, previous.answeredCallToNpConversion, "up");
-  const cashTrend = inferTrend(current.cashActual, previous.cashActual, "up");
-
-  return [
-    {
-      label: "Total Visits",
-      value: formatWhole(current.totalVisits),
-      meta: `${visitTrend.diff >= 0 ? "+" : ""}${formatWhole(visitTrend.diff)} vs prior week`,
-      status: visitTrend.status,
-      statusColor: visitTrend.statusColor
-    },
-    {
-      label: "Visits / Day",
-      value: formatDecimal(current.visitsPerDay, 1),
-      meta: `${vpdTrend.diff >= 0 ? "+" : ""}${formatDecimal(vpdTrend.diff, 1)} vs prior week`,
-      status: vpdTrend.status,
-      statusColor: vpdTrend.statusColor
-    },
-    {
-      label: "New Patients",
-      value: formatWhole(current.npActual),
-      meta: `${npTrend.diff >= 0 ? "+" : ""}${formatWhole(npTrend.diff)} vs prior week`,
-      status: npTrend.status,
-      statusColor: npTrend.statusColor
-    },
-    {
-      label: "Surgical Cases",
-      value: formatWhole(current.surgeryActual),
-      meta: `${surgTrend.diff >= 0 ? "+" : ""}${formatWhole(surgTrend.diff)} vs prior week`,
-      status: surgTrend.status,
-      statusColor: surgTrend.statusColor
-    },
-    {
-      label: "Call Volume",
-      value: formatWhole(current.totalCalls),
-      meta: `${callTrend.diff >= 0 ? "+" : ""}${formatWhole(callTrend.diff)} vs prior week`,
-      status: callTrend.status,
-      statusColor: callTrend.statusColor
-    },
-    {
-      label: "Abandonment Rate",
-      value: formatPercent(current.abandonmentRate, 1),
-      meta: `${abdTrend.diff >= 0 ? "+" : ""}${formatDecimal(abdTrend.diff, 1)} pts vs prior week`,
-      status: abdTrend.status,
-      statusColor: abdTrend.statusColor
-    },
-    {
-      label: "Answered Call to NP %",
-      value: formatPercent(current.answeredCallToNpConversion, 1),
-      meta: `${convTrend.diff >= 0 ? "+" : ""}${formatDecimal(convTrend.diff, 1)} pts vs prior week`,
-      status: convTrend.status,
-      statusColor: convTrend.statusColor
-    },
-    {
-      label: "Cash Collected",
-      value: `$${formatWhole(current.cashActual)}`,
-      meta: `${cashTrend.diff >= 0 ? "+" : ""}$${formatWhole(cashTrend.diff)} vs prior week`,
-      status: cashTrend.status,
-      statusColor: cashTrend.statusColor
-    }
-  ];
+function setStatus(message, isError = false) {
+  const el = byId("statusMessage");
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = isError ? "#ff8a8a" : "#7CFC98";
 }
 
-function buildSharedCards(page, current, previous = {}) {
-  if (page === "PT") {
-    const visitTrend = inferTrend(current.ptScheduledVisits, previous.ptScheduledVisits, "up");
-    const cancelTrend = inferTrend(current.ptCancellations, previous.ptCancellations, "down");
-    const noShowTrend = inferTrend(current.ptNoShows, previous.ptNoShows, "down");
-    const rescheduleTrend = inferTrend(current.ptReschedules, previous.ptReschedules, "down");
-    const unitsTrend = inferTrend(current.totalUnitsBilled, previous.totalUnitsBilled, "up");
+function setDebug(data) {
+  const el = byId("debugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
 
-    return [
-      {
-        label: "PT Scheduled Visits",
-        value: formatWhole(current.ptScheduledVisits),
-        meta: `${visitTrend.diff >= 0 ? "+" : ""}${formatWhole(visitTrend.diff)} vs prior week`,
-        status: visitTrend.status,
-        statusColor: visitTrend.statusColor
-      },
-      {
-        label: "PT Cancellations",
-        value: formatWhole(current.ptCancellations),
-        meta: `${cancelTrend.diff >= 0 ? "+" : ""}${formatWhole(cancelTrend.diff)} vs prior week`,
-        status: cancelTrend.status,
-        statusColor: cancelTrend.statusColor
-      },
-      {
-        label: "PT No Shows",
-        value: formatWhole(current.ptNoShows),
-        meta: `${noShowTrend.diff >= 0 ? "+" : ""}${formatWhole(noShowTrend.diff)} vs prior week`,
-        status: noShowTrend.status,
-        statusColor: noShowTrend.statusColor
-      },
-      {
-        label: "PT Reschedules",
-        value: formatWhole(current.ptReschedules),
-        meta: `${rescheduleTrend.diff >= 0 ? "+" : ""}${formatWhole(rescheduleTrend.diff)} vs prior week`,
-        status: rescheduleTrend.status,
-        statusColor: rescheduleTrend.statusColor
-      },
-      {
-        label: "Units Billed",
-        value: formatWhole(current.totalUnitsBilled),
-        meta: `${unitsTrend.diff >= 0 ? "+" : ""}${formatWhole(unitsTrend.diff)} vs prior week`,
-        status: unitsTrend.status,
-        statusColor: unitsTrend.statusColor
-      }
-    ];
-  }
+function setExecutiveDebug(data) {
+  const el = byId("executiveDebugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
 
-  if (page === "CXNS") {
-    const scheduledTrend = inferTrend(current.scheduledAppts, previous.scheduledAppts, "up");
-    const cancelTrend = inferTrend(current.cancellations, previous.cancellations, "down");
-    const noShowTrend = inferTrend(current.noShows, previous.noShows, "down");
-    const rescheduleTrend = inferTrend(current.reschedules, previous.reschedules, "down");
+function setTrendsDebug(data) {
+  const el = byId("trendsDebugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
 
-    return [
-      {
-        label: "CXNS Scheduled",
-        value: formatWhole(current.scheduledAppts),
-        meta: `${scheduledTrend.diff >= 0 ? "+" : ""}${formatWhole(scheduledTrend.diff)} vs prior week`,
-        status: scheduledTrend.status,
-        statusColor: scheduledTrend.statusColor
-      },
-      {
-        label: "CXNS Cancellations",
-        value: formatWhole(current.cancellations),
-        meta: `${cancelTrend.diff >= 0 ? "+" : ""}${formatWhole(cancelTrend.diff)} vs prior week`,
-        status: cancelTrend.status,
-        statusColor: cancelTrend.statusColor
-      },
-      {
-        label: "CXNS No Shows",
-        value: formatWhole(current.noShows),
-        meta: `${noShowTrend.diff >= 0 ? "+" : ""}${formatWhole(noShowTrend.diff)} vs prior week`,
-        status: noShowTrend.status,
-        statusColor: noShowTrend.statusColor
-      },
-      {
-        label: "CXNS Reschedules",
-        value: formatWhole(current.reschedules),
-        meta: `${rescheduleTrend.diff >= 0 ? "+" : ""}${formatWhole(rescheduleTrend.diff)} vs prior week`,
-        status: rescheduleTrend.status,
-        statusColor: rescheduleTrend.statusColor
-      }
-    ];
-  }
+function setImportStatus(message, isError = false) {
+  const el =
+    firstExistingId([
+      "importStatusMessage",
+      "adminImportStatusMessage",
+      "budgetImportStatusMessage"
+    ]);
 
-  return [
-    {
-      label: page,
-      value: "Coming Soon",
-      meta: "This page is not fully wired yet.",
-      status: "Flat",
-      statusColor: "yellow"
-    }
-  ];
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = isError ? "#ff8a8a" : "#7CFC98";
+}
+
+function setImportDebug(data) {
+  const el =
+    firstExistingId([
+      "importDebugOutput",
+      "adminImportDebugOutput"
+    ]);
+
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function setDashboardDebug(data) {
+  const el = byId("dashboardDebugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function getDefaultWeekEnding() {
+  const d = new Date();
+  const diff = (5 - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(isoDate, days) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function getDateWeeksAgo(weeksAgo, anchor = null) {
+  const d = anchor ? new Date(`${anchor}T12:00:00Z`) : new Date();
+  d.setUTCDate(d.getUTCDate() - weeksAgo * 7);
+  return d.toISOString().slice(0, 10);
 }
 
 function getPreviousWeekEnding(weekEnding) {
-  const d = new Date(`${weekEnding}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 7);
-  return d.toISOString().split("T")[0];
+  return addDays(weekEnding, -7);
 }
 
-async function loadDashboard() {
-  const week = currentWeekEnding();
-
-  setViewHeader(
-    "Executive Summary",
-    "Weekly companywide KPI overview with trends, target comparisons, and submission visibility."
-  );
-  setStatusPanelText("Loading dashboard...");
-
-  const result = await safeApiGet(
-    `/api/dashboard?weekEnding=${encodeURIComponent(week)}`,
-    { kpis: [] }
-  );
-
-  renderKpiCards(Array.isArray(result.kpis) ? result.kpis : []);
-  setStatusPanelText("Executive dashboard loaded.");
+function normalizeNumber(value) {
+  if (value === null || value === undefined || value === "") return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
-async function loadRegionPage(entity) {
-  const week = currentWeekEnding();
-  const previousWeek = getPreviousWeekEnding(week);
-
-  setViewHeader(
-    `${entity} Weekly View`,
-    `Weekly operational performance for ${entity}.`
-  );
-  setStatusPanelText(`Loading ${entity} weekly data...`);
-
-  const current = await safeApiGet(
-    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(week)}`,
-    { values: {} }
-  );
-
-  const previous = await safeApiGet(
-    `/api/weekly?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(previousWeek)}`,
-    { values: {} }
-  );
-
-  const cards = buildRegionCards(current.values || {}, previous.values || {});
-  renderCardsFromItems(cards);
-  setStatusPanelText(`${entity} weekly data loaded.`);
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
-async function loadSharedPage(page) {
-  const week = currentWeekEnding();
-  const previousWeek = getPreviousWeekEnding(week);
+function formatWhole(value) {
+  return Math.round(normalizeNumber(value)).toLocaleString();
+}
 
-  setViewHeader(
-    `${page} Weekly View`,
-    `Weekly metrics for ${page}.`
-  );
-  setStatusPanelText(`Loading ${page} data...`);
+function formatPercent(value, digits = 1) {
+  return `${normalizeNumber(value).toFixed(digits)}%`;
+}
 
-  if (page === "Capacity" || page === "Productivity Builder") {
-    renderCardsFromItems([
-      {
-        label: page,
-        value: "Coming Soon",
-        meta: "This section is not fully wired yet.",
-        status: "Flat",
-        statusColor: "yellow"
-      }
-    ]);
-    setStatusPanelText(`${page} is not fully wired yet.`);
-    return;
+function formatVariance(actual, target) {
+  const diff = normalizeNumber(actual) - normalizeNumber(target);
+  return `${diff >= 0 ? "+" : ""}${Math.round(diff).toLocaleString()}`;
+}
+
+function formatVariancePct(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return "n/a";
+  const pct = ((normalizeNumber(actual) - t) / t) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+function formatToGoal(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return "n/a";
+  return `${((normalizeNumber(actual) / t) * 100).toFixed(1)}%`;
+}
+
+function getGoalStatus(actual, target, inverse = false) {
+  const a = normalizeNumber(actual);
+  const t = normalizeNumber(target);
+
+  if (!t && !inverse) return "neutral";
+  if (inverse) {
+    if (a <= t) return "good";
+    if (a <= t * 1.15) return "warning";
+    return "bad";
   }
 
-  const current = await safeApiGet(
-    `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(week)}`,
-    { values: {} }
-  );
-
-  const previous = await safeApiGet(
-    `/api/shared-data?page=${encodeURIComponent(page)}&weekEnding=${encodeURIComponent(previousWeek)}`,
-    { values: {} }
-  );
-
-  const cards = buildSharedCards(page, current.values || {}, previous.values || {});
-  renderCardsFromItems(cards);
-  setStatusPanelText(`${page} weekly data loaded.`);
+  const pct = t ? a / t : 0;
+  if (pct >= 1) return "good";
+  if (pct >= 0.92) return "warning";
+  return "bad";
 }
 
-async function loadCurrentView() {
-  try {
-    if (state.currentRoute === "region") {
-      await loadRegionPage(state.currentRegion);
-      return;
-    }
+function getMetricChipClass(status) {
+  if (status === "good") return "metricChip metricChipGood";
+  if (status === "warning") return "metricChip metricChipWarning";
+  if (status === "bad") return "metricChip metricChipBad";
+  return "metricChip";
+}
 
-    if (state.currentRoute === "shared") {
-      await loadSharedPage(state.currentSharedPage);
-      return;
+function getPerformanceSummary(row, compareAgainst) {
+  if (compareAgainst !== "budget") {
+    const abandoned = normalizeNumber(row.abandonedCallRate);
+    if (abandoned >= 10) return { text: "Call access needs attention", tone: "bad" };
+    if (normalizeNumber(row.visitVolume) > 0 && normalizeNumber(row.newPatients) > 0) {
+      return { text: "Operating normally", tone: "good" };
     }
+    return { text: "Review actuals", tone: "warning" };
+  }
 
-    await loadDashboard();
-  } catch (err) {
-    handleFatalError(err);
+  const visitDelta = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+  const npDelta = normalizeNumber(row.newPatients) - normalizeNumber(row.newPatientsBudget);
+
+  if (visitDelta >= 0 && npDelta >= 0) {
+    return { text: "Above budget on visits and NP", tone: "good" };
+  }
+
+  if (visitDelta < 0 && npDelta < 0) {
+    return { text: "Below budget on visits and NP", tone: "bad" };
+  }
+
+  if (visitDelta >= 0 && npDelta < 0) {
+    return { text: "Visits strong, NP below budget", tone: "warning" };
+  }
+
+  if (visitDelta < 0 && npDelta >= 0) {
+    return { text: "NP strong, visits below budget", tone: "warning" };
+  }
+
+  return { text: "Mixed performance", tone: "warning" };
+}
+
+function progressPercent(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return 0;
+  return clamp((normalizeNumber(actual) / t) * 100, 0, 140);
+}
+
+function accessPercentFromAbandoned(rate, threshold = 10) {
+  const r = normalizeNumber(rate);
+  const pct = 100 - (r / threshold) * 100;
+  return clamp(pct, 0, 100);
+}
+
+function getTrendClass(current, comparison) {
+  const diff = normalizeNumber(current) - normalizeNumber(comparison);
+  if (diff > 0) return "kpi-positive";
+  if (diff < 0) return "kpi-negative";
+  return "kpi-neutral";
+}
+
+function renderUser(userData) {
+  const label = `${userData.user.userDetails} (${userData.access.role})`;
+  const el = byId("userInfo");
+  if (el) {
+    el.innerText = label;
   }
 }
 
-function routeFromLink(link) {
-  const explicit = link.dataset.route;
-  if (explicit) return explicit;
+function setupEntityDropdown(userData) {
+  const select = byId("entitySelect");
+  if (!select) return;
 
-  const text = (link.textContent || "").trim().toLowerCase();
-  if (text.includes("executive")) return "dashboard";
-  if (["laoss", "nes", "spineone", "mro"].includes(text)) return "region";
-  if (["pt", "cxns", "capacity", "productivity builder"].includes(text)) return "shared";
-  return "dashboard";
+  select.innerHTML = "";
+
+  if (userData.access.isAdmin) {
+    ENTITIES.forEach((entity) => {
+      const option = document.createElement("option");
+      option.value = entity;
+      option.textContent = entity;
+      select.appendChild(option);
+    });
+  } else {
+    const option = document.createElement("option");
+    option.value = userData.access.entity;
+    option.textContent = userData.access.entity;
+    select.appendChild(option);
+    select.disabled = true;
+  }
 }
 
-function initNavigation() {
-  const nav = getNavContainer();
-  if (!nav) return;
+function setupTrendsEntityDropdown(userData) {
+  const select = byId("trendsEntitySelect");
+  if (!select) return;
 
-  nav.addEventListener("click", async (e) => {
-    const link = e.target.closest(".nav-link");
-    if (!link) return;
+  select.innerHTML = "";
 
-    const href = link.getAttribute("href") || "";
-    if (href.includes("admin-import.html")) return;
+  if (userData.access.isAdmin) {
+    ENTITIES.forEach((entity) => {
+      const option = document.createElement("option");
+      option.value = entity;
+      option.textContent = entity;
+      select.appendChild(option);
+    });
+  } else {
+    const option = document.createElement("option");
+    option.value = userData.access.entity;
+    option.textContent = userData.access.entity;
+    select.appendChild(option);
+    select.disabled = true;
+  }
+}
 
-    e.preventDefault();
+function getSelectedEntity() {
+  const el = byId("entitySelect");
+  return el ? el.value : "LAOSS";
+}
 
-    const route = routeFromLink(link);
-    state.currentRoute = route;
+function getSelectedTrendsEntity() {
+  const el = byId("trendsEntitySelect");
+  return el ? el.value : "LAOSS";
+}
 
-    if (route === "region") {
-      state.currentRegion = link.dataset.entity || state.currentRegion;
-    }
+function renderForm() {
+  const fields = [
+    { key: "visitVolume", label: "Visit Volume" },
+    { key: "callVolume", label: "Call Volume" },
+    { key: "newPatients", label: "New Patients" },
+    { key: "noShowRate", label: "No Show Rate" },
+    { key: "cancellationRate", label: "Cancellation Rate" },
+    { key: "abandonedCallRate", label: "Abandoned Call Rate" }
+  ];
 
-    if (route === "shared") {
-      state.currentSharedPage = link.dataset.page || state.currentSharedPage;
-    }
+  const container = byId("kpiForm");
+  if (!container) return;
 
-    activateNav(link);
-    await loadCurrentView();
+  container.innerHTML = "";
+
+  fields.forEach((field) => {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <label for="${field.key}">${field.label}</label>
+      <input type="number" id="${field.key}" step="any" />
+    `;
+    container.appendChild(div);
   });
 }
 
-async function saveRegion() {
-  const payload = collectRegionFormValues();
+function mapWeeklyValuesToFormData(values) {
+  return {
+    visitVolume: values?.visitVolume ?? values?.totalVisits ?? "",
+    callVolume: values?.callVolume ?? values?.totalCalls ?? "",
+    newPatients: values?.newPatients ?? values?.npActual ?? "",
+    noShowRate: values?.noShowRate ?? "",
+    cancellationRate: values?.cancellationRate ?? "",
+    abandonedCallRate: values?.abandonedCallRate ?? values?.abandonmentRate ?? ""
+  };
+}
 
-  if (!payload.entity || payload.entity === "Loading..." || payload.entity === "None" || payload.entity === "Admin") {
-    payload.entity = state.currentRegion;
+function setFormValues(data) {
+  const mapped = mapWeeklyValuesToFormData(data || {});
+  const keys = [
+    "visitVolume",
+    "callVolume",
+    "newPatients",
+    "noShowRate",
+    "cancellationRate",
+    "abandonedCallRate"
+  ];
+
+  keys.forEach((key) => {
+    const input = byId(key);
+    if (!input) return;
+    input.value = mapped[key] !== null && mapped[key] !== undefined ? mapped[key] : "";
+  });
+}
+
+function getFormValues() {
+  return {
+    visitVolume: byId("visitVolume")?.value || "",
+    callVolume: byId("callVolume")?.value || "",
+    newPatients: byId("newPatients")?.value || "",
+    noShowRate: byId("noShowRate")?.value || "",
+    cancellationRate: byId("cancellationRate")?.value || "",
+    abandonedCallRate: byId("abandonedCallRate")?.value || ""
+  };
+}
+
+function updateButtonState() {
+  const saveBtn = byId("saveBtn");
+  const submitBtn = byId("submitBtn");
+  const approveBtn = byId("approveBtn");
+
+  if (!saveBtn || !submitBtn || !approveBtn) return;
+
+  const status = String(currentWeekData?.status || "draft").toLowerCase();
+  const isAdmin = !!currentUser?.access?.isAdmin;
+
+  saveBtn.disabled = status === "approved" && !isAdmin;
+  submitBtn.disabled = status === "submitted" || status === "approved";
+  approveBtn.disabled = !isAdmin || status !== "submitted";
+}
+
+function getBranding(entity) {
+  return ENTITY_BRANDING[entity] || {
+    label: entity,
+    fullName: entity,
+    logo: "",
+    accent: "#4b88c7"
+  };
+}
+
+function renderEntityBrand(containerId, entity) {
+  const container = byId(containerId);
+  if (!container) return;
+
+  if (!entity) {
+    container.innerHTML = "";
+    return;
   }
 
-  if (!payload.weekEnding) {
-    payload.weekEnding = currentWeekEnding();
-  }
+  const brand = getBranding(entity);
+  container.innerHTML = `
+    <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid #1d435b; border-radius:10px; background:#0a2233;">
+      <div style="width:110px; height:48px; background:#fff; border-radius:8px; padding:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+        <img src="${brand.logo}" alt="${brand.label}" style="max-width:100%; max-height:100%; object-fit:contain;" />
+      </div>
+      <div>
+        <div style="font-weight:bold; color:${brand.accent};">${brand.label}</div>
+        <div style="font-size:12px; opacity:0.9;">${brand.fullName}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMetricCards(containerId, items) {
+  const container = byId(containerId);
+  if (!container) return;
+
+  container.innerHTML = items.map((item) => `
+    <div class="summaryCard ${item.className || ""}">
+      <h3>${item.label}</h3>
+      <div class="value">${item.value}</div>
+      ${item.meta ? `<div style="margin-top:6px; font-size:12px; opacity:0.85; white-space:pre-line;">${item.meta}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+async function loadWeek() {
+  const weekEnding = byId("weekEnding")?.value || getDefaultWeekEnding();
+  const entity = getSelectedEntity();
+
+  renderEntityBrand("entryBrandWrap", entity);
+  setStatus("Loading...");
+
+  const result = await apiGet(
+    `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
+  );
+
+  currentWeekData = result;
+  setFormValues(result.values || result.data || {});
+  updateButtonState();
+
+  setStatus(`Loaded ${entity} for ${weekEnding} (${result.status || "draft"})`);
+  setDebug(result);
+}
+
+async function saveWeek() {
+  const payload = {
+    weekEnding: byId("weekEnding")?.value || "",
+    entity: getSelectedEntity(),
+    data: getFormValues()
+  };
+
+  setStatus("Saving...");
+  setDebug(payload);
 
   const result = await apiPost("/api/weekly-save", payload);
 
-  if (!result || result.error) {
-    alert("Save failed.");
+  setStatus(result.message || "Saved successfully");
+  setDebug(result);
+
+  await loadWeek();
+}
+
+async function submitWeek() {
+  const payload = {
+    weekEnding: byId("weekEnding")?.value || "",
+    entity: getSelectedEntity()
+  };
+
+  setStatus("Submitting...");
+  setDebug(payload);
+
+  const result = await apiPost("/api/submit-week", payload);
+
+  setStatus(result.message || "Submitted successfully");
+  setDebug(result);
+
+  await loadWeek();
+}
+
+async function approveWeek() {
+  const payload = {
+    weekEnding: byId("weekEnding")?.value || "",
+    entity: getSelectedEntity()
+  };
+
+  setStatus("Approving...");
+  setDebug(payload);
+
+  const result = await apiPost("/api/approve-week", payload);
+
+  setStatus(result.message || "Approved successfully");
+  setDebug(result);
+
+  await loadWeek();
+}
+
+async function deleteWeek(entity, weekEnding) {
+  if (!confirm(`Delete ${entity} for ${weekEnding}? This cannot be undone.`)) {
     return;
   }
 
-  alert("Saved successfully.");
+  const result = await apiPost("/api/delete-week", { entity, weekEnding });
+  setTrendsDebug(result);
+  await loadTrends();
 }
 
-async function saveShared() {
-  const payload = collectSharedFormValues();
+async function openOverride(entity, weekEnding) {
+  showEntryView();
+  if (byId("entitySelect")) byId("entitySelect").value = entity;
+  if (byId("weekEnding")) byId("weekEnding").value = weekEnding;
+  await loadWeek();
+  setStatus(`Admin override mode: ${entity} ${weekEnding}`);
+}
 
-  if (!payload.page || payload.page === "Loading...") {
-    payload.page = state.currentSharedPage;
+function hideAllViews() {
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "importView"];
+  ids.forEach((id) => {
+    const el = byId(id);
+    if (el) el.style.display = "none";
+  });
+}
+
+function setActiveNav(buttonId) {
+  [
+    "navDashboardBtn",
+    "navEntryBtn",
+    "navExecutiveBtn",
+    "navTrendsBtn",
+    "navImportBtn"
+  ].forEach((id) => {
+    const btn = byId(id);
+    if (!btn) return;
+    btn.style.boxShadow = id === buttonId ? "inset 0 0 0 1px #f7c62f" : "";
+  });
+}
+
+function showDashboardView() {
+  hideAllViews();
+  const el = byId("dashboardView");
+  if (el) el.style.display = "";
+  setActiveNav("navDashboardBtn");
+}
+
+function showEntryView() {
+  hideAllViews();
+  const el = byId("entryView");
+  if (el) el.style.display = "";
+  setActiveNav("navEntryBtn");
+  renderEntityBrand("entryBrandWrap", getSelectedEntity());
+}
+
+function showExecutiveView() {
+  hideAllViews();
+  const el = byId("executiveView");
+  if (el) el.style.display = "";
+  setActiveNav("navExecutiveBtn");
+}
+
+function showTrendsView() {
+  hideAllViews();
+  const el = byId("trendsView");
+  if (el) el.style.display = "";
+  setActiveNav("navTrendsBtn");
+  syncTrendsRangeUi();
+  renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+}
+
+function showImportView() {
+  hideAllViews();
+  const el = byId("importView");
+  if (el) el.style.display = "";
+  setActiveNav("navImportBtn");
+}
+
+function buildWeekSets() {
+  const periodType = byId("dashboardPeriodType")?.value || "currentWeek";
+  const anchorWeek = byId("dashboardWeekEnding")?.value || getDefaultWeekEnding();
+  const customStart = byId("dashboardCustomStart")?.value || "";
+  const customEnd = byId("dashboardCustomEnd")?.value || "";
+
+  if (periodType === "currentWeek") {
+    return {
+      primaryWeeks: [anchorWeek],
+      comparisonWeeks: [getPreviousWeekEnding(anchorWeek)],
+      summary: `Viewing Current Week anchored to ${anchorWeek}`
+    };
   }
 
-  if (!payload.weekEnding) {
-    payload.weekEnding = currentWeekEnding();
+  if (periodType === "lastWeek") {
+    const primary = getPreviousWeekEnding(anchorWeek);
+    return {
+      primaryWeeks: [primary],
+      comparisonWeeks: [getPreviousWeekEnding(primary)],
+      summary: `Viewing Last Week anchored from ${anchorWeek}`
+    };
   }
 
-  const result = await apiPost("/api/shared-save", payload);
+  if (periodType === "rolling4") {
+    const primaryWeeks = [
+      addDays(anchorWeek, -21),
+      addDays(anchorWeek, -14),
+      addDays(anchorWeek, -7),
+      anchorWeek
+    ];
+    const comparisonWeeks = primaryWeeks.map((w) => addDays(w, -28));
+    return {
+      primaryWeeks,
+      comparisonWeeks,
+      summary: `Viewing Rolling 4 Weeks ending ${anchorWeek}`
+    };
+  }
 
-  if (!result || result.error) {
-    alert("Save failed.");
+  if (periodType === "mtd") {
+    const d = new Date(`${anchorWeek}T12:00:00Z`);
+    d.setUTCDate(1);
+
+    const primaryWeeks = [];
+    while (d.toISOString().slice(0, 10) <= anchorWeek) {
+      if (d.getUTCDay() === 5) primaryWeeks.push(d.toISOString().slice(0, 10));
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+
+    const comparisonWeeks = primaryWeeks.map((w) => addDays(w, -28));
+    return {
+      primaryWeeks,
+      comparisonWeeks,
+      summary: `Viewing Month to Date through ${anchorWeek}`
+    };
+  }
+
+  if (periodType === "lastMonth") {
+    const anchor = new Date(`${anchorWeek}T12:00:00Z`);
+    anchor.setUTCDate(1);
+    anchor.setUTCDate(anchor.getUTCDate() - 1);
+
+    const monthEnd = anchor.toISOString().slice(0, 10);
+    anchor.setUTCDate(1);
+    const monthStart = anchor.toISOString().slice(0, 10);
+
+    const primaryWeeks = [];
+    const walker = new Date(`${monthStart}T12:00:00Z`);
+    while (walker.toISOString().slice(0, 10) <= monthEnd) {
+      if (walker.getUTCDay() === 5) primaryWeeks.push(walker.toISOString().slice(0, 10));
+      walker.setUTCDate(walker.getUTCDate() + 1);
+    }
+
+    const comparisonWeeks = primaryWeeks.map((w) => addDays(w, -28));
+    return {
+      primaryWeeks,
+      comparisonWeeks,
+      summary: `Viewing Last Month (${monthStart} to ${monthEnd})`
+    };
+  }
+
+  if (periodType === "custom") {
+    const primaryWeeks = [];
+    const start = new Date(`${customStart}T12:00:00Z`);
+    const end = new Date(`${customEnd}T12:00:00Z`);
+
+    const walker = new Date(start);
+    while (walker <= end) {
+      if (walker.getUTCDay() === 5) primaryWeeks.push(walker.toISOString().slice(0, 10));
+      walker.setUTCDate(walker.getUTCDate() + 1);
+    }
+
+    const comparisonWeeks = primaryWeeks.map((w) => addDays(w, -28));
+    return {
+      primaryWeeks,
+      comparisonWeeks,
+      summary: `Viewing Custom Range (${customStart} to ${customEnd})`
+    };
+  }
+
+  return {
+    primaryWeeks: [anchorWeek],
+    comparisonWeeks: [getPreviousWeekEnding(anchorWeek)],
+    summary: `Viewing Current Week anchored to ${anchorWeek}`
+  };
+}
+
+function syncDashboardPeriodUi() {
+  const periodType = byId("dashboardPeriodType")?.value || "currentWeek";
+  const custom = periodType === "custom";
+
+  const weekWrap = byId("dashboardWeekWrap");
+  const startWrap = byId("dashboardCustomStartWrap");
+  const endWrap = byId("dashboardCustomEndWrap");
+
+  if (weekWrap) weekWrap.style.display = custom ? "none" : "";
+  if (startWrap) startWrap.style.display = custom ? "" : "none";
+  if (endWrap) endWrap.style.display = custom ? "" : "none";
+}
+
+async function fetchExecutiveSummaryByWeek(weekEnding) {
+  return apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
+}
+
+function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
+  const includeBudget = !!options.includeBudget;
+  const map = new Map();
+
+  summaries.forEach((summary) => {
+    (summary.regions || []).forEach((region) => {
+      if (entityScope !== "ALL" && region.entity !== entityScope) return;
+
+      if (!map.has(region.entity)) {
+        map.set(region.entity, {
+          entity: region.entity,
+          status: "approved",
+          visitVolume: 0,
+          callVolume: 0,
+          newPatients: 0,
+          noShowRateTotal: 0,
+          cancellationRateTotal: 0,
+          abandonedCallRateTotal: 0,
+          weekCount: 0,
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0
+        });
+      }
+
+      const row = map.get(region.entity);
+      row.visitVolume += normalizeNumber(region.visitVolume);
+      row.callVolume += normalizeNumber(region.callVolume);
+      row.newPatients += normalizeNumber(region.newPatients);
+      row.noShowRateTotal += normalizeNumber(region.noShowRate);
+      row.cancellationRateTotal += normalizeNumber(region.cancellationRate);
+      row.abandonedCallRateTotal += normalizeNumber(region.abandonedCallRate);
+      row.weekCount += 1;
+
+      if (includeBudget) {
+        row.visitVolumeBudget += normalizeNumber(region.budget?.visitVolumeBudget);
+        row.newPatientsBudget += normalizeNumber(region.budget?.newPatientsBudget);
+      }
+    });
+  });
+
+  const regions = Array.from(map.values()).map((row) => ({
+    entity: row.entity,
+    status: row.status,
+    visitVolume: row.visitVolume,
+    callVolume: row.callVolume,
+    newPatients: row.newPatients,
+    noShowRate: row.weekCount ? row.noShowRateTotal / row.weekCount : 0,
+    cancellationRate: row.weekCount ? row.cancellationRateTotal / row.weekCount : 0,
+    abandonedCallRate: row.weekCount ? row.abandonedCallRateTotal / row.weekCount : 0,
+    visitVolumeBudget: row.visitVolumeBudget,
+    newPatientsBudget: row.newPatientsBudget
+  }));
+
+  const totals = {
+    visitVolume: regions.reduce((sum, r) => sum + normalizeNumber(r.visitVolume), 0),
+    callVolume: regions.reduce((sum, r) => sum + normalizeNumber(r.callVolume), 0),
+    newPatients: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatients), 0)
+  };
+
+  const budgetTotals = includeBudget
+    ? {
+        visitVolumeBudget: regions.reduce((sum, r) => sum + normalizeNumber(r.visitVolumeBudget), 0),
+        newPatientsBudget: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatientsBudget), 0)
+      }
+    : {
+        visitVolumeBudget: 0,
+        newPatientsBudget: 0
+      };
+
+  return {
+    entityCount: regions.length,
+    totals,
+    budgetTotals,
+    regions
+  };
+}
+
+async function loadDashboardDataForWeeks(weeks, entityScope, options = {}) {
+  const validWeeks = (weeks || []).filter(Boolean);
+
+  if (!validWeeks.length) {
+    return {
+      entityCount: 0,
+      totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
+      budgetTotals: { visitVolumeBudget: 0, newPatientsBudget: 0 },
+      regions: []
+    };
+  }
+
+  const summaries = await Promise.all(validWeeks.map((week) => fetchExecutiveSummaryByWeek(week)));
+  return aggregateExecutiveSummaries(summaries, entityScope, options);
+}
+
+function averageMetric(rows, key) {
+  if (!rows || !rows.length) return 0;
+  return rows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0) / rows.length;
+}
+
+function getEntityMap(summary) {
+  const map = {};
+  (summary.regions || []).forEach((r) => {
+    map[r.entity] = r;
+  });
+  return map;
+}
+
+function buildVariancePct(current, comparison) {
+  const c = normalizeNumber(current);
+  const p = normalizeNumber(comparison);
+  if (!p) return null;
+  return ((c - p) / p) * 100;
+}
+
+function renderDashboardCards(current, comparison, compareAgainst) {
+  if (compareAgainst === "budget") {
+    const visitActual = normalizeNumber(current.totals?.visitVolume);
+    const visitBudget = normalizeNumber(current.budgetTotals?.visitVolumeBudget);
+    const npActual = normalizeNumber(current.totals?.newPatients);
+    const npBudget = normalizeNumber(current.budgetTotals?.newPatientsBudget);
+
+    const cards = [
+      {
+        label: "Visit Volume",
+        value: formatWhole(visitActual),
+        meta: `Budget ${formatWhole(visitBudget)}
+Variance ${formatVariance(visitActual, visitBudget)} (${formatVariancePct(visitActual, visitBudget)})
+To Goal ${formatToGoal(visitActual, visitBudget)}`,
+        className: getTrendClass(visitActual, visitBudget)
+      },
+      {
+        label: "Call Volume",
+        value: formatWhole(current.totals?.callVolume || 0),
+        meta: "Budget n/a\nVariance n/a\nTo Goal n/a",
+        className: "kpi-neutral"
+      },
+      {
+        label: "New Patients",
+        value: formatWhole(npActual),
+        meta: `Budget ${formatWhole(npBudget)}
+Variance ${formatVariance(npActual, npBudget)} (${formatVariancePct(npActual, npBudget)})
+To Goal ${formatToGoal(npActual, npBudget)}`,
+        className: getTrendClass(npActual, npBudget)
+      },
+      {
+        label: "Avg No Show %",
+        value: formatPercent(averageMetric(current.regions, "noShowRate")),
+        meta: "Actual only",
+        className: "kpi-neutral"
+      },
+      {
+        label: "Avg Cancel %",
+        value: formatPercent(averageMetric(current.regions, "cancellationRate")),
+        meta: "Actual only",
+        className: "kpi-neutral"
+      },
+      {
+        label: "Avg Abandoned %",
+        value: formatPercent(averageMetric(current.regions, "abandonedCallRate")),
+        meta: "Actual only",
+        className: "kpi-neutral"
+      }
+    ];
+
+    renderMetricCards("dashboardCards", cards);
     return;
   }
 
-  alert("Saved successfully.");
+  const visitCurrent = normalizeNumber(current.totals?.visitVolume);
+  const visitComparison = normalizeNumber(comparison.totals?.visitVolume);
+
+  const callCurrent = normalizeNumber(current.totals?.callVolume);
+  const callComparison = normalizeNumber(comparison.totals?.callVolume);
+
+  const npCurrent = normalizeNumber(current.totals?.newPatients);
+  const npComparison = normalizeNumber(comparison.totals?.newPatients);
+
+  const cards = [
+    {
+      label: "Approved Regions",
+      value: current.entityCount || 0,
+      meta: compareAgainst === "priorPeriod"
+        ? `Prev ${comparison.entityCount || 0}`
+        : `${compareAgainst.charAt(0).toUpperCase() + compareAgainst.slice(1)} comparison pending`,
+      className: getTrendClass(current.entityCount || 0, comparison.entityCount || 0)
+    },
+    {
+      label: "Visit Volume",
+      value: visitCurrent,
+      meta: compareAgainst === "priorPeriod"
+        ? `${visitCurrent - visitComparison >= 0 ? "+" : ""}${visitCurrent - visitComparison} vs prior period`
+        : `Actuals loaded • ${compareAgainst} pending`,
+      className: compareAgainst === "priorPeriod" ? getTrendClass(visitCurrent, visitComparison) : "kpi-neutral"
+    },
+    {
+      label: "Call Volume",
+      value: callCurrent,
+      meta: compareAgainst === "priorPeriod"
+        ? `${callCurrent - callComparison >= 0 ? "+" : ""}${callCurrent - callComparison} vs prior period`
+        : `Actuals loaded • ${compareAgainst} pending`,
+      className: compareAgainst === "priorPeriod" ? getTrendClass(callCurrent, callComparison) : "kpi-neutral"
+    },
+    {
+      label: "New Patients",
+      value: npCurrent,
+      meta: compareAgainst === "priorPeriod"
+        ? `${npCurrent - npComparison >= 0 ? "+" : ""}${npCurrent - npComparison} vs prior period`
+        : `Actuals loaded • ${compareAgainst} pending`,
+      className: compareAgainst === "priorPeriod" ? getTrendClass(npCurrent, npComparison) : "kpi-neutral"
+    },
+    {
+      label: "Avg No Show %",
+      value: `${averageMetric(current.regions, "noShowRate").toFixed(1)}%`,
+      meta: "Across approved entities",
+      className: "kpi-neutral"
+    },
+    {
+      label: "Avg Cancel %",
+      value: `${averageMetric(current.regions, "cancellationRate").toFixed(1)}%`,
+      meta: "Across approved entities",
+      className: "kpi-neutral"
+    },
+    {
+      label: "Avg Abandoned %",
+      value: `${averageMetric(current.regions, "abandonedCallRate").toFixed(1)}%`,
+      meta: "Across approved entities",
+      className: "kpi-neutral"
+    }
+  ];
+
+  renderMetricCards("dashboardCards", cards);
 }
 
-function initButtons() {
-  const saveBtn = $("saveButton");
-  const submitBtn = $("submitWeekButton");
+function renderDashboardEntities(current, comparison, compareAgainst, entityScope) {
+  const container = byId("dashboardEntities");
+  if (!container) return;
 
-  if (saveBtn) {
-    saveBtn.addEventListener("click", async () => {
-      if (state.currentRoute === "region") {
-        await saveRegion();
-        return;
-      }
+  const currentMap = getEntityMap(current);
+  const comparisonMap = getEntityMap(comparison);
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
 
-      if (state.currentRoute === "shared") {
-        await saveShared();
-        return;
-      }
+  container.innerHTML = `
+    <div class="entityCardGrid">
+      ${entities.map((entity) => {
+        const brand = getBranding(entity);
+        const row = currentMap[entity] || {
+          entity,
+          status: "missing",
+          visitVolume: 0,
+          callVolume: 0,
+          newPatients: 0,
+          noShowRate: 0,
+          cancellationRate: 0,
+          abandonedCallRate: 0,
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0
+        };
+        const prior = comparisonMap[entity] || {
+          visitVolume: 0,
+          callVolume: 0,
+          newPatients: 0,
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0
+        };
 
-      alert("Nothing to save on this page.");
-    });
-  }
+        const visitPct = buildVariancePct(row.visitVolume, prior.visitVolume);
+        const callPct = buildVariancePct(row.callVolume, prior.callVolume);
+        const npPct = buildVariancePct(row.newPatients, prior.newPatients);
 
-  if (submitBtn) {
-    submitBtn.addEventListener("click", async () => {
-      if (state.currentRoute === "region") {
-        await saveRegion();
-        alert("Week submitted.");
-        return;
-      }
+        const visitBudgetStatus = getGoalStatus(row.visitVolume, row.visitVolumeBudget);
+        const npBudgetStatus = getGoalStatus(row.newPatients, row.newPatientsBudget);
+        const callStatus = getGoalStatus(row.abandonedCallRate, 10, true);
+        const summary = getPerformanceSummary(row, compareAgainst);
 
-      if (state.currentRoute === "shared") {
-        await saveShared();
-        alert("Week submitted.");
-        return;
-      }
+        const visitGoalPct = progressPercent(row.visitVolume, row.visitVolumeBudget);
+        const npGoalPct = progressPercent(row.newPatients, row.newPatientsBudget);
+        const accessPct = accessPercentFromAbandoned(row.abandonedCallRate, 10);
 
-      alert("Nothing to submit on this page.");
-    });
-  }
+        const fmtPct = (value) => value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+
+        const comparisonBlock = compareAgainst === "budget"
+          ? `
+            <div class="entityBudgetGrid">
+              <div class="entityBudgetTile">
+                <div class="entityBudgetLabel">Visit Budget</div>
+                <div class="entityBudgetValue">${formatWhole(row.visitVolumeBudget)}</div>
+                <div class="${getMetricChipClass(visitBudgetStatus)}">
+                  ${visitBudgetStatus === "good" ? "Above Goal" : visitBudgetStatus === "warning" ? "Near Goal" : "Below Goal"}
+                </div>
+                <div class="entityBudgetMeta">Variance ${formatVariance(row.visitVolume, row.visitVolumeBudget)}</div>
+                <div class="entityBudgetMeta">To Goal ${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</div>
+                <div class="entityProgressWrap">
+                  <div class="entityProgressLabelRow">
+                    <span>Goal Progress</span>
+                    <strong>${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</strong>
+                  </div>
+                  <div class="entityProgressTrack">
+                    <div class="entityProgressBar ${visitBudgetStatus === "good" ? "entityProgressGood" : visitBudgetStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${visitGoalPct}%"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="entityBudgetTile">
+                <div class="entityBudgetLabel">NP Budget</div>
+                <div class="entityBudgetValue">${formatWhole(row.newPatientsBudget)}</div>
+                <div class="${getMetricChipClass(npBudgetStatus)}">
+                  ${npBudgetStatus === "good" ? "Above Goal" : npBudgetStatus === "warning" ? "Near Goal" : "Below Goal"}
+                </div>
+                <div class="entityBudgetMeta">Variance ${formatVariance(row.newPatients, row.newPatientsBudget)}</div>
+                <div class="entityBudgetMeta">To Goal ${formatToGoal(row.newPatients, row.newPatientsBudget)}</div>
+                <div class="entityProgressWrap">
+                  <div class="entityProgressLabelRow">
+                    <span>Goal Progress</span>
+                    <strong>${formatToGoal(row.newPatients, row.newPatientsBudget)}</strong>
+                  </div>
+                  <div class="entityProgressTrack">
+                    <div class="entityProgressBar ${npBudgetStatus === "good" ? "entityProgressGood" : npBudgetStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${npGoalPct}%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `
+          : `
+            <div class="entityCompareGrid">
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Visits ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
+                <strong>${compareAgainst === "priorPeriod" ? fmtPct(visitPct) : formatWhole(row.visitVolume)}</strong>
+              </div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Calls ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
+                <strong>${compareAgainst === "priorPeriod" ? fmtPct(callPct) : formatWhole(row.callVolume)}</strong>
+              </div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">NP ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
+                <strong>${compareAgainst === "priorPeriod" ? fmtPct(npPct) : formatWhole(row.newPatients)}</strong>
+              </div>
+            </div>
+          `;
+
+        return `
+          <div class="entityCard" style="border-top:4px solid ${brand.accent};">
+            <div class="entityCardHeader">
+              <div class="entityHeaderLeft">
+                <div class="entityStatusRow">
+                  <span class="entityStatusPill">${row.status || "missing"}</span>
+                  <span class="${summary.tone === "good" ? "metricChip metricChipGood" : summary.tone === "warning" ? "metricChip metricChipWarning" : "metricChip metricChipBad"}">${summary.text}</span>
+                </div>
+                <div class="entityTitle">${entity}</div>
+                <div class="entitySubtitle">${brand.fullName}</div>
+              </div>
+
+              <div class="entityLogoWrap">
+                <img src="${brand.logo}" alt="${brand.label}" class="entityLogo" />
+              </div>
+            </div>
+
+            <div class="entityTopMetrics">
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Visits</span>
+                <strong>${formatWhole(row.visitVolume)}</strong>
+              </div>
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">New Patients</span>
+                <strong>${formatWhole(row.newPatients)}</strong>
+              </div>
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Calls</span>
+                <strong>${formatWhole(row.callVolume)}</strong>
+              </div>
+            </div>
+
+            ${comparisonBlock}
+
+            <div class="entityHealthRow">
+              <div class="entityHealthItem">
+                <span>No Show</span>
+                <strong>${formatPercent(row.noShowRate)}</strong>
+              </div>
+              <div class="entityHealthItem">
+                <span>Cancel</span>
+                <strong>${formatPercent(row.cancellationRate)}</strong>
+              </div>
+              <div class="entityHealthItem">
+                <span>Abandoned</span>
+                <strong>${formatPercent(row.abandonedCallRate)}</strong>
+              </div>
+            </div>
+
+            <div class="entityAccessPanel">
+              <div class="entityProgressLabelRow">
+                <span>Access Health</span>
+                <strong>${Math.round(accessPct)}%</strong>
+              </div>
+              <div class="entityProgressTrack">
+                <div class="entityProgressBar ${callStatus === "good" ? "entityProgressGood" : callStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${accessPct}%"></div>
+              </div>
+            </div>
+
+            <details class="entityDetailDrawer">
+              <summary>More detail</summary>
+              <div class="entityDetailGrid">
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">Visit Variance</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.visitVolume, row.visitVolumeBudget) : compareAgainst === "priorPeriod" ? fmtPct(visitPct) : "n/a"}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">NP Variance</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.newPatients, row.newPatientsBudget) : compareAgainst === "priorPeriod" ? fmtPct(npPct) : "n/a"}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">Access Signal</div>
+                  <div class="${getMetricChipClass(callStatus)}">
+                    ${callStatus === "good" ? "Healthy" : callStatus === "warning" ? "Watch" : "Needs Action"}
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
-function initHeroButtons() {
-  const goToRegionBtn = $("goToMyRegionButton");
-  const executiveBtn = $("executiveSummaryButton");
+function renderDashboardAlerts(current, comparison, entityScope, compareAgainst) {
+  const container = byId("dashboardAlerts");
+  if (!container) return;
 
-  if (goToRegionBtn) {
-    goToRegionBtn.addEventListener("click", async () => {
-      state.currentRoute = "region";
-      state.currentRegion = isAdmin() ? "LAOSS" : (state.entity === "Admin" ? "LAOSS" : state.entity);
+  const currentMap = getEntityMap(current);
+  const comparisonMap = getEntityMap(comparison);
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
+  const alerts = [];
 
-      const regionLink = Array.from(document.querySelectorAll(".nav-link")).find((el) => {
-        const text = (el.textContent || "").trim();
-        return text === state.currentRegion;
+  entities.forEach((entity) => {
+    const row = currentMap[entity];
+    const prior = comparisonMap[entity] || {};
+
+    if (!row) {
+      alerts.push({ severity: "warning", text: `${entity} has no approved record in the selected period.` });
+      return;
+    }
+
+    if (normalizeNumber(row.noShowRate) >= 6) {
+      alerts.push({ severity: "bad", text: `${entity} no show rate is elevated at ${normalizeNumber(row.noShowRate).toFixed(1)}%.` });
+    }
+
+    if (normalizeNumber(row.cancellationRate) >= 8) {
+      alerts.push({ severity: "bad", text: `${entity} cancellation rate is elevated at ${normalizeNumber(row.cancellationRate).toFixed(1)}%.` });
+    }
+
+    if (normalizeNumber(row.abandonedCallRate) >= 10) {
+      alerts.push({ severity: "bad", text: `${entity} abandoned call rate is elevated at ${normalizeNumber(row.abandonedCallRate).toFixed(1)}%.` });
+    }
+
+    if (compareAgainst === "priorPeriod") {
+      const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
+      if (visitDiff < -100) {
+        alerts.push({ severity: "warning", text: `${entity} visit volume is down ${Math.abs(visitDiff)} vs comparison period.` });
+      }
+      if (visitDiff > 100) {
+        alerts.push({ severity: "good", text: `${entity} visit volume is up ${Math.abs(visitDiff)} vs comparison period.` });
+      }
+    }
+
+    if (compareAgainst === "budget") {
+      const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+      const npGap = normalizeNumber(row.newPatients) - normalizeNumber(row.newPatientsBudget);
+
+      if (normalizeNumber(row.visitVolumeBudget) > 0 && visitGap < 0) {
+        alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(visitGap))} visits below budget.` });
+      }
+
+      if (normalizeNumber(row.newPatientsBudget) > 0 && npGap < 0) {
+        alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(npGap))} new patients below budget.` });
+      }
+
+      if (visitGap > 0 && npGap > 0) {
+        alerts.push({ severity: "good", text: `${entity} is above budget on visits and new patients.` });
+      }
+    }
+  });
+
+  if (!alerts.length) {
+    alerts.push({ severity: "good", text: "No major operational alerts for the selected period." });
+  }
+
+  container.innerHTML = alerts.map((alert) => `
+    <div class="${alert.severity}" style="margin-bottom:8px; padding:12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
+      ${alert.text}
+    </div>
+  `).join("");
+}
+
+function renderDashboardSnapshot(current, entityScope, compareAgainst) {
+  const container = byId("dashboardSnapshot");
+  if (!container) return;
+
+  const rows = (current.regions || []).filter((r) => entityScope === "ALL" || r.entity === entityScope);
+
+  if (!rows.length) {
+    container.innerHTML = "<p>No approved entities found for the selected period.</p>";
+    return;
+  }
+
+  if (compareAgainst === "budget") {
+    container.innerHTML = `
+      <table class="regionTable">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Visits</th>
+            <th>Visit Budget</th>
+            <th>Visit Var</th>
+            <th>New</th>
+            <th>New Budget</th>
+            <th>New Var</th>
+            <th>Calls</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r) => `
+            <tr>
+              <td>${r.entity}</td>
+              <td>${formatWhole(r.visitVolume)}</td>
+              <td>${formatWhole(r.visitVolumeBudget)}</td>
+              <td>${formatVariance(r.visitVolume, r.visitVolumeBudget)}</td>
+              <td>${formatWhole(r.newPatients)}</td>
+              <td>${formatWhole(r.newPatientsBudget)}</td>
+              <td>${formatVariance(r.newPatients, r.newPatientsBudget)}</td>
+              <td>${formatWhole(r.callVolume)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Visit</th>
+          <th>Calls</th>
+          <th>New</th>
+          <th>No Show</th>
+          <th>Cancel</th>
+          <th>Abandoned</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr>
+            <td>${r.entity}</td>
+            <td>${formatWhole(r.visitVolume)}</td>
+            <td>${formatWhole(r.callVolume)}</td>
+            <td>${formatWhole(r.newPatients)}</td>
+            <td>${formatPercent(r.noShowRate)}</td>
+            <td>${formatPercent(r.cancellationRate)}</td>
+            <td>${formatPercent(r.abandonedCallRate)}</td>
+            <td>${r.status}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadDashboardLanding() {
+  const compareAgainst = byId("dashboardCompareAgainst")?.value || "priorPeriod";
+  const entityScope = byId("dashboardEntityScope")?.value || "ALL";
+  const weekSets = buildWeekSets();
+
+  let current;
+  let comparison;
+
+  if (compareAgainst === "budget") {
+    current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope, { includeBudget: true });
+    comparison = {
+      entityCount: current.entityCount,
+      totals: {
+        visitVolume: current.budgetTotals.visitVolumeBudget,
+        callVolume: 0,
+        newPatients: current.budgetTotals.newPatientsBudget
+      },
+      budgetTotals: current.budgetTotals,
+      regions: (current.regions || []).map((r) => ({
+        entity: r.entity,
+        visitVolume: r.visitVolumeBudget,
+        callVolume: 0,
+        newPatients: r.newPatientsBudget
+      }))
+    };
+  } else {
+    current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope, { includeBudget: false });
+
+    if (compareAgainst === "priorPeriod") {
+      comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, entityScope, { includeBudget: false });
+    } else {
+      comparison = {
+        entityCount: 0,
+        totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
+        budgetTotals: { visitVolumeBudget: 0, newPatientsBudget: 0 },
+        regions: []
+      };
+    }
+  }
+
+  const summaryEl = byId("dashboardSummaryText");
+  if (summaryEl) {
+    summaryEl.innerHTML = `<div style="font-size:13px; opacity:0.85;">${weekSets.summary}${entityScope !== "ALL" ? ` • Scope: ${entityScope}` : " • Scope: All Entities"}</div>`;
+  }
+
+  const noticeEl = byId("dashboardBenchmarkNotice");
+  if (noticeEl) {
+    if (compareAgainst === "budget") {
+      noticeEl.innerHTML = `
+        <div class="good" style="padding:10px 12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
+          Budget comparison is live for Visit Volume and New Patients. Call Volume and percentage metrics remain actual-only.
+        </div>
+      `;
+    } else if (["target", "forecast"].includes(compareAgainst)) {
+      noticeEl.innerHTML = `
+        <div class="warning" style="padding:10px 12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
+          ${compareAgainst.charAt(0).toUpperCase() + compareAgainst.slice(1)} comparison structure is in place, but the benchmark data layer is not wired into this front-end yet. Current view is showing actuals cleanly so the site stays stable.
+        </div>
+      `;
+    } else {
+      noticeEl.innerHTML = "";
+    }
+  }
+
+  renderDashboardCards(current, comparison, compareAgainst);
+  renderDashboardEntities(current, comparison, compareAgainst, entityScope);
+  renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
+  renderDashboardSnapshot(current, entityScope, compareAgainst);
+
+  setDashboardDebug({
+    compareAgainst,
+    entityScope,
+    weekSets,
+    current,
+    comparison
+  });
+}
+
+function renderExecutiveCards(summary) {
+  const rows = summary.regions || [];
+  const avg = (key) => {
+    if (!rows.length) return 0;
+    return rows.reduce((sum, r) => sum + normalizeNumber(r[key]), 0) / rows.length;
+  };
+
+  renderMetricCards("executiveCards", [
+    { label: "Approved Regions", value: summary.entityCount || 0, className: "kpi-neutral" },
+    { label: "Visit Volume", value: summary.totals?.visitVolume || 0, className: "kpi-neutral" },
+    { label: "Call Volume", value: summary.totals?.callVolume || 0, className: "kpi-neutral" },
+    { label: "New Patients", value: summary.totals?.newPatients || 0, className: "kpi-neutral" },
+    { label: "Avg No Show %", value: `${avg("noShowRate").toFixed(1)}%`, className: "kpi-neutral" },
+    { label: "Avg Cancel %", value: `${avg("cancellationRate").toFixed(1)}%`, className: "kpi-neutral" },
+    { label: "Avg Abandoned %", value: `${avg("abandonedCallRate").toFixed(1)}%`, className: "kpi-neutral" }
+  ]);
+}
+
+function renderExecutiveRegions(summary) {
+  const container = byId("executiveRegions");
+  if (!container) return;
+
+  if (!summary.regions || !summary.regions.length) {
+    container.innerHTML = "<p>No approved regions found for this week.</p>";
+    return;
+  }
+
+  const rows = summary.regions.map((r) => `
+    <tr>
+      <td>${r.entity}</td>
+      <td>${r.visitVolume}</td>
+      <td>${r.callVolume}</td>
+      <td>${r.newPatients}</td>
+      <td>${normalizeNumber(r.noShowRate).toFixed(1)}%</td>
+      <td>${normalizeNumber(r.cancellationRate).toFixed(1)}%</td>
+      <td>${normalizeNumber(r.abandonedCallRate).toFixed(1)}%</td>
+      <td>${r.status}</td>
+    </tr>
+  `).join("");
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Visit</th>
+          <th>Calls</th>
+          <th>New</th>
+          <th>No Show</th>
+          <th>Cancel</th>
+          <th>Abandoned</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+async function loadExecutiveSummary() {
+  const weekEnding = byId("executiveWeekEnding")?.value || getDefaultWeekEnding();
+  const result = await apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
+  renderExecutiveCards(result);
+  renderExecutiveRegions(result);
+  setExecutiveDebug(result);
+}
+
+function renderTrendsCards(result) {
+  const items = result.items || [];
+  const latest = items.length ? items[0] : null;
+  const previous = items.length > 1 ? items[1] : null;
+
+  const formatDelta = (current, prior) => {
+    const c = normalizeNumber(current);
+    const p = normalizeNumber(prior);
+    const diff = c - p;
+    return `${c} (${diff >= 0 ? "+" : ""}${diff})`;
+  };
+
+  renderMetricCards("trendsCards", [
+    { label: "Weeks Loaded", value: items.length, className: "kpi-neutral" },
+    {
+      label: "Latest Visit Volume",
+      value: latest ? formatDelta(latest.visitVolume, previous?.visitVolume) : "-",
+      className: latest ? getTrendClass(latest.visitVolume, previous?.visitVolume) : "kpi-neutral"
+    },
+    {
+      label: "Latest Call Volume",
+      value: latest ? formatDelta(latest.callVolume, previous?.callVolume) : "-",
+      className: latest ? getTrendClass(latest.callVolume, previous?.callVolume) : "kpi-neutral"
+    },
+    {
+      label: "Latest New Patients",
+      value: latest ? formatDelta(latest.newPatients, previous?.newPatients) : "-",
+      className: latest ? getTrendClass(latest.newPatients, previous?.newPatients) : "kpi-neutral"
+    }
+  ]);
+}
+
+function renderTrendsTable(result) {
+  const wrap = byId("trendsTableWrap");
+  if (!wrap) return;
+
+  const items = result.items || [];
+
+  if (!items.length) {
+    wrap.innerHTML = "<p>No trend data found for this entity.</p>";
+    return;
+  }
+
+  const isAdmin = !!currentUser?.access?.isAdmin;
+
+  wrap.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Week Ending</th>
+          <th>Visit Volume</th>
+          <th>Call Volume</th>
+          <th>New Patients</th>
+          <th>No Show Rate</th>
+          <th>Cancellation Rate</th>
+          <th>Abandoned Call Rate</th>
+          <th>Status</th>
+          ${isAdmin ? "<th>Actions</th>" : ""}
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td>${item.weekEnding}</td>
+            <td>${normalizeNumber(item.visitVolume)}</td>
+            <td>${normalizeNumber(item.callVolume)}</td>
+            <td>${normalizeNumber(item.newPatients)}</td>
+            <td>${normalizeNumber(item.noShowRate).toFixed(1)}%</td>
+            <td>${normalizeNumber(item.cancellationRate).toFixed(1)}%</td>
+            <td>${normalizeNumber(item.abandonedCallRate).toFixed(1)}%</td>
+            <td>${item.status}</td>
+            ${isAdmin ? `
+              <td>
+                <button class="actionBtn" data-action="override" data-entity="${item.entity}" data-week="${item.weekEnding}">Override</button>
+                <button class="actionBtn" data-action="delete" data-entity="${item.entity}" data-week="${item.weekEnding}">Delete</button>
+              </td>
+            ` : ""}
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  if (isAdmin) {
+    wrap.querySelectorAll("button[data-action='override']").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await openOverride(btn.dataset.entity, btn.dataset.week);
       });
-
-      activateNav(regionLink);
-      await loadCurrentView();
     });
-  }
 
-  if (executiveBtn) {
-    executiveBtn.addEventListener("click", async () => {
-      state.currentRoute = "dashboard";
-
-      const executiveLink = Array.from(document.querySelectorAll(".nav-link")).find((el) =>
-        ((el.textContent || "").trim().toLowerCase().includes("executive"))
-      );
-
-      activateNav(executiveLink);
-      await loadCurrentView();
+    wrap.querySelectorAll("button[data-action='delete']").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await deleteWeek(btn.dataset.entity, btn.dataset.week);
+      });
     });
   }
 }
 
-async function init() {
+function syncTrendsRangeUi() {
+  const mode = byId("trendsRangeMode")?.value || "recent";
+  const weeksWrap = byId("trendsWeeksWrap");
+  const startWrap = byId("trendsStartWrap");
+  const endWrap = byId("trendsEndWrap");
+
+  if (weeksWrap) weeksWrap.style.display = mode === "recent" ? "" : "none";
+  if (startWrap) startWrap.style.display = mode === "dateRange" ? "" : "none";
+  if (endWrap) endWrap.style.display = mode === "dateRange" ? "" : "none";
+}
+
+async function loadTrends() {
+  const entity = getSelectedTrendsEntity();
+  const mode = byId("trendsRangeMode")?.value || "recent";
+  const weeks = byId("trendsLimit")?.value || "12";
+  const startDate = byId("trendsStartDate")?.value || "";
+  const endDate = byId("trendsEndDate")?.value || "";
+
+  renderEntityBrand("trendsBrandWrap", entity);
+
+  let url = `/api/trends?entity=${encodeURIComponent(entity)}`;
+
+  if (mode === "dateRange") {
+    url += `&mode=dateRange`;
+    if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
+  } else {
+    url += `&mode=recent&weeks=${encodeURIComponent(weeks)}`;
+  }
+
+  const result = await apiGet(url);
+  renderTrendsCards(result);
+  renderTrendsTable(result);
+  setTrendsDebug(result);
+}
+
+async function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result || "";
+      const base64 = String(result).split(",")[1] || "";
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function getWeeklyImportFileInput() {
+  return firstExistingId([
+    "importFile",
+    "weeklyImportFile",
+    "historicalImportFile"
+  ]);
+}
+
+function getBudgetImportFileInput() {
+  return firstExistingId([
+    "budgetImportFile",
+    "budgetFile",
+    "importBudgetFile",
+    "budgetWorkbookFile"
+  ]);
+}
+
+function getWeeklyImportButton() {
+  return firstExistingId([
+    "runImportBtn",
+    "runWeeklyImportBtn"
+  ]);
+}
+
+function getBudgetImportButton() {
+  return firstExistingId([
+    "runBudgetImportBtn",
+    "budgetImportBtn"
+  ]);
+}
+
+async function runImport() {
+  if (!currentUser?.access?.isAdmin) {
+    throw new Error("Admin only");
+  }
+
+  const fileInput = getWeeklyImportFileInput();
+  const file = fileInput?.files && fileInput.files[0];
+
+  if (!file) {
+    throw new Error("Select a workbook file first");
+  }
+
+  setImportStatus("Reading workbook...");
+  const fileBase64 = await readFileAsBase64(file);
+
+  const payload = {
+    fileName: file.name,
+    fileBase64
+  };
+
+  setImportStatus("Importing workbook...");
+  setImportDebug({
+    route: "/api/import-excel",
+    fileName: payload.fileName
+  });
+
+  const result = await apiPost("/api/import-excel", payload);
+
+  setImportStatus(result.message || "Import completed");
+  setImportDebug(result);
+}
+
+async function runBudgetImport() {
+  throw new Error("Standalone budget import is retired. Use the main workbook import.");
+}
+
+(function injectDashboardCardStyles() {
+  if (document.getElementById("dashboard-entity-card-style-block")) return;
+
+  const style = document.createElement("style");
+  style.id = "dashboard-entity-card-style-block";
+  style.textContent = `
+    .entityCardGrid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+      gap:18px;
+    }
+    .entityCard {
+      background:linear-gradient(180deg, rgba(18,56,81,0.98) 0%, rgba(13,43,63,0.98) 100%);
+      border:1px solid rgba(108,182,255,0.12);
+      border-radius:18px;
+      padding:18px;
+      box-shadow:0 12px 24px rgba(0,0,0,0.14);
+      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .entityCard:hover {
+      transform:translateY(-3px);
+      box-shadow:0 18px 34px rgba(0,0,0,0.2);
+      border-color:rgba(108,182,255,0.24);
+    }
+    .entityCardHeader {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+      margin-bottom:14px;
+    }
+    .entityHeaderLeft {
+      min-width:0;
+      flex:1;
+    }
+    .entityStatusRow {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+    .entityStatusPill {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(124,252,152,0.14);
+      color:#7CFC98;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    .metricChip {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.07);
+      color:#dcebf8;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.03em;
+    }
+    .metricChipGood {
+      background:rgba(124,252,152,0.12);
+      color:#7CFC98;
+    }
+    .metricChipWarning {
+      background:rgba(247,198,47,0.14);
+      color:#f7c62f;
+    }
+    .metricChipBad {
+      background:rgba(255,125,125,0.14);
+      color:#ff9a9a;
+    }
+    .entityTitle {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:6px;
+    }
+    .entitySubtitle {
+      font-size:12px;
+      color:#b8d3e6;
+      line-height:1.45;
+    }
+    .entityLogoWrap {
+      width:88px;
+      height:46px;
+      background:#fff;
+      border-radius:10px;
+      padding:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-shrink:0;
+    }
+    .entityLogo {
+      max-width:100%;
+      max-height:100%;
+      object-fit:contain;
+    }
+    .entityTopMetrics {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .entityMetricHero {
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;
+      padding:12px;
+    }
+    .entityMetricLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityMetricHero strong {
+      font-size:24px;
+      font-weight:900;
+      line-height:1;
+      letter-spacing:-.03em;
+    }
+    .entityBudgetGrid,
+    .entityCompareGrid {
+      display:grid;
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .entityBudgetGrid {
+      grid-template-columns:repeat(2,1fr);
+    }
+    .entityCompareGrid {
+      grid-template-columns:repeat(3,1fr);
+    }
+    .entityBudgetTile,
+    .entityMiniStat {
+      background:linear-gradient(180deg, rgba(20,67,97,0.96) 0%, rgba(17,54,79,0.96) 100%);
+      border:1px solid rgba(108,182,255,0.12);
+      border-radius:14px;
+      padding:12px;
+    }
+    .entityBudgetLabel,
+    .entityMiniLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityBudgetValue,
+    .entityMiniStat strong {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:8px;
+      display:block;
+    }
+    .entityBudgetMeta {
+      margin-top:6px;
+      font-size:12px;
+      color:#b8d3e6;
+    }
+    .entityProgressWrap {
+      margin-top:10px;
+    }
+    .entityProgressLabelRow {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      font-size:12px;
+      color:#b8d3e6;
+      margin-bottom:6px;
+    }
+    .entityProgressLabelRow strong {
+      color:#fff;
+      font-size:12px;
+    }
+    .entityProgressTrack {
+      width:100%;
+      height:10px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.08);
+      overflow:hidden;
+      position:relative;
+    }
+    .entityProgressBar {
+      height:100%;
+      border-radius:999px;
+      transition:width .28s ease;
+      background:linear-gradient(90deg, #6cb6ff, #74f0ff);
+    }
+    .entityProgressGood {
+      background:linear-gradient(90deg, #33d17a, #7CFC98);
+    }
+    .entityProgressWarning {
+      background:linear-gradient(90deg, #f1b718, #f7c62f);
+    }
+    .entityProgressBad {
+      background:linear-gradient(90deg, #ff7d7d, #ff4f73);
+    }
+    .entityHealthRow {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .entityHealthItem {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+      color:#b8d3e6;
+      font-size:13px;
+    }
+    .entityHealthItem strong {
+      color:#fff;
+      font-size:14px;
+    }
+    .entityAccessPanel {
+      margin-bottom:12px;
+      padding:12px;
+      border-radius:14px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+    .entityDetailDrawer {
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:12px;
+      background:rgba(7,31,51,0.34);
+      overflow:hidden;
+    }
+    .entityDetailDrawer summary {
+      cursor:pointer;
+      list-style:none;
+      padding:12px 14px;
+      font-weight:800;
+      font-size:13px;
+      color:#dcebf8;
+    }
+    .entityDetailDrawer summary::-webkit-details-marker {
+      display:none;
+    }
+    .entityDetailGrid {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      padding:0 14px 14px;
+    }
+    .entityDetailTile {
+      padding:12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+    .entityDetailLabel {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityDetailValue {
+      font-size:18px;
+      font-weight:900;
+      line-height:1.1;
+    }
+    @media (max-width: 820px) {
+      .entityTopMetrics,
+      .entityCompareGrid,
+      .entityHealthRow,
+      .entityDetailGrid {
+        grid-template-columns:1fr;
+      }
+      .entityBudgetGrid {
+        grid-template-columns:1fr;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+(async function init() {
   try {
-    setLoadingHeader();
-    initWeekSelector();
-    initButtons();
-    initHeroButtons();
-    await resolveAuth();
-    initNavigation();
-    await loadCurrentView();
-  } catch (err) {
-    handleFatalError(err);
-  }
-}
+    currentUser = await apiGet("/api/me");
 
-document.addEventListener("DOMContentLoaded", init);
+    renderUser(currentUser);
+    setupEntityDropdown(currentUser);
+    setupTrendsEntityDropdown(currentUser);
+    renderForm();
+
+    const defaultWeek = getDefaultWeekEnding();
+
+    if (byId("dashboardWeekEnding")) byId("dashboardWeekEnding").value = defaultWeek;
+    if (byId("dashboardCustomEnd")) byId("dashboardCustomEnd").value = defaultWeek;
+    if (byId("dashboardCustomStart")) byId("dashboardCustomStart").value = getDateWeeksAgo(8, defaultWeek);
+    if (byId("weekEnding")) byId("weekEnding").value = defaultWeek;
+    if (byId("executiveWeekEnding")) byId("executiveWeekEnding").value = defaultWeek;
+    if (byId("trendsStartDate")) byId("trendsStartDate").value = getDateWeeksAgo(12, defaultWeek);
+    if (byId("trendsEndDate")) byId("trendsEndDate").value = defaultWeek;
+
+    if (byId("trendsRangeMode")) syncTrendsRangeUi();
+    if (byId("dashboardPeriodType")) syncDashboardPeriodUi();
+
+    renderEntityBrand("entryBrandWrap", byId("entitySelect") ? getSelectedEntity() : "");
+    renderEntityBrand("trendsBrandWrap", byId("trendsEntitySelect") ? getSelectedTrendsEntity() : "");
+
+    if (byId("entitySelect")) {
+      byId("entitySelect").addEventListener("change", async () => {
+        renderEntityBrand("entryBrandWrap", getSelectedEntity());
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("weekEnding")) {
+      byId("weekEnding").addEventListener("change", async () => {
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("saveBtn")) {
+      byId("saveBtn").addEventListener("click", async () => {
+        try {
+          await saveWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("submitBtn")) {
+      byId("submitBtn").addEventListener("click", async () => {
+        try {
+          await submitWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("approveBtn")) {
+      byId("approveBtn").addEventListener("click", async () => {
+        try {
+          await approveWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navDashboardBtn")) {
+      byId("navDashboardBtn").addEventListener("click", async () => {
+        showDashboardView();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navEntryBtn")) {
+      byId("navEntryBtn").addEventListener("click", showEntryView);
+    }
+
+    if (byId("navExecutiveBtn")) {
+      byId("navExecutiveBtn").addEventListener("click", async () => {
+        showExecutiveView();
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navTrendsBtn")) {
+      byId("navTrendsBtn").addEventListener("click", async () => {
+        showTrendsView();
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navImportBtn")) {
+      byId("navImportBtn").addEventListener("click", showImportView);
+    }
+
+    if (byId("loadDashboardBtn")) {
+      byId("loadDashboardBtn").addEventListener("click", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardPeriodType")) {
+      byId("dashboardPeriodType").addEventListener("change", async () => {
+        syncDashboardPeriodUi();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardCompareAgainst")) {
+      byId("dashboardCompareAgainst").addEventListener("change", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardEntityScope")) {
+      byId("dashboardEntityScope").addEventListener("change", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardWeekEnding")) {
+      byId("dashboardWeekEnding").addEventListener("change", async () => {
+        if ((byId("dashboardPeriodType")?.value || "currentWeek") !== "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("dashboardCustomStart")) {
+      byId("dashboardCustomStart").addEventListener("change", async () => {
+        if ((byId("dashboardPeriodType")?.value || "currentWeek") === "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("dashboardCustomEnd")) {
+      byId("dashboardCustomEnd").addEventListener("change", async () => {
+        if ((byId("dashboardPeriodType")?.value || "currentWeek") === "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("loadExecutiveBtn")) {
+      byId("loadExecutiveBtn").addEventListener("click", async () => {
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("loadTrendsBtn")) {
+      byId("loadTrendsBtn").addEventListener("click", async () => {
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsEntitySelect")) {
+      byId("trendsEntitySelect").addEventListener("change", async () => {
+        renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsLimit")) {
+      byId("trendsLimit").addEventListener("change", async () => {
+        if ((byId("trendsRangeMode")?.value || "recent") === "recent") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsRangeMode")) {
+      byId("trendsRangeMode").addEventListener("change", async () => {
+        syncTrendsRangeUi();
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsStartDate")) {
+      byId("trendsStartDate").addEventListener("change", async () => {
+        if ((byId("trendsRangeMode")?.value || "recent") === "dateRange") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsEndDate")) {
+      byId("trendsEndDate").addEventListener("change", async () => {
+        if ((byId("trendsRangeMode")?.value || "recent") === "dateRange") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    const weeklyImportBtn = getWeeklyImportButton();
+    if (weeklyImportBtn) {
+      weeklyImportBtn.addEventListener("click", async () => {
+        try {
+          await runImport();
+        } catch (e) {
+          setImportStatus(e.message, true);
+          setImportDebug(String(e));
+        }
+      });
+    }
+
+    const budgetImportBtn = getBudgetImportButton();
+    if (budgetImportBtn) {
+      budgetImportBtn.addEventListener("click", async () => {
+        try {
+          await runBudgetImport();
+        } catch (e) {
+          setImportStatus(e.message, true);
+          setImportDebug(String(e));
+        }
+      });
+    }
+
+    showDashboardView();
+    await loadDashboardLanding();
+  } catch (error) {
+    setStatus(error.message || "Failed to load app", true);
+    setDebug(String(error));
+    setDashboardDebug(String(error));
+    setImportDebug(String(error));
+  }
+})();
