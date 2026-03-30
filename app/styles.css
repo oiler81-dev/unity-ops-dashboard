@@ -930,3 +930,11 @@ button:disabled {
     flex-direction: column;
   }
 }
+canvas {
+  width: 100% !important;
+  max-height: 260px;
+}
+
+.chartPanel {
+  padding-top: 10px;
+}
