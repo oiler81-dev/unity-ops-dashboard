@@ -1902,12 +1902,17 @@ function renderTrendsTable(result) {
       <thead>
         <tr>
           <th>Week Ending</th>
+          <th>New</th>
+          <th>Surgeries</th>
+          <th>Established</th>
+          <th>No Shows</th>
+          <th>Cancelled</th>
+          <th>Total Calls</th>
+          <th>Abandoned Calls</th>
           <th>Visit Volume</th>
-          <th>Call Volume</th>
-          <th>New Patients</th>
-          <th>No Show Rate</th>
-          <th>Cancellation Rate</th>
-          <th>Abandoned Call Rate</th>
+          <th>No Show %</th>
+          <th>Cancel %</th>
+          <th>Abandoned %</th>
           <th>Status</th>
           ${isAdmin ? "<th>Actions</th>" : ""}
         </tr>
@@ -1916,9 +1921,14 @@ function renderTrendsTable(result) {
         ${items.map((item) => `
           <tr>
             <td>${item.weekEnding}</td>
-            <td>${normalizeNumber(item.visitVolume)}</td>
-            <td>${normalizeNumber(item.callVolume)}</td>
             <td>${normalizeNumber(item.newPatients)}</td>
+            <td>${normalizeNumber(item.surgeries)}</td>
+            <td>${normalizeNumber(item.established)}</td>
+            <td>${normalizeNumber(item.noShows)}</td>
+            <td>${normalizeNumber(item.cancelled)}</td>
+            <td>${normalizeNumber(item.totalCalls || item.callVolume)}</td>
+            <td>${normalizeNumber(item.abandonedCalls)}</td>
+            <td>${normalizeNumber(item.visitVolume)}</td>
             <td>${normalizeNumber(item.noShowRate).toFixed(1)}%</td>
             <td>${normalizeNumber(item.cancellationRate).toFixed(1)}%</td>
             <td>${normalizeNumber(item.abandonedCallRate).toFixed(1)}%</td>
