@@ -86,8 +86,6 @@
                   <select id="dashboardCompareAgainst">
                     <option value="priorPeriod" selected>Prior Period</option>
                     <option value="budget">Budget</option>
-                    <option value="target">Target</option>
-                    <option value="forecast">Forecast</option>
                   </select>
                 </div>
 
@@ -125,10 +123,10 @@
               <div class="quickPresetBar">
                 <span class="quickPresetLabel">Quick presets</span>
                 <div class="quickPresetPills">
-                  <span class="quickPresetPill">Current Week</span>
-                  <span class="quickPresetPill">Last Week</span>
-                  <span class="quickPresetPill">MTD</span>
-                  <span class="quickPresetPill">Rolling 4</span>
+                  <button class="quickPresetPill" type="button" data-preset="currentWeek">Current Week</button>
+                  <button class="quickPresetPill" type="button" data-preset="lastWeek">Last Week</button>
+                  <button class="quickPresetPill" type="button" data-preset="mtd">MTD</button>
+                  <button class="quickPresetPill" type="button" data-preset="rolling4">Rolling 4</button>
                 </div>
               </div>
             </div>
@@ -203,7 +201,7 @@
             <div class="sectionHeader">
               <div class="sectionEyebrow">Weekly Capture</div>
               <h3>Weekly Entry</h3>
-              <p>Update weekly operational metrics for the selected entity.</p>
+              <p>Enter raw operational counts. Percentages are calculated automatically.</p>
             </div>
 
             <div class="fieldRow">
