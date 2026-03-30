@@ -124,10 +124,10 @@
               <div class="quickPresetBar">
                 <span class="quickPresetLabel">Quick presets</span>
                 <div class="quickPresetPills">
-                  <span class="quickPresetPill">Current Week</span>
-                  <span class="quickPresetPill">Last Week</span>
-                  <span class="quickPresetPill">MTD</span>
-                  <span class="quickPresetPill">Rolling 4</span>
+                  <button class="quickPresetPill" type="button" data-preset="currentWeek">Current Week</button>
+                  <button class="quickPresetPill" type="button" data-preset="lastWeek">Last Week</button>
+                  <button class="quickPresetPill" type="button" data-preset="mtd">MTD</button>
+                  <button class="quickPresetPill" type="button" data-preset="rolling4">Rolling 4</button>
                 </div>
               </div>
             </div>
@@ -145,6 +145,26 @@
             <div id="dashboardCards" class="cardGrid"></div>
           </div>
 
+          <div class="dashboardChartGrid">
+            <div class="panel sectionPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Visual Comparison</div>
+                <h3>Actual vs Budget by Entity</h3>
+                <p>Visits actuals against budget for the selected scope and period.</p>
+              </div>
+              <div id="entityBudgetChart" class="chartCard"></div>
+            </div>
+
+            <div class="panel sectionPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Trend Line</div>
+                <h3>Visits Trend by Week</h3>
+                <p>Weekly visit movement based on the selected dashboard period.</p>
+              </div>
+              <div id="visitsTrendChart" class="chartCard"></div>
+            </div>
+          </div>
+
           <div class="panel sectionPanel">
             <div class="sectionHeader">
               <div class="sectionEyebrow">Operating Units</div>
@@ -154,7 +174,7 @@
             <div id="dashboardEntities"></div>
           </div>
 
-          <div class="dashboardTwoUp">
+          <div class="dashboardThreeUp">
             <div class="panel sectionPanel">
               <div class="sectionHeader">
                 <div class="sectionEyebrow">Watchlist</div>
@@ -162,6 +182,15 @@
                 <p>Items that need attention based on current thresholds.</p>
               </div>
               <div id="dashboardAlerts"></div>
+            </div>
+
+            <div class="panel sectionPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Momentum</div>
+                <h3>Wins</h3>
+                <p>Positive operational signals surfaced from the same data.</p>
+              </div>
+              <div id="dashboardWins"></div>
             </div>
 
             <div class="panel sectionPanel">
