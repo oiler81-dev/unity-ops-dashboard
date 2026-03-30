@@ -67,8 +67,6 @@ body {
   min-height: 100vh;
 }
 
-/* ---------- SIDEBAR ---------- */
-
 #sidebar {
   width: 250px;
   background:
@@ -154,8 +152,6 @@ body {
   opacity: 1;
 }
 
-/* ---------- MAIN CONTENT ---------- */
-
 #mainContent {
   flex: 1;
   padding: 28px;
@@ -231,8 +227,6 @@ main {
   display: grid;
   gap: 18px;
 }
-
-/* ---------- PANELS ---------- */
 
 .panel {
   background:
@@ -353,8 +347,6 @@ main {
   margin-top: 20px;
   margin-bottom: 6px;
 }
-
-/* ---------- FILTERS / FORMS ---------- */
 
 .filterShell {
   margin-top: 6px;
@@ -481,8 +473,6 @@ select option {
   align-items: flex-end;
 }
 
-/* ---------- BUTTONS ---------- */
-
 button {
   padding: 11px 18px;
   background: linear-gradient(180deg, #f7cf45 0%, #f0bf1f 100%);
@@ -533,8 +523,6 @@ button:disabled {
   box-shadow: none;
 }
 
-/* ---------- STATUS / DEBUG ---------- */
-
 .statusMessage {
   margin-top: 16px;
   font-weight: 700;
@@ -569,8 +557,6 @@ button:disabled {
   line-height: 1.5;
   color: #d8e8f6;
 }
-
-/* ---------- KPI CARDS ---------- */
 
 .cardGrid {
   display: grid;
@@ -706,8 +692,6 @@ button:disabled {
   min-height: 118px;
 }
 
-/* ---------- TABLES ---------- */
-
 .regionTable {
   width: 100%;
   border-collapse: collapse;
@@ -741,8 +725,6 @@ button:disabled {
   background: rgba(255, 255, 255, 0.03);
 }
 
-/* ---------- STATES ---------- */
-
 .good {
   color: var(--good);
 }
@@ -764,8 +746,6 @@ button:disabled {
   border-radius: 10px;
 }
 
-/* ---------- BANNERS / CONTEXT ---------- */
-
 .subtleBanner {
   margin-top: 4px;
   padding: 12px 14px;
@@ -780,8 +760,6 @@ button:disabled {
 .brandContextWrap {
   margin-bottom: 18px;
 }
-
-/* ---------- DASHBOARD / ENTITY PRESENTATION ---------- */
 
 #dashboardEntities > div {
   display: grid;
@@ -800,19 +778,24 @@ button:disabled {
 
 #dashboardAlerts .good,
 #dashboardAlerts .warning,
-#dashboardAlerts .bad {
+#dashboardAlerts .bad,
+#dashboardWins .good,
+#dashboardWins .warning,
+#dashboardWins .bad {
   display: block;
   border-radius: 12px;
 }
 
-#dashboardAlerts > div {
+#dashboardAlerts > div,
+#dashboardWins > div {
   background:
     linear-gradient(180deg, rgba(11, 40, 59, 0.96) 0%, rgba(9, 31, 46, 0.96) 100%);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
   transition: transform var(--transition-fast), border-color var(--transition-fast);
 }
 
-#dashboardAlerts > div:hover {
+#dashboardAlerts > div:hover,
+#dashboardWins > div:hover {
   transform: translateY(-1px);
   border-color: rgba(108, 182, 255, 0.16) !important;
 }
@@ -821,14 +804,27 @@ button:disabled {
   overflow-x: auto;
 }
 
-.dashboardTwoUp {
+.dashboardThreeUp {
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  grid-template-columns: 1fr 1fr 1.2fr;
   gap: 18px;
   align-items: start;
 }
 
-/* ---------- RESPONSIVE ---------- */
+.chartPanel {
+  padding-top: 10px;
+}
+
+canvas {
+  width: 100% !important;
+  max-height: 260px;
+}
+
+@media (max-width: 1300px) {
+  .dashboardThreeUp {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 1200px) {
   #sidebar {
@@ -841,10 +837,6 @@ button:disabled {
 
   .summaryCard .value {
     font-size: 32px;
-  }
-
-  .dashboardTwoUp {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -929,12 +921,4 @@ button:disabled {
     align-items: flex-start;
     flex-direction: column;
   }
-}
-canvas {
-  width: 100% !important;
-  max-height: 260px;
-}
-
-.chartPanel {
-  padding-top: 10px;
 }
