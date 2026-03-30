@@ -1625,6 +1625,51 @@ function getWeeklyImportButton() {
   ]);
 }
 
+function renderVisitsChart(weeks, currentData) {
+  const ctx = document.getElementById("visitsChart");
+  if (!ctx) return;
+
+  const labels = weeks;
+
+  const visitData = weeks.map(w => {
+    const row = currentData.regions.find(r => r.weekEnding === w);
+    return row ? row.visitVolume : 0;
+  });
+
+  if (window.visitsChartInstance) {
+    window.visitsChartInstance.destroy();
+  }
+
+  window.visitsChartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Visit Volume",
+          data: visitData,
+          tension: 0.35
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: { color: "#b8d3e6" }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#8eb2c9" }
+        },
+        y: {
+          ticks: { color: "#8eb2c9" }
+        }
+      }
+    }
+  });
+}
 function getBudgetImportButton() {
   return firstExistingId([
     "runBudgetImportBtn",
