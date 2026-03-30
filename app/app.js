@@ -230,13 +230,6 @@ function getMetricChipClass(status) {
   return "metricChip";
 }
 
-function getTrendClass(current, comparison) {
-  const diff = normalizeNumber(current) - normalizeNumber(comparison);
-  if (diff > 0) return "kpi-positive";
-  if (diff < 0) return "kpi-negative";
-  return "kpi-neutral";
-}
-
 function getPerformanceSummary(row, compareAgainst) {
   if (compareAgainst !== "budget") {
     const abandoned = normalizeNumber(row.abandonedCallRate);
@@ -279,6 +272,13 @@ function accessPercentFromAbandoned(rate, threshold = 10) {
   const r = normalizeNumber(rate);
   const pct = 100 - (r / threshold) * 100;
   return clamp(pct, 0, 100);
+}
+
+function getTrendClass(current, comparison) {
+  const diff = normalizeNumber(current) - normalizeNumber(comparison);
+  if (diff > 0) return "kpi-positive";
+  if (diff < 0) return "kpi-negative";
+  return "kpi-neutral";
 }
 
 function renderUser(userData) {
@@ -907,12 +907,14 @@ To Goal ${formatToGoal(npActual, npBudget)}`,
     return;
   }
 
-  const currentVisit = normalizeNumber(current.totals?.visitVolume);
-  const priorVisit = normalizeNumber(comparison.totals?.visitVolume);
-  const currentCalls = normalizeNumber(current.totals?.callVolume);
-  const priorCalls = normalizeNumber(comparison.totals?.callVolume);
-  const currentNp = normalizeNumber(current.totals?.newPatients);
-  const priorNp = normalizeNumber(comparison.totals?.newPatients);
+  const visitCurrent = normalizeNumber(current.totals?.visitVolume);
+  const visitComparison = normalizeNumber(comparison.totals?.visitVolume);
+
+  const callCurrent = normalizeNumber(current.totals?.callVolume);
+  const callComparison = normalizeNumber(comparison.totals?.callVolume);
+
+  const npCurrent = normalizeNumber(current.totals?.newPatients);
+  const npComparison = normalizeNumber(comparison.totals?.newPatients);
 
   const cards = [
     {
@@ -925,27 +927,27 @@ To Goal ${formatToGoal(npActual, npBudget)}`,
     },
     {
       label: "Visit Volume",
-      value: formatWhole(currentVisit),
+      value: visitCurrent,
       meta: compareAgainst === "priorPeriod"
-        ? `${formatVariance(currentVisit, priorVisit)} vs prior period`
+        ? `${visitCurrent - visitComparison >= 0 ? "+" : ""}${visitCurrent - visitComparison} vs prior period`
         : `Actuals loaded • ${compareAgainst} pending`,
-      className: compareAgainst === "priorPeriod" ? getTrendClass(currentVisit, priorVisit) : "kpi-neutral"
+      className: compareAgainst === "priorPeriod" ? getTrendClass(visitCurrent, visitComparison) : "kpi-neutral"
     },
     {
       label: "Call Volume",
-      value: formatWhole(currentCalls),
+      value: callCurrent,
       meta: compareAgainst === "priorPeriod"
-        ? `${formatVariance(currentCalls, priorCalls)} vs prior period`
+        ? `${callCurrent - callComparison >= 0 ? "+" : ""}${callCurrent - callComparison} vs prior period`
         : `Actuals loaded • ${compareAgainst} pending`,
-      className: compareAgainst === "priorPeriod" ? getTrendClass(currentCalls, priorCalls) : "kpi-neutral"
+      className: compareAgainst === "priorPeriod" ? getTrendClass(callCurrent, callComparison) : "kpi-neutral"
     },
     {
       label: "New Patients",
-      value: formatWhole(currentNp),
+      value: npCurrent,
       meta: compareAgainst === "priorPeriod"
-        ? `${formatVariance(currentNp, priorNp)} vs prior period`
+        ? `${npCurrent - npComparison >= 0 ? "+" : ""}${npCurrent - npComparison} vs prior period`
         : `Actuals loaded • ${compareAgainst} pending`,
-      className: compareAgainst === "priorPeriod" ? getTrendClass(currentNp, priorNp) : "kpi-neutral"
+      className: compareAgainst === "priorPeriod" ? getTrendClass(npCurrent, npComparison) : "kpi-neutral"
     },
     {
       label: "Avg No Show %",
@@ -1195,6 +1197,9 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
       const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
       if (visitDiff < -100) {
         alerts.push({ severity: "warning", text: `${entity} visit volume is down ${Math.abs(visitDiff)} vs comparison period.` });
+      }
+      if (visitDiff > 100) {
+        alerts.push({ severity: "good", text: `${entity} visit volume is up ${Math.abs(visitDiff)} vs comparison period.` });
       }
     }
 
@@ -1454,34 +1459,29 @@ function renderTrendsCards(result) {
   const latest = items.length ? items[0] : null;
   const previous = items.length > 1 ? items[1] : null;
 
-  const currentVisit = normalizeNumber(latest?.visitVolume);
-  const previousVisit = normalizeNumber(previous?.visitVolume);
-  const currentCalls = normalizeNumber(latest?.callVolume);
-  const previousCalls = normalizeNumber(previous?.callVolume);
-  const currentNp = normalizeNumber(latest?.newPatients);
-  const previousNp = normalizeNumber(previous?.newPatients);
-
   const formatDelta = (current, prior) => {
-    const diff = normalizeNumber(current) - normalizeNumber(prior);
-    return `${formatWhole(current)} (${diff >= 0 ? "+" : ""}${formatWhole(diff)})`;
+    const c = normalizeNumber(current);
+    const p = normalizeNumber(prior);
+    const diff = c - p;
+    return `${c} (${diff >= 0 ? "+" : ""}${diff})`;
   };
 
   renderMetricCards("trendsCards", [
     { label: "Weeks Loaded", value: items.length, className: "kpi-neutral" },
     {
       label: "Latest Visit Volume",
-      value: latest ? formatDelta(currentVisit, previousVisit) : "-",
-      className: latest ? getTrendClass(currentVisit, previousVisit) : "kpi-neutral"
+      value: latest ? formatDelta(latest.visitVolume, previous?.visitVolume) : "-",
+      className: latest ? getTrendClass(latest.visitVolume, previous?.visitVolume) : "kpi-neutral"
     },
     {
       label: "Latest Call Volume",
-      value: latest ? formatDelta(currentCalls, previousCalls) : "-",
-      className: latest ? getTrendClass(currentCalls, previousCalls) : "kpi-neutral"
+      value: latest ? formatDelta(latest.callVolume, previous?.callVolume) : "-",
+      className: latest ? getTrendClass(latest.callVolume, previous?.callVolume) : "kpi-neutral"
     },
     {
       label: "Latest New Patients",
-      value: latest ? formatDelta(currentNp, previousNp) : "-",
-      className: latest ? getTrendClass(currentNp, previousNp) : "kpi-neutral"
+      value: latest ? formatDelta(latest.newPatients, previous?.newPatients) : "-",
+      className: latest ? getTrendClass(latest.newPatients, previous?.newPatients) : "kpi-neutral"
     }
   ]);
 }
@@ -1700,4 +1700,578 @@ async function runBudgetImport() {
       margin-bottom:14px;
     }
     .entityHeaderLeft {
-      min-width:
+      min-width:0;
+      flex:1;
+    }
+    .entityStatusRow {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+    .entityStatusPill {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(124,252,152,0.14);
+      color:#7CFC98;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    .metricChip {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.07);
+      color:#dcebf8;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.03em;
+    }
+    .metricChipGood {
+      background:rgba(124,252,152,0.12);
+      color:#7CFC98;
+    }
+    .metricChipWarning {
+      background:rgba(247,198,47,0.14);
+      color:#f7c62f;
+    }
+    .metricChipBad {
+      background:rgba(255,125,125,0.14);
+      color:#ff9a9a;
+    }
+    .entityTitle {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:6px;
+    }
+    .entitySubtitle {
+      font-size:12px;
+      color:#b8d3e6;
+      line-height:1.45;
+    }
+    .entityLogoWrap {
+      width:88px;
+      height:46px;
+      background:#fff;
+      border-radius:10px;
+      padding:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-shrink:0;
+    }
+    .entityLogo {
+      max-width:100%;
+      max-height:100%;
+      object-fit:contain;
+    }
+    .entityTopMetrics {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .entityMetricHero {
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;
+      padding:12px;
+    }
+    .entityMetricLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityMetricHero strong {
+      font-size:24px;
+      font-weight:900;
+      line-height:1;
+      letter-spacing:-.03em;
+    }
+    .entityBudgetGrid,
+    .entityCompareGrid {
+      display:grid;
+      gap:10px;
+      margin-bottom:14px;
+    }
+    .entityBudgetGrid {
+      grid-template-columns:repeat(2,1fr);
+    }
+    .entityCompareGrid {
+      grid-template-columns:repeat(3,1fr);
+    }
+    .entityBudgetTile,
+    .entityMiniStat {
+      background:linear-gradient(180deg, rgba(20,67,97,0.96) 0%, rgba(17,54,79,0.96) 100%);
+      border:1px solid rgba(108,182,255,0.12);
+      border-radius:14px;
+      padding:12px;
+    }
+    .entityBudgetLabel,
+    .entityMiniLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityBudgetValue,
+    .entityMiniStat strong {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:8px;
+      display:block;
+    }
+    .entityBudgetMeta {
+      margin-top:6px;
+      font-size:12px;
+      color:#b8d3e6;
+    }
+    .entityProgressWrap {
+      margin-top:10px;
+    }
+    .entityProgressLabelRow {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      font-size:12px;
+      color:#b8d3e6;
+      margin-bottom:6px;
+    }
+    .entityProgressLabelRow strong {
+      color:#fff;
+      font-size:12px;
+    }
+    .entityProgressTrack {
+      width:100%;
+      height:10px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.08);
+      overflow:hidden;
+      position:relative;
+    }
+    .entityProgressBar {
+      height:100%;
+      border-radius:999px;
+      transition:width .28s ease;
+      background:linear-gradient(90deg, #6cb6ff, #74f0ff);
+    }
+    .entityProgressGood {
+      background:linear-gradient(90deg, #33d17a, #7CFC98);
+    }
+    .entityProgressWarning {
+      background:linear-gradient(90deg, #f1b718, #f7c62f);
+    }
+    .entityProgressBad {
+      background:linear-gradient(90deg, #ff7d7d, #ff4f73);
+    }
+    .entityHealthRow {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .entityHealthItem {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+      color:#b8d3e6;
+      font-size:13px;
+    }
+    .entityHealthItem strong {
+      color:#fff;
+      font-size:14px;
+    }
+    .entityAccessPanel {
+      margin-bottom:12px;
+      padding:12px;
+      border-radius:14px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+    .entityDetailDrawer {
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:12px;
+      background:rgba(7,31,51,0.34);
+      overflow:hidden;
+    }
+    .entityDetailDrawer summary {
+      cursor:pointer;
+      list-style:none;
+      padding:12px 14px;
+      font-weight:800;
+      font-size:13px;
+      color:#dcebf8;
+    }
+    .entityDetailDrawer summary::-webkit-details-marker {
+      display:none;
+    }
+    .entityDetailGrid {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      padding:0 14px 14px;
+    }
+    .entityDetailTile {
+      padding:12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+    .entityDetailLabel {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+    .entityDetailValue {
+      font-size:18px;
+      font-weight:900;
+      line-height:1.1;
+    }
+    @media (max-width: 820px) {
+      .entityTopMetrics,
+      .entityCompareGrid,
+      .entityHealthRow,
+      .entityDetailGrid {
+        grid-template-columns:1fr;
+      }
+      .entityBudgetGrid {
+        grid-template-columns:1fr;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+(async function init() {
+  try {
+    currentUser = await apiGet("/api/me");
+
+    renderUser(currentUser);
+    setupEntityDropdown(currentUser);
+    setupTrendsEntityDropdown(currentUser);
+    renderForm();
+
+    const defaultWeek = getDefaultWeekEnding();
+
+    if (byId("dashboardWeekEnding")) byId("dashboardWeekEnding").value = defaultWeek;
+    if (byId("dashboardCustomEnd")) byId("dashboardCustomEnd").value = defaultWeek;
+    if (byId("dashboardCustomStart")) byId("dashboardCustomStart").value = getDateWeeksAgo(8, defaultWeek);
+    if (byId("weekEnding")) byId("weekEnding").value = defaultWeek;
+    if (byId("executiveWeekEnding")) byId("executiveWeekEnding").value = defaultWeek;
+    if (byId("trendsStartDate")) byId("trendsStartDate").value = getDateWeeksAgo(12, defaultWeek);
+    if (byId("trendsEndDate")) byId("trendsEndDate").value = defaultWeek;
+
+    if (byId("trendsRangeMode")) syncTrendsRangeUi();
+    if (byId("dashboardPeriodType")) syncDashboardPeriodUi();
+
+    renderEntityBrand("entryBrandWrap", byId("entitySelect") ? getSelectedEntity() : "");
+    renderEntityBrand("trendsBrandWrap", byId("trendsEntitySelect") ? getSelectedTrendsEntity() : "");
+
+    if (byId("entitySelect")) {
+      byId("entitySelect").addEventListener("change", async () => {
+        renderEntityBrand("entryBrandWrap", getSelectedEntity());
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("weekEnding")) {
+      byId("weekEnding").addEventListener("change", async () => {
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("saveBtn")) {
+      byId("saveBtn").addEventListener("click", async () => {
+        try {
+          await saveWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("submitBtn")) {
+      byId("submitBtn").addEventListener("click", async () => {
+        try {
+          await submitWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("approveBtn")) {
+      byId("approveBtn").addEventListener("click", async () => {
+        try {
+          await approveWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navDashboardBtn")) {
+      byId("navDashboardBtn").addEventListener("click", async () => {
+        showDashboardView();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navEntryBtn")) {
+      byId("navEntryBtn").addEventListener("click", showEntryView);
+    }
+
+    if (byId("navExecutiveBtn")) {
+      byId("navExecutiveBtn").addEventListener("click", async () => {
+        showExecutiveView();
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navTrendsBtn")) {
+      byId("navTrendsBtn").addEventListener("click", async () => {
+        showTrendsView();
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navImportBtn")) {
+      byId("navImportBtn").addEventListener("click", showImportView);
+    }
+
+    if (byId("loadDashboardBtn")) {
+      byId("loadDashboardBtn").addEventListener("click", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardPeriodType")) {
+      byId("dashboardPeriodType").addEventListener("change", async () => {
+        syncDashboardPeriodUi();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardCompareAgainst")) {
+      byId("dashboardCompareAgainst").addEventListener("change", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardEntityScope")) {
+      byId("dashboardEntityScope").addEventListener("change", async () => {
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("dashboardWeekEnding")) {
+      byId("dashboardWeekEnding").addEventListener("change", async () => {
+        if ((byId("dashboardPeriodType")?.value || "currentWeek") !== "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("dashboardCustomStart")) {
+      byId("dashboardCustomStart").addEventListener("change", async () => {
+        if ((byId("dashboardPeriodType")?.value || "currentWeek") === "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("dashboardCustomEnd")) {
+      byId("dashboardCustomEnd").addEventListener("change", async () => {
+        if ((byId("dashboardPeriodType")?.value || "currentWeek") === "custom") {
+          try {
+            await loadDashboardLanding();
+          } catch (e) {
+            setDashboardDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("loadExecutiveBtn")) {
+      byId("loadExecutiveBtn").addEventListener("click", async () => {
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("loadTrendsBtn")) {
+      byId("loadTrendsBtn").addEventListener("click", async () => {
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsEntitySelect")) {
+      byId("trendsEntitySelect").addEventListener("change", async () => {
+        renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsLimit")) {
+      byId("trendsLimit").addEventListener("change", async () => {
+        if ((byId("trendsRangeMode")?.value || "recent") === "recent") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsRangeMode")) {
+      byId("trendsRangeMode").addEventListener("change", async () => {
+        syncTrendsRangeUi();
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsStartDate")) {
+      byId("trendsStartDate").addEventListener("change", async () => {
+        if ((byId("trendsRangeMode")?.value || "recent") === "dateRange") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsEndDate")) {
+      byId("trendsEndDate").addEventListener("change", async () => {
+        if ((byId("trendsRangeMode")?.value || "recent") === "dateRange") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    const weeklyImportBtn = getWeeklyImportButton();
+    if (weeklyImportBtn) {
+      weeklyImportBtn.addEventListener("click", async () => {
+        try {
+          await runImport();
+        } catch (e) {
+          setImportStatus(e.message, true);
+          setImportDebug(String(e));
+        }
+      });
+    }
+
+    const budgetImportBtn = getBudgetImportButton();
+    if (budgetImportBtn) {
+      budgetImportBtn.addEventListener("click", async () => {
+        try {
+          await runBudgetImport();
+        } catch (e) {
+          setImportStatus(e.message, true);
+          setImportDebug(String(e));
+        }
+      });
+    }
+
+    showDashboardView();
+    await loadDashboardLanding();
+  } catch (error) {
+    setStatus(error.message || "Failed to load app", true);
+    setDebug(String(error));
+    setDashboardDebug(String(error));
+    setImportDebug(String(error));
+  }
+})();
