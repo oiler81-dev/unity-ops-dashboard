@@ -281,6 +281,57 @@ function getTrendClass(current, comparison) {
   return "kpi-neutral";
 }
 
+function calculateDerivedMetrics(values = {}) {
+  const newPatients = normalizeNumber(values.newPatients);
+  const surgeries = normalizeNumber(values.surgeries);
+  const established = normalizeNumber(values.established);
+  const noShows = normalizeNumber(values.noShows);
+  const cancelled = normalizeNumber(values.cancelled);
+  const totalCalls = normalizeNumber(values.totalCalls);
+  const abandonedCalls = normalizeNumber(values.abandonedCalls);
+
+  const visitVolume = newPatients + surgeries + established;
+  const scheduledAppointments = visitVolume + noShows + cancelled;
+
+  const noShowRate = scheduledAppointments > 0 ? (noShows / scheduledAppointments) * 100 : 0;
+  const cancellationRate = scheduledAppointments > 0 ? (cancelled / scheduledAppointments) * 100 : 0;
+  const abandonedCallRate = totalCalls > 0 ? (abandonedCalls / totalCalls) * 100 : 0;
+
+  return {
+    newPatients,
+    surgeries,
+    established,
+    noShows,
+    cancelled,
+    totalCalls,
+    abandonedCalls,
+    visitVolume,
+    callVolume: totalCalls,
+    noShowRate,
+    cancellationRate,
+    abandonedCallRate
+  };
+}
+
+function updateDerivedDisplays() {
+  const currentValues = {
+    newPatients: byId("newPatients")?.value || "",
+    surgeries: byId("surgeries")?.value || "",
+    established: byId("established")?.value || "",
+    noShows: byId("noShows")?.value || "",
+    cancelled: byId("cancelled")?.value || "",
+    totalCalls: byId("totalCalls")?.value || "",
+    abandonedCalls: byId("abandonedCalls")?.value || ""
+  };
+
+  const derived = calculateDerivedMetrics(currentValues);
+
+  if (byId("visitVolume")) byId("visitVolume").value = derived.visitVolume ? String(derived.visitVolume) : "0";
+  if (byId("noShowRate")) byId("noShowRate").value = derived.noShowRate.toFixed(1);
+  if (byId("cancellationRate")) byId("cancellationRate").value = derived.cancellationRate.toFixed(1);
+  if (byId("abandonedCallRate")) byId("abandonedCallRate").value = derived.abandonedCallRate.toFixed(1);
+}
+
 function renderUser(userData) {
   const label = `${userData.user.userDetails} (${userData.access.role})`;
   const el = byId("userInfo");
@@ -344,50 +395,134 @@ function getSelectedTrendsEntity() {
 }
 
 function renderForm() {
-  const fields = [
-    { key: "visitVolume", label: "Visit Volume" },
-    { key: "callVolume", label: "Call Volume" },
-    { key: "newPatients", label: "New Patients" },
-    { key: "noShowRate", label: "No Show Rate" },
-    { key: "cancellationRate", label: "Cancellation Rate" },
-    { key: "abandonedCallRate", label: "Abandoned Call Rate" }
-  ];
-
   const container = byId("kpiForm");
   if (!container) return;
 
-  container.innerHTML = "";
+  container.innerHTML = `
+    <div class="formSectionBreak">
+      <h4>Team Inputs</h4>
+    </div>
 
-  fields.forEach((field) => {
-    const div = document.createElement("div");
-    div.innerHTML = `
-      <label for="${field.key}">${field.label}</label>
-      <input type="number" id="${field.key}" step="any" />
-    `;
-    container.appendChild(div);
+    <div>
+      <label for="newPatients">New Patients</label>
+      <input type="number" id="newPatients" step="1" min="0" />
+    </div>
+
+    <div>
+      <label for="surgeries">Surgeries</label>
+      <input type="number" id="surgeries" step="1" min="0" />
+    </div>
+
+    <div>
+      <label for="established">Established</label>
+      <input type="number" id="established" step="1" min="0" />
+    </div>
+
+    <div>
+      <label for="noShows">No Shows</label>
+      <input type="number" id="noShows" step="1" min="0" />
+    </div>
+
+    <div>
+      <label for="cancelled">Cancelled</label>
+      <input type="number" id="cancelled" step="1" min="0" />
+    </div>
+
+    <div>
+      <label for="totalCalls">Total Calls</label>
+      <input type="number" id="totalCalls" step="1" min="0" />
+    </div>
+
+    <div>
+      <label for="abandonedCalls">Abandoned Calls</label>
+      <input type="number" id="abandonedCalls" step="1" min="0" />
+    </div>
+
+    <div class="formSectionBreak">
+      <h4>Calculated</h4>
+    </div>
+
+    <div>
+      <label for="visitVolume">Visit Volume</label>
+      <input type="number" id="visitVolume" step="1" readonly />
+    </div>
+
+    <div>
+      <label for="noShowRate">No Show %</label>
+      <input type="number" id="noShowRate" step="0.1" readonly />
+    </div>
+
+    <div>
+      <label for="cancellationRate">Cancellation %</label>
+      <input type="number" id="cancellationRate" step="0.1" readonly />
+    </div>
+
+    <div>
+      <label for="abandonedCallRate">Abandoned Call %</label>
+      <input type="number" id="abandonedCallRate" step="0.1" readonly />
+    </div>
+  `;
+
+  [
+    "newPatients",
+    "surgeries",
+    "established",
+    "noShows",
+    "cancelled",
+    "totalCalls",
+    "abandonedCalls"
+  ].forEach((id) => {
+    const input = byId(id);
+    if (input) {
+      input.addEventListener("input", updateDerivedDisplays);
+    }
   });
+
+  updateDerivedDisplays();
 }
 
 function mapWeeklyValuesToFormData(values) {
-  return {
-    visitVolume: values?.visitVolume ?? values?.totalVisits ?? "",
-    callVolume: values?.callVolume ?? values?.totalCalls ?? "",
+  const mapped = {
     newPatients: values?.newPatients ?? values?.npActual ?? "",
+    surgeries: values?.surgeries ?? "",
+    established: values?.established ?? "",
+    noShows: values?.noShows ?? "",
+    cancelled: values?.cancelled ?? "",
+    totalCalls: values?.totalCalls ?? values?.callVolume ?? values?.totalCallsActual ?? "",
+    abandonedCalls: values?.abandonedCalls ?? "",
+    visitVolume: values?.visitVolume ?? values?.totalVisits ?? "",
     noShowRate: values?.noShowRate ?? "",
     cancellationRate: values?.cancellationRate ?? "",
     abandonedCallRate: values?.abandonedCallRate ?? values?.abandonmentRate ?? ""
+  };
+
+  const derived = calculateDerivedMetrics(mapped);
+
+  return {
+    newPatients: mapped.newPatients,
+    surgeries: mapped.surgeries,
+    established: mapped.established,
+    noShows: mapped.noShows,
+    cancelled: mapped.cancelled,
+    totalCalls: mapped.totalCalls,
+    abandonedCalls: mapped.abandonedCalls,
+    visitVolume: derived.visitVolume,
+    noShowRate: derived.noShowRate,
+    cancellationRate: derived.cancellationRate,
+    abandonedCallRate: derived.abandonedCallRate
   };
 }
 
 function setFormValues(data) {
   const mapped = mapWeeklyValuesToFormData(data || {});
   const keys = [
-    "visitVolume",
-    "callVolume",
     "newPatients",
-    "noShowRate",
-    "cancellationRate",
-    "abandonedCallRate"
+    "surgeries",
+    "established",
+    "noShows",
+    "cancelled",
+    "totalCalls",
+    "abandonedCalls"
   ];
 
   keys.forEach((key) => {
@@ -395,16 +530,36 @@ function setFormValues(data) {
     if (!input) return;
     input.value = mapped[key] !== null && mapped[key] !== undefined ? mapped[key] : "";
   });
+
+  updateDerivedDisplays();
 }
 
 function getFormValues() {
-  return {
-    visitVolume: byId("visitVolume")?.value || "",
-    callVolume: byId("callVolume")?.value || "",
+  const raw = {
     newPatients: byId("newPatients")?.value || "",
-    noShowRate: byId("noShowRate")?.value || "",
-    cancellationRate: byId("cancellationRate")?.value || "",
-    abandonedCallRate: byId("abandonedCallRate")?.value || ""
+    surgeries: byId("surgeries")?.value || "",
+    established: byId("established")?.value || "",
+    noShows: byId("noShows")?.value || "",
+    cancelled: byId("cancelled")?.value || "",
+    totalCalls: byId("totalCalls")?.value || "",
+    abandonedCalls: byId("abandonedCalls")?.value || ""
+  };
+
+  const derived = calculateDerivedMetrics(raw);
+
+  return {
+    newPatients: derived.newPatients,
+    surgeries: derived.surgeries,
+    established: derived.established,
+    noShows: derived.noShows,
+    cancelled: derived.cancelled,
+    totalCalls: derived.totalCalls,
+    abandonedCalls: derived.abandonedCalls,
+    visitVolume: derived.visitVolume,
+    callVolume: derived.callVolume,
+    noShowRate: Number(derived.noShowRate.toFixed(2)),
+    cancellationRate: Number(derived.cancellationRate.toFixed(2)),
+    abandonedCallRate: Number(derived.abandonedCallRate.toFixed(2))
   };
 }
 
@@ -736,6 +891,42 @@ function syncDashboardPeriodUi() {
   if (endWrap) endWrap.style.display = custom ? "" : "none";
 }
 
+function setActiveQuickPreset(preset) {
+  document.querySelectorAll(".quickPresetPill").forEach((btn) => {
+    btn.classList.toggle("quickPresetActive", btn.dataset.preset === preset);
+  });
+}
+
+async function applyDashboardPreset(preset) {
+  const periodType = byId("dashboardPeriodType");
+  const anchorInput = byId("dashboardWeekEnding");
+  const customStart = byId("dashboardCustomStart");
+  const customEnd = byId("dashboardCustomEnd");
+
+  const anchorWeek = anchorInput?.value || getDefaultWeekEnding();
+
+  if (!periodType) return;
+
+  if (preset === "currentWeek") {
+    periodType.value = "currentWeek";
+  } else if (preset === "lastWeek") {
+    periodType.value = "lastWeek";
+  } else if (preset === "mtd") {
+    periodType.value = "mtd";
+  } else if (preset === "rolling4") {
+    periodType.value = "rolling4";
+  }
+
+  if (preset === "custom" && customStart && customEnd) {
+    customEnd.value = anchorWeek;
+    customStart.value = getDateWeeksAgo(8, anchorWeek);
+  }
+
+  syncDashboardPeriodUi();
+  setActiveQuickPreset(preset);
+  await loadDashboardLanding();
+}
+
 async function fetchExecutiveSummaryByWeek(weekEnding) {
   return apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
 }
@@ -931,34 +1122,26 @@ To Goal ${formatToGoal(npActual, npBudget)}`,
     {
       label: "Approved Regions",
       value: current.entityCount || 0,
-      meta: compareAgainst === "priorPeriod"
-        ? `Prev ${comparison.entityCount || 0}`
-        : `${compareAgainst.charAt(0).toUpperCase() + compareAgainst.slice(1)} comparison pending`,
+      meta: `Prev ${comparison.entityCount || 0}`,
       className: getTrendClass(current.entityCount || 0, comparison.entityCount || 0)
     },
     {
       label: "Visit Volume",
       value: visitCurrent,
-      meta: compareAgainst === "priorPeriod"
-        ? `${visitCurrent - visitComparison >= 0 ? "+" : ""}${visitCurrent - visitComparison} vs prior period`
-        : `Actuals loaded • ${compareAgainst} pending`,
-      className: compareAgainst === "priorPeriod" ? getTrendClass(visitCurrent, visitComparison) : "kpi-neutral"
+      meta: `${visitCurrent - visitComparison >= 0 ? "+" : ""}${visitCurrent - visitComparison} vs prior period`,
+      className: getTrendClass(visitCurrent, visitComparison)
     },
     {
       label: "Call Volume",
       value: callCurrent,
-      meta: compareAgainst === "priorPeriod"
-        ? `${callCurrent - callComparison >= 0 ? "+" : ""}${callCurrent - callComparison} vs prior period`
-        : `Actuals loaded • ${compareAgainst} pending`,
-      className: compareAgainst === "priorPeriod" ? getTrendClass(callCurrent, callComparison) : "kpi-neutral"
+      meta: `${callCurrent - callComparison >= 0 ? "+" : ""}${callCurrent - callComparison} vs prior period`,
+      className: getTrendClass(callCurrent, callComparison)
     },
     {
       label: "New Patients",
       value: npCurrent,
-      meta: compareAgainst === "priorPeriod"
-        ? `${npCurrent - npComparison >= 0 ? "+" : ""}${npCurrent - npComparison} vs prior period`
-        : `Actuals loaded • ${compareAgainst} pending`,
-      className: compareAgainst === "priorPeriod" ? getTrendClass(npCurrent, npComparison) : "kpi-neutral"
+      meta: `${npCurrent - npComparison >= 0 ? "+" : ""}${npCurrent - npComparison} vs prior period`,
+      className: getTrendClass(npCurrent, npComparison)
     },
     {
       label: "Avg No Show %",
@@ -1075,16 +1258,16 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           : `
             <div class="entityCompareGrid">
               <div class="entityMiniStat">
-                <span class="entityMiniLabel">Visits ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
-                <strong>${compareAgainst === "priorPeriod" ? fmtPct(visitPct) : formatWhole(row.visitVolume)}</strong>
+                <span class="entityMiniLabel">Visits vs Prior</span>
+                <strong>${fmtPct(visitPct)}</strong>
               </div>
               <div class="entityMiniStat">
-                <span class="entityMiniLabel">Calls ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
-                <strong>${compareAgainst === "priorPeriod" ? fmtPct(callPct) : formatWhole(row.callVolume)}</strong>
+                <span class="entityMiniLabel">Calls vs Prior</span>
+                <strong>${fmtPct(callPct)}</strong>
               </div>
               <div class="entityMiniStat">
-                <span class="entityMiniLabel">NP ${compareAgainst === "priorPeriod" ? "vs Prior" : "Pending"}</span>
-                <strong>${compareAgainst === "priorPeriod" ? fmtPct(npPct) : formatWhole(row.newPatients)}</strong>
+                <span class="entityMiniLabel">NP vs Prior</span>
+                <strong>${fmtPct(npPct)}</strong>
               </div>
             </div>
           `;
@@ -1153,11 +1336,11 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
               <div class="entityDetailGrid">
                 <div class="entityDetailTile">
                   <div class="entityDetailLabel">Visit Variance</div>
-                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.visitVolume, row.visitVolumeBudget) : compareAgainst === "priorPeriod" ? fmtPct(visitPct) : "n/a"}</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.visitVolume, row.visitVolumeBudget) : fmtPct(visitPct)}</div>
                 </div>
                 <div class="entityDetailTile">
                   <div class="entityDetailLabel">NP Variance</div>
-                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.newPatients, row.newPatientsBudget) : compareAgainst === "priorPeriod" ? fmtPct(npPct) : "n/a"}</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.newPatients, row.newPatientsBudget) : fmtPct(npPct)}</div>
                 </div>
                 <div class="entityDetailTile">
                   <div class="entityDetailLabel">Access Signal</div>
@@ -1207,10 +1390,10 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
     if (compareAgainst === "priorPeriod") {
       const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
       if (visitDiff < -100) {
-        alerts.push({ severity: "warning", text: `${entity} visit volume is down ${Math.abs(visitDiff)} vs comparison period.` });
+        alerts.push({ severity: "warning", text: `${entity} visit volume is down ${Math.abs(visitDiff)} vs prior period.` });
       }
       if (visitDiff > 100) {
-        alerts.push({ severity: "good", text: `${entity} visit volume is up ${Math.abs(visitDiff)} vs comparison period.` });
+        alerts.push({ severity: "good", text: `${entity} visit volume is up ${Math.abs(visitDiff)} vs prior period.` });
       }
     }
 
@@ -1282,7 +1465,7 @@ function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
           text: `${entity} is beating budget on both visits and new patients.`
         });
       }
-    } else if (compareAgainst === "priorPeriod") {
+    } else {
       const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
       const npDiff = normalizeNumber(row.newPatients) - normalizeNumber(prior.newPatients);
       const callDiff = normalizeNumber(row.callVolume) - normalizeNumber(prior.callVolume);
@@ -1565,17 +1748,7 @@ async function loadDashboardLanding() {
     };
   } else {
     current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope, { includeBudget: false });
-
-    if (compareAgainst === "priorPeriod") {
-      comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, entityScope, { includeBudget: false });
-    } else {
-      comparison = {
-        entityCount: 0,
-        totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
-        budgetTotals: { visitVolumeBudget: 0, newPatientsBudget: 0 },
-        regions: []
-      };
-    }
+    comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, entityScope, { includeBudget: false });
   }
 
   const summaryEl = byId("dashboardSummaryText");
@@ -1589,12 +1762,6 @@ async function loadDashboardLanding() {
       noticeEl.innerHTML = `
         <div class="good" style="padding:10px 12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
           Budget comparison is live for Visit Volume and New Patients. Call Volume and percentage metrics remain actual-only.
-        </div>
-      `;
-    } else if (["target", "forecast"].includes(compareAgainst)) {
-      noticeEl.innerHTML = `
-        <div class="warning" style="padding:10px 12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
-          ${compareAgainst.charAt(0).toUpperCase() + compareAgainst.slice(1)} comparison structure is in place, but the benchmark data layer is not wired into this front-end yet. Current view is showing actuals cleanly so the site stays stable.
         </div>
       `;
     } else {
@@ -2331,6 +2498,7 @@ async function runBudgetImport() {
     if (byId("dashboardPeriodType")) {
       byId("dashboardPeriodType").addEventListener("change", async () => {
         syncDashboardPeriodUi();
+        setActiveQuickPreset("");
         try {
           await loadDashboardLanding();
         } catch (e) {
@@ -2394,6 +2562,16 @@ async function runBudgetImport() {
         }
       });
     }
+
+    document.querySelectorAll(".quickPresetPill").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await applyDashboardPreset(btn.dataset.preset || "");
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    });
 
     if (byId("loadExecutiveBtn")) {
       byId("loadExecutiveBtn").addEventListener("click", async () => {
@@ -2497,6 +2675,7 @@ async function runBudgetImport() {
       });
     }
 
+    setActiveQuickPreset("currentWeek");
     showDashboardView();
     await loadDashboardLanding();
   } catch (error) {
