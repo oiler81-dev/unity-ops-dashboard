@@ -1345,6 +1345,7 @@ async function loadDashboardLanding() {
         totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
         budgetTotals: { visitVolumeBudget: 0, newPatientsBudget: 0 },
         regions: []
+        renderVisitsChart(weekSets.primaryWeeks, current);
       };
     }
   }
