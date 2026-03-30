@@ -415,6 +415,12 @@ select:focus {
   background: rgba(255, 255, 255, 0.08);
 }
 
+input[readonly] {
+  background: rgba(255, 255, 255, 0.03);
+  color: #dcebf8;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 select option {
   color: #000;
 }
@@ -448,12 +454,42 @@ select option {
   color: var(--text-soft);
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
+  width: auto;
+  box-shadow: none;
+}
+
+.quickPresetPill:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(108, 182, 255, 0.22);
+  box-shadow: none;
+}
+
+.quickPresetPill.quickPresetActive {
+  background: linear-gradient(180deg, rgba(108, 182, 255, 0.18), rgba(108, 182, 255, 0.08));
+  border-color: rgba(108, 182, 255, 0.35);
+  color: #f4f8fc;
 }
 
 #kpiForm {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.formSectionBreak {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.formSectionBreak h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
 }
 
 #kpiForm > div {
@@ -920,5 +956,9 @@ canvas {
   .quickPresetBar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .quickPresetPill {
+    width: auto;
   }
 }
