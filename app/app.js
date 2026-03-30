@@ -9,10 +9,21 @@ import {
 /* ---------------- STATE ---------------- */
 
 const state = {
-  weekEnding: getDefaultWeekEnding(),
-  compareMode: "priorPeriod",
-  periodType: "currentWeek"
+  weekEnding: getDefaultWeekEnding()
 };
+
+/* ---------------- INIT ---------------- */
+
+document.addEventListener("DOMContentLoaded", init);
+
+async function init() {
+  try {
+    initControls();
+    await loadDashboard();
+  } catch (err) {
+    handleFatalError(err);
+  }
+}
 
 /* ---------------- HELPERS ---------------- */
 
@@ -26,78 +37,51 @@ function getKpiClass(change) {
   return "kpi-neutral";
 }
 
-/* ---------------- INIT ---------------- */
-
-document.addEventListener("DOMContentLoaded", init);
-
-async function init() {
-  try {
-    initControls();
-    initQuickPresets();
-    await loadDashboard();
-  } catch (err) {
-    handleFatalError(err);
-  }
-}
-
 /* ---------------- CONTROLS ---------------- */
 
 function initControls() {
-  $("loadDashboardBtn").addEventListener("click", loadDashboard);
-
-  $("dashboardCompareAgainst").addEventListener("change", (e) => {
-    state.compareMode = e.target.value;
-  });
-
-  $("dashboardPeriodType").addEventListener("change", (e) => {
-    state.periodType = e.target.value;
-  });
+  const btn = $("loadDashboardBtn");
+  if (btn) {
+    btn.addEventListener("click", loadDashboard);
+  }
 }
 
-/* ---------------- QUICK PRESETS ---------------- */
-
-function initQuickPresets() {
-  document.querySelectorAll(".quickPresetPill").forEach((pill) => {
-    pill.addEventListener("click", async () => {
-      const text = pill.innerText.toLowerCase();
-
-      if (text.includes("current")) state.periodType = "currentWeek";
-      if (text.includes("last week")) state.periodType = "lastWeek";
-      if (text.includes("mtd")) state.periodType = "mtd";
-      if (text.includes("rolling")) state.periodType = "rolling4";
-
-      $("dashboardPeriodType").value = state.periodType;
-
-      await loadDashboard();
-    });
-  });
-}
-
-/* ---------------- DASHBOARD LOAD ---------------- */
+/* ---------------- DASHBOARD ---------------- */
 
 async function loadDashboard() {
-  const week = $("dashboardWeekEnding").value || state.weekEnding;
+  try {
+    const week =
+      $("dashboardWeekEnding")?.value || state.weekEnding;
 
-  $("dashboardSummaryText").innerText = "Loading dashboard...";
+    const data = await safeApiGet(
+      `/api/executive-summary?weekEnding=${week}`,
+      {}
+    );
 
-  const data = await safeApiGet(
-    `/api/executive-summary?weekEnding=${week}`,
-    {}
-  );
+    renderTopCards(data);
+    renderEntities(data.regions || []);
+    renderWins(data.regions || []);
 
-  renderTopCards(data);
-  renderEntityCards(data.regions || []);
-  renderCharts(data);
-  renderWins(data.regions || []);
+    const banner = $("dashboardSummaryText");
+    if (banner) {
+      banner.innerText = `Viewing ${formatDate(week)}`;
+    }
 
-  $("dashboardSummaryText").innerText = `Viewing ${formatDate(week)}`;
+    // charts are optional — won’t break if missing
+    safeRenderCharts(data);
+
+  } catch (err) {
+    console.error(err);
+  }
 }
 
-/* ---------------- TOP KPI CARDS ---------------- */
+/* ---------------- TOP KPI ---------------- */
 
 function renderTopCards(data) {
+  const container = $("dashboardCards");
+  if (!container) return;
+
   const totals = data.totals || {};
-  const budget = data.budgetTotals || {};
   const variance = data.variances || {};
 
   const cards = [
@@ -118,14 +102,12 @@ function renderTopCards(data) {
     }
   ];
 
-  const container = $("dashboardCards");
-
   container.innerHTML = cards
     .map(
       (c) => `
       <div class="summaryCard ${getKpiClass(c.change)}">
         <h3>${c.label}</h3>
-        <div class="value">${c.value.toLocaleString()}</div>
+        <div class="value">${Number(c.value).toLocaleString()}</div>
         <div>${c.change >= 0 ? "+" : ""}${c.change}</div>
       </div>
     `
@@ -133,22 +115,23 @@ function renderTopCards(data) {
     .join("");
 }
 
-/* ---------------- ENTITY CARDS ---------------- */
+/* ---------------- ENTITY PERFORMANCE ---------------- */
 
-function renderEntityCards(regions) {
+function renderEntities(regions) {
   const container = $("dashboardEntities");
+  if (!container) return;
 
   container.innerHTML = regions
     .map((r) => {
-      const variance =
-        (r.visitVolume || 0) - (r.budget?.visitVolumeBudget || 0);
+      const budget = r.budget?.visitVolumeBudget || 0;
+      const variance = (r.visitVolume || 0) - budget;
 
       return `
-      <div class="entityCard ${getKpiClass(variance)}">
+      <div class="panel innerPanel ${getKpiClass(variance)}">
         <h3>${r.entity}</h3>
-        <div>Visits: ${r.visitVolume}</div>
-        <div>NP: ${r.newPatients}</div>
-        <div>Calls: ${r.callVolume}</div>
+        <div>Visits: ${r.visitVolume || 0}</div>
+        <div>New Patients: ${r.newPatients || 0}</div>
+        <div>Calls: ${r.callVolume || 0}</div>
         <div>Variance: ${variance}</div>
       </div>
     `;
@@ -156,11 +139,42 @@ function renderEntityCards(regions) {
     .join("");
 }
 
-/* ---------------- CHARTS ---------------- */
+/* ---------------- WINS ---------------- */
 
-function renderCharts(data) {
-  renderBudgetChart(data.regions || []);
-  renderTrendChart(data.regions || []);
+function renderWins(regions) {
+  const container = $("dashboardAlerts");
+  if (!container) return;
+
+  const wins = regions.filter(
+    (r) => r.visitVolume > (r.budget?.visitVolumeBudget || 0)
+  );
+
+  container.innerHTML = `
+    <h4>Wins</h4>
+    ${
+      wins.length
+        ? wins
+            .map(
+              (w) =>
+                `<div>${w.entity} performing above budget</div>`
+            )
+            .join("")
+        : "<div>No standout wins this period</div>"
+    }
+  `;
+}
+
+/* ---------------- SAFE CHARTS ---------------- */
+
+function safeRenderCharts(data) {
+  if (typeof Chart === "undefined") return;
+
+  try {
+    renderBudgetChart(data.regions || []);
+    renderTrendChart(data.regions || []);
+  } catch (e) {
+    console.warn("Chart render skipped:", e);
+  }
 }
 
 function renderBudgetChart(regions) {
@@ -169,19 +183,25 @@ function renderBudgetChart(regions) {
 
   const ctx = canvas.getContext("2d");
 
-  const labels = regions.map((r) => r.entity);
-  const actual = regions.map((r) => r.visitVolume || 0);
-  const budget = regions.map((r) => r.budget?.visitVolumeBudget || 0);
-
-  if (window.budgetChart) window.budgetChart.destroy();
+  if (window.budgetChart) {
+    window.budgetChart.destroy();
+  }
 
   window.budgetChart = new Chart(ctx, {
     type: "bar",
     data: {
-      labels,
+      labels: regions.map((r) => r.entity),
       datasets: [
-        { label: "Actual", data: actual },
-        { label: "Budget", data: budget }
+        {
+          label: "Actual",
+          data: regions.map((r) => r.visitVolume || 0)
+        },
+        {
+          label: "Budget",
+          data: regions.map(
+            (r) => r.budget?.visitVolumeBudget || 0
+          )
+        }
       ]
     }
   });
@@ -193,44 +213,20 @@ function renderTrendChart(regions) {
 
   const ctx = canvas.getContext("2d");
 
-  const labels = regions.map((r) => r.entity);
-  const visits = regions.map((r) => r.visitVolume || 0);
-
-  if (window.trendChart) window.trendChart.destroy();
+  if (window.trendChart) {
+    window.trendChart.destroy();
+  }
 
   window.trendChart = new Chart(ctx, {
     type: "line",
     data: {
-      labels,
+      labels: regions.map((r) => r.entity),
       datasets: [
         {
           label: "Visits",
-          data: visits
+          data: regions.map((r) => r.visitVolume || 0)
         }
       ]
     }
   });
-}
-
-/* ---------------- WINS SECTION ---------------- */
-
-function renderWins(regions) {
-  const container = $("dashboardAlerts");
-
-  const wins = regions.filter(
-    (r) => r.visitVolume > (r.budget?.visitVolumeBudget || 0)
-  );
-
-  container.innerHTML = `
-    <h4>Wins</h4>
-    ${wins
-      .map(
-        (w) => `
-      <div class="winItem">
-        ${w.entity} above budget
-      </div>
-    `
-      )
-      .join("")}
-  `;
 }
