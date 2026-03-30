@@ -760,7 +760,8 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
           abandonedCallRateTotal: 0,
           weekCount: 0,
           visitVolumeBudget: 0,
-          newPatientsBudget: 0
+          newPatientsBudget: 0,
+          weekEntries: []
         });
       }
 
@@ -777,6 +778,15 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
         row.visitVolumeBudget += normalizeNumber(region.budget?.visitVolumeBudget);
         row.newPatientsBudget += normalizeNumber(region.budget?.newPatientsBudget);
       }
+
+      row.weekEntries.push({
+        weekEnding: summary.weekEnding || region.weekEnding || "",
+        visitVolume: normalizeNumber(region.visitVolume),
+        callVolume: normalizeNumber(region.callVolume),
+        newPatients: normalizeNumber(region.newPatients),
+        visitVolumeBudget: normalizeNumber(region.budget?.visitVolumeBudget),
+        newPatientsBudget: normalizeNumber(region.budget?.newPatientsBudget)
+      });
     });
   });
 
@@ -790,7 +800,8 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
     cancellationRate: row.weekCount ? row.cancellationRateTotal / row.weekCount : 0,
     abandonedCallRate: row.weekCount ? row.abandonedCallRateTotal / row.weekCount : 0,
     visitVolumeBudget: row.visitVolumeBudget,
-    newPatientsBudget: row.newPatientsBudget
+    newPatientsBudget: row.newPatientsBudget,
+    weekEntries: row.weekEntries
   }));
 
   const totals = {
@@ -1309,6 +1320,128 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
   `;
 }
 
+function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
+  const ctx = document.getElementById("visitsChart");
+  if (!ctx) return;
+
+  const validWeeks = (weeks || []).filter(Boolean);
+  const labels = validWeeks.map((w) => {
+    const parts = String(w).split("-");
+    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : w;
+  });
+
+  const totalsByWeek = validWeeks.map((week) => {
+    const rows = (currentData.regions || [])
+      .flatMap((region) => region.weekEntries || [])
+      .filter((entry) => entry.weekEnding === week);
+
+    return {
+      visitVolume: rows.reduce((sum, entry) => sum + normalizeNumber(entry.visitVolume), 0),
+      callVolume: rows.reduce((sum, entry) => sum + normalizeNumber(entry.callVolume), 0),
+      newPatients: rows.reduce((sum, entry) => sum + normalizeNumber(entry.newPatients), 0),
+      visitVolumeBudget: rows.reduce((sum, entry) => sum + normalizeNumber(entry.visitVolumeBudget), 0)
+    };
+  });
+
+  const visitData = totalsByWeek.map((row) => row.visitVolume);
+  const callData = totalsByWeek.map((row) => row.callVolume);
+  const npData = totalsByWeek.map((row) => row.newPatients);
+  const budgetData = totalsByWeek.map((row) => row.visitVolumeBudget);
+
+  if (window.visitsChartInstance) {
+    window.visitsChartInstance.destroy();
+  }
+
+  window.visitsChartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Visits",
+          data: visitData,
+          tension: 0.35,
+          borderColor: "#6cb6ff",
+          backgroundColor: "rgba(108, 182, 255, 0.16)",
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: false
+        },
+        {
+          label: "Calls",
+          data: callData,
+          tension: 0.35,
+          borderColor: "#f7c62f",
+          backgroundColor: "rgba(247, 198, 47, 0.16)",
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: false,
+          hidden: true
+        },
+        {
+          label: "New Patients",
+          data: npData,
+          tension: 0.35,
+          borderColor: "#7cfc98",
+          backgroundColor: "rgba(124, 252, 152, 0.16)",
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: false
+        },
+        ...(compareAgainst === "budget"
+          ? [
+              {
+                label: "Visit Budget",
+                data: budgetData,
+                tension: 0.35,
+                borderColor: "#ff7d7d",
+                backgroundColor: "rgba(255, 125, 125, 0.12)",
+                borderDash: [6, 6],
+                borderWidth: 2,
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                fill: false
+              }
+            ]
+          : [])
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: "#b8d3e6",
+            boxWidth: 14,
+            boxHeight: 14
+          }
+        },
+        tooltip: {
+          enabled: true
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#8eb2c9" },
+          grid: { color: "rgba(255,255,255,0.06)" }
+        },
+        y: {
+          ticks: { color: "#8eb2c9" },
+          grid: { color: "rgba(255,255,255,0.06)" }
+        }
+      }
+    }
+  });
+}
+
 async function loadDashboardLanding() {
   const compareAgainst = byId("dashboardCompareAgainst")?.value || "priorPeriod";
   const entityScope = byId("dashboardEntityScope")?.value || "ALL";
@@ -1319,6 +1452,7 @@ async function loadDashboardLanding() {
 
   if (compareAgainst === "budget") {
     current = await loadDashboardDataForWeeks(weekSets.primaryWeeks, entityScope, { includeBudget: true });
+
     comparison = {
       entityCount: current.entityCount,
       totals: {
@@ -1345,7 +1479,6 @@ async function loadDashboardLanding() {
         totals: { visitVolume: 0, callVolume: 0, newPatients: 0 },
         budgetTotals: { visitVolumeBudget: 0, newPatientsBudget: 0 },
         regions: []
-        renderVisitsChart(weekSets.primaryWeeks, current);
       };
     }
   }
@@ -1378,6 +1511,7 @@ async function loadDashboardLanding() {
   renderDashboardEntities(current, comparison, compareAgainst, entityScope);
   renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
   renderDashboardSnapshot(current, entityScope, compareAgainst);
+  renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
 
   setDashboardDebug({
     compareAgainst,
@@ -1626,51 +1760,6 @@ function getWeeklyImportButton() {
   ]);
 }
 
-function renderVisitsChart(weeks, currentData) {
-  const ctx = document.getElementById("visitsChart");
-  if (!ctx) return;
-
-  const labels = weeks;
-
-  const visitData = weeks.map(w => {
-    const row = currentData.regions.find(r => r.weekEnding === w);
-    return row ? row.visitVolume : 0;
-  });
-
-  if (window.visitsChartInstance) {
-    window.visitsChartInstance.destroy();
-  }
-
-  window.visitsChartInstance = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Visit Volume",
-          data: visitData,
-          tension: 0.35
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          labels: { color: "#b8d3e6" }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { color: "#8eb2c9" }
-        },
-        y: {
-          ticks: { color: "#8eb2c9" }
-        }
-      }
-    }
-  });
-}
 function getBudgetImportButton() {
   return firstExistingId([
     "runBudgetImportBtn",
