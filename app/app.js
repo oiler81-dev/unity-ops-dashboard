@@ -1243,6 +1243,101 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
   `).join("");
 }
 
+function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
+  const container = byId("dashboardWins");
+  if (!container) return;
+
+  const currentMap = getEntityMap(current);
+  const comparisonMap = getEntityMap(comparison);
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
+  const wins = [];
+
+  entities.forEach((entity) => {
+    const row = currentMap[entity];
+    const prior = comparisonMap[entity] || {};
+
+    if (!row) return;
+
+    if (compareAgainst === "budget") {
+      const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+      const npGap = normalizeNumber(row.newPatients) - normalizeNumber(row.newPatientsBudget);
+
+      if (normalizeNumber(row.visitVolumeBudget) > 0 && visitGap > 0) {
+        wins.push({
+          severity: "good",
+          text: `${entity} is ${Math.round(visitGap)} visits above budget.`
+        });
+      }
+
+      if (normalizeNumber(row.newPatientsBudget) > 0 && npGap > 0) {
+        wins.push({
+          severity: "good",
+          text: `${entity} is ${Math.round(npGap)} new patients above budget.`
+        });
+      }
+
+      if (visitGap > 0 && npGap > 0) {
+        wins.push({
+          severity: "good",
+          text: `${entity} is beating budget on both visits and new patients.`
+        });
+      }
+    } else if (compareAgainst === "priorPeriod") {
+      const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
+      const npDiff = normalizeNumber(row.newPatients) - normalizeNumber(prior.newPatients);
+      const callDiff = normalizeNumber(row.callVolume) - normalizeNumber(prior.callVolume);
+
+      if (visitDiff > 100) {
+        wins.push({
+          severity: "good",
+          text: `${entity} visits improved by ${Math.round(visitDiff)} vs prior period.`
+        });
+      }
+
+      if (npDiff > 15) {
+        wins.push({
+          severity: "good",
+          text: `${entity} new patients improved by ${Math.round(npDiff)} vs prior period.`
+        });
+      }
+
+      if (callDiff > 100) {
+        wins.push({
+          severity: "good",
+          text: `${entity} call volume increased by ${Math.round(callDiff)} vs prior period.`
+        });
+      }
+    }
+
+    if (normalizeNumber(row.abandonedCallRate) > 0 && normalizeNumber(row.abandonedCallRate) < 5) {
+      wins.push({
+        severity: "good",
+        text: `${entity} has strong call handling with only ${normalizeNumber(row.abandonedCallRate).toFixed(1)}% abandoned calls.`
+      });
+    }
+
+    if (normalizeNumber(row.noShowRate) > 0 && normalizeNumber(row.noShowRate) < 4) {
+      wins.push({
+        severity: "good",
+        text: `${entity} is keeping no-show rate low at ${normalizeNumber(row.noShowRate).toFixed(1)}%.`
+      });
+    }
+  });
+
+  if (!wins.length) {
+    wins.push({
+      severity: "warning",
+      text: "No standout wins for the selected period yet."
+    });
+  }
+
+  container.innerHTML = wins.map((win) => `
+    <div class="${win.severity}" style="margin-bottom:8px; padding:12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
+      ${win.text}
+    </div>
+  `).join("");
+}
+
 function renderDashboardSnapshot(current, entityScope, compareAgainst) {
   const container = byId("dashboardSnapshot");
   if (!container) return;
@@ -1510,6 +1605,7 @@ async function loadDashboardLanding() {
   renderDashboardCards(current, comparison, compareAgainst);
   renderDashboardEntities(current, comparison, compareAgainst, entityScope);
   renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
+  renderDashboardWins(current, comparison, entityScope, compareAgainst);
   renderDashboardSnapshot(current, entityScope, compareAgainst);
   renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
 
