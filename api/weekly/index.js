@@ -36,7 +36,17 @@ function normalizeWeeklyValues(values = {}, record = null) {
     abandonedCallRate: toNumber(
       values.abandonedCallRate ?? values.abandonmentRate ?? record?.abandonedCallRate,
       0
-    )
+    ),
+
+    ptScheduledVisits: toNumber(values.ptScheduledVisits ?? record?.ptScheduledVisits, 0),
+    ptCancellations: toNumber(values.ptCancellations ?? record?.ptCancellations, 0),
+    ptNoShows: toNumber(values.ptNoShows ?? record?.ptNoShows, 0),
+    ptReschedules: toNumber(values.ptReschedules ?? record?.ptReschedules, 0),
+    ptTotalUnitsBilled: toNumber(values.ptTotalUnitsBilled ?? record?.ptTotalUnitsBilled, 0),
+    ptVisitsSeen: toNumber(values.ptVisitsSeen ?? record?.ptVisitsSeen, 0),
+    ptWorkingDays: toNumber(values.ptWorkingDays ?? record?.ptWorkingDays, 5),
+    ptUnitsPerVisit: toNumber(values.ptUnitsPerVisit ?? record?.ptUnitsPerVisit, 0),
+    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record?.ptVisitsPerDay, 0)
   };
 }
 
