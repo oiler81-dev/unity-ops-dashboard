@@ -34,14 +34,67 @@ function mapRow(entity) {
     entity: entity.entity || entity.partitionKey,
     weekEnding: entity.weekEnding || entity.rowKey,
     status: normalizeStatus(entity.status),
-    visitVolume: toNumber(values.totalVisits) ?? toNumber(entity.visitVolume) ?? 0,
-    callVolume: toNumber(values.totalCalls) ?? toNumber(entity.callVolume) ?? 0,
-    newPatients: toNumber(values.npActual) ?? toNumber(entity.newPatients) ?? 0,
-    noShowRate: toNumber(values.noShowRate) ?? toNumber(entity.noShowRate) ?? 0,
+
+    newPatients:
+      toNumber(values.newPatients ?? values.npActual) ??
+      toNumber(entity.newPatients) ??
+      0,
+
+    surgeries:
+      toNumber(values.surgeries ?? values.surgeryActual) ??
+      toNumber(entity.surgeries) ??
+      0,
+
+    established:
+      toNumber(values.established ?? values.establishedActual) ??
+      toNumber(entity.established) ??
+      0,
+
+    noShows:
+      toNumber(values.noShows) ??
+      toNumber(entity.noShows) ??
+      0,
+
+    cancelled:
+      toNumber(values.cancelled) ??
+      toNumber(entity.cancelled) ??
+      0,
+
+    totalCalls:
+      toNumber(values.totalCalls ?? values.callVolume) ??
+      toNumber(entity.totalCalls ?? entity.callVolume) ??
+      0,
+
+    abandonedCalls:
+      toNumber(values.abandonedCalls) ??
+      toNumber(entity.abandonedCalls) ??
+      0,
+
+    visitVolume:
+      toNumber(values.visitVolume ?? values.totalVisits) ??
+      toNumber(entity.visitVolume) ??
+      0,
+
+    callVolume:
+      toNumber(values.callVolume ?? values.totalCalls) ??
+      toNumber(entity.callVolume ?? entity.totalCalls) ??
+      0,
+
+    noShowRate:
+      toNumber(values.noShowRate) ??
+      toNumber(entity.noShowRate) ??
+      0,
+
     cancellationRate:
-      toNumber(values.cancellationRate) ?? toNumber(entity.cancellationRate) ?? 0,
+      toNumber(values.cancellationRate) ??
+      toNumber(entity.cancellationRate) ??
+      0,
+
     abandonedCallRate:
-      toNumber(values.abandonmentRate) ?? toNumber(entity.abandonedCallRate) ?? 0,
+      toNumber(values.abandonmentRate ?? values.abandonedCallRate) ??
+      toNumber(entity.abandonedCallRate) ??
+      0,
+
     updatedBy: entity.updatedBy || entity.submittedBy || entity.approvedBy || null,
     updatedAt: entity.updatedAt || entity.importedAt || entity.approvedAt || null,
     source: entity.source || null
@@ -53,6 +106,12 @@ function hasRealData(row) {
     (row.visitVolume ?? 0) > 0 ||
     (row.callVolume ?? 0) > 0 ||
     (row.newPatients ?? 0) > 0 ||
+    (row.surgeries ?? 0) > 0 ||
+    (row.established ?? 0) > 0 ||
+    (row.noShows ?? 0) > 0 ||
+    (row.cancelled ?? 0) > 0 ||
+    (row.totalCalls ?? 0) > 0 ||
+    (row.abandonedCalls ?? 0) > 0 ||
     (row.noShowRate ?? 0) > 0 ||
     (row.cancellationRate ?? 0) > 0 ||
     (row.abandonedCallRate ?? 0) > 0
@@ -78,7 +137,6 @@ function dedupeWeeks(items) {
 
   for (const item of items) {
     if (isFriday(item.weekEnding)) {
-      // Prefer imported/approved Friday rows when duplicates exist
       const existing = fridayRows.get(item.weekEnding);
       if (!existing) {
         fridayRows.set(item.weekEnding, item);
@@ -88,6 +146,7 @@ function dedupeWeeks(items) {
       const existingScore =
         (existing.source === "workbook-import" ? 2 : 0) +
         (existing.status === "Approved" ? 1 : 0);
+
       const itemScore =
         (item.source === "workbook-import" ? 2 : 0) +
         (item.status === "Approved" ? 1 : 0);
@@ -158,7 +217,6 @@ module.exports = async function (context, req) {
     const rawRows = await getRowsForEntity(table, entity);
 
     let items = rawRows.map(mapRow).filter(hasRealData);
-
     items = dedupeWeeks(items);
 
     if (mode === "dateRange" && startDate && endDate) {
