@@ -1,5 +1,14 @@
+const ENTITY_OPTIONS = [
+  { key: "LAOSS", baseEntity: "LAOSS", label: "LAOSS", isPt: false },
+  { key: "NES", baseEntity: "NES", label: "NES", isPt: false },
+  { key: "NES-PT", baseEntity: "NES", label: "NES-PT", isPt: true },
+  { key: "SpineOne", baseEntity: "SpineOne", label: "SpineOne", isPt: false },
+  { key: "SpineOne-PT", baseEntity: "SpineOne", label: "SpineOne-PT", isPt: true },
+  { key: "MRO", baseEntity: "MRO", label: "MRO", isPt: false },
+  { key: "MRO-PT", baseEntity: "MRO", label: "MRO-PT", isPt: true }
+];
+
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
-const PT_ENABLED_ENTITIES = new Set(["NES", "SpineOne", "MRO"]);
 
 const ENTITY_BRANDING = {
   LAOSS: {
@@ -282,8 +291,25 @@ function getTrendClass(current, comparison) {
   return "kpi-neutral";
 }
 
-function entityHasPt(entity) {
-  return PT_ENABLED_ENTITIES.has(entity);
+function getEntityOptionByKey(key) {
+  return ENTITY_OPTIONS.find((x) => x.key === key) || ENTITY_OPTIONS[0];
+}
+
+function getCurrentEntityOption() {
+  const selectedKey = byId("entitySelect")?.value || "LAOSS";
+  return getEntityOptionByKey(selectedKey);
+}
+
+function getSelectedEntity() {
+  return getCurrentEntityOption().baseEntity;
+}
+
+function getSelectedEntryLabel() {
+  return getCurrentEntityOption().label;
+}
+
+function entityHasPtEntry() {
+  return !!getCurrentEntityOption().isPt;
 }
 
 function calculateDerivedMetrics(values = {}) {
@@ -377,25 +403,34 @@ function renderUser(userData) {
   }
 }
 
+function getAllowedEntryOptions(userData) {
+  if (userData.access.isAdmin) {
+    return ENTITY_OPTIONS;
+  }
+
+  const baseEntity = userData.access.entity;
+  return ENTITY_OPTIONS.filter((option) => option.baseEntity === baseEntity);
+}
+
 function setupEntityDropdown(userData) {
   const select = byId("entitySelect");
   if (!select) return;
 
+  const options = getAllowedEntryOptions(userData);
+
   select.innerHTML = "";
 
-  if (userData.access.isAdmin) {
-    ENTITIES.forEach((entity) => {
-      const option = document.createElement("option");
-      option.value = entity;
-      option.textContent = entity;
-      select.appendChild(option);
-    });
-  } else {
+  options.forEach((entry) => {
     const option = document.createElement("option");
-    option.value = userData.access.entity;
-    option.textContent = userData.access.entity;
+    option.value = entry.key;
+    option.textContent = entry.label;
     select.appendChild(option);
+  });
+
+  if (!userData.access.isAdmin && options.length === 1) {
     select.disabled = true;
+  } else {
+    select.disabled = false;
   }
 }
 
@@ -419,11 +454,6 @@ function setupTrendsEntityDropdown(userData) {
     select.appendChild(option);
     select.disabled = true;
   }
-}
-
-function getSelectedEntity() {
-  const el = byId("entitySelect");
-  return el ? el.value : "LAOSS";
 }
 
 function getSelectedTrendsEntity() {
@@ -576,8 +606,7 @@ function renderForm() {
 }
 
 function syncPtSectionVisibility() {
-  const entity = getSelectedEntity();
-  const showPt = entityHasPt(entity);
+  const showPt = entityHasPtEntry();
 
   const sectionBreak = byId("ptSectionBreak");
   if (sectionBreak) {
@@ -696,6 +725,8 @@ function setFormValues(data) {
 }
 
 function getFormValues() {
+  const ptMode = entityHasPtEntry();
+
   const raw = {
     newPatients: byId("newPatients")?.value || "",
     surgeries: byId("surgeries")?.value || "",
@@ -705,13 +736,13 @@ function getFormValues() {
     totalCalls: byId("totalCalls")?.value || "",
     abandonedCalls: byId("abandonedCalls")?.value || "",
 
-    ptScheduledVisits: entityHasPt(getSelectedEntity()) ? (byId("ptScheduledVisits")?.value || "") : 0,
-    ptCancellations: entityHasPt(getSelectedEntity()) ? (byId("ptCancellations")?.value || "") : 0,
-    ptNoShows: entityHasPt(getSelectedEntity()) ? (byId("ptNoShows")?.value || "") : 0,
-    ptReschedules: entityHasPt(getSelectedEntity()) ? (byId("ptReschedules")?.value || "") : 0,
-    ptTotalUnitsBilled: entityHasPt(getSelectedEntity()) ? (byId("ptTotalUnitsBilled")?.value || "") : 0,
-    ptVisitsSeen: entityHasPt(getSelectedEntity()) ? (byId("ptVisitsSeen")?.value || "") : 0,
-    ptWorkingDays: entityHasPt(getSelectedEntity()) ? (byId("ptWorkingDays")?.value || "5") : 5
+    ptScheduledVisits: ptMode ? (byId("ptScheduledVisits")?.value || "") : 0,
+    ptCancellations: ptMode ? (byId("ptCancellations")?.value || "") : 0,
+    ptNoShows: ptMode ? (byId("ptNoShows")?.value || "") : 0,
+    ptReschedules: ptMode ? (byId("ptReschedules")?.value || "") : 0,
+    ptTotalUnitsBilled: ptMode ? (byId("ptTotalUnitsBilled")?.value || "") : 0,
+    ptVisitsSeen: ptMode ? (byId("ptVisitsSeen")?.value || "") : 0,
+    ptWorkingDays: ptMode ? (byId("ptWorkingDays")?.value || "5") : 5
   };
 
   const derived = calculateDerivedMetrics(raw);
@@ -805,6 +836,7 @@ function renderMetricCards(containerId, items) {
 async function loadWeek() {
   const weekEnding = byId("weekEnding")?.value || getDefaultWeekEnding();
   const entity = getSelectedEntity();
+  const selectedLabel = getSelectedEntryLabel();
 
   renderEntityBrand("entryBrandWrap", entity);
   setStatus("Loading...");
@@ -817,8 +849,12 @@ async function loadWeek() {
   setFormValues(result.values || result.data || {});
   updateButtonState();
 
-  setStatus(`Loaded ${entity} for ${weekEnding} (${result.status || "draft"})`);
-  setDebug(result);
+  setStatus(`Loaded ${selectedLabel} for ${weekEnding} (${result.status || "draft"})`);
+  setDebug({
+    selectedEntry: selectedLabel,
+    baseEntity: entity,
+    result
+  });
 }
 
 async function saveWeek() {
@@ -829,12 +865,20 @@ async function saveWeek() {
   };
 
   setStatus("Saving...");
-  setDebug(payload);
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    payload
+  });
 
   const result = await apiPost("/api/weekly-save", payload);
 
   setStatus(result.message || "Saved successfully");
-  setDebug(result);
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    result
+  });
 
   await loadWeek();
 }
@@ -846,12 +890,20 @@ async function submitWeek() {
   };
 
   setStatus("Submitting...");
-  setDebug(payload);
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    payload
+  });
 
   const result = await apiPost("/api/submit-week", payload);
 
   setStatus(result.message || "Submitted successfully");
-  setDebug(result);
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    result
+  });
 
   await loadWeek();
 }
@@ -863,12 +915,20 @@ async function approveWeek() {
   };
 
   setStatus("Approving...");
-  setDebug(payload);
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    payload
+  });
 
   const result = await apiPost("/api/approve-week", payload);
 
   setStatus(result.message || "Approved successfully");
-  setDebug(result);
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    result
+  });
 
   await loadWeek();
 }
@@ -885,7 +945,13 @@ async function deleteWeek(entity, weekEnding) {
 
 async function openOverride(entity, weekEnding) {
   showEntryView();
-  if (byId("entitySelect")) byId("entitySelect").value = entity;
+
+  const select = byId("entitySelect");
+  if (select) {
+    const option = ENTITY_OPTIONS.find((x) => x.baseEntity === entity && !x.isPt) || ENTITY_OPTIONS[0];
+    select.value = option.key;
+  }
+
   if (byId("weekEnding")) byId("weekEnding").value = weekEnding;
   await loadWeek();
   setStatus(`Admin override mode: ${entity} ${weekEnding}`);
@@ -2600,7 +2666,7 @@ async function runBudgetImport() {
     if (byId("trendsRangeMode")) syncTrendsRangeUi();
     if (byId("dashboardPeriodType")) syncDashboardPeriodUi();
 
-    renderEntityBrand("entryBrandWrap", byId("entitySelect") ? getSelectedEntity() : "");
+    renderEntityBrand("entryBrandWrap", getSelectedEntity());
     renderEntityBrand("trendsBrandWrap", byId("trendsEntitySelect") ? getSelectedTrendsEntity() : "");
     syncPtSectionVisibility();
 
