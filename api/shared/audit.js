@@ -1,4 +1,4 @@
-const { ensureTable } = require("./table");
+const { getTableClient } = require("./table");
 const { AUDIT_TABLE } = require("./constants");
 
 function toIso(value) {
@@ -14,6 +14,16 @@ function safeJson(value, fallback = {}) {
     return JSON.stringify(value ?? fallback);
   } catch {
     return JSON.stringify(fallback);
+  }
+}
+
+function parseJsonSafe(value, fallback = {}) {
+  if (!value) return fallback;
+
+  try {
+    return typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    return fallback;
   }
 }
 
@@ -48,15 +58,30 @@ function summarizeChanges(before = {}, after = {}, eventType = "update") {
     }
   }
 
-  if (!changed.length) {
-    return "Updated record";
-  }
-
-  if (changed.length <= 4) {
-    return `Updated ${changed.join(", ")}`;
-  }
-
+  if (!changed.length) return "Updated record";
+  if (changed.length <= 4) return `Updated ${changed.join(", ")}`;
   return `Updated ${changed.length} fields`;
+}
+
+async function ensureAuditTableReady(client) {
+  try {
+    if (typeof client.createTable === "function") {
+      await client.createTable();
+    }
+  } catch (error) {
+    const code = String(error?.statusCode || error?.code || "");
+    const message = String(error?.message || "").toLowerCase();
+
+    if (
+      code === "409" ||
+      message.includes("table already exists") ||
+      message.includes("conflict")
+    ) {
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function writeAuditEvent({
@@ -70,7 +95,8 @@ async function writeAuditEvent({
   summary,
   metadata
 }) {
-  const client = await ensureTable(AUDIT_TABLE);
+  const client = getTableClient(AUDIT_TABLE);
+  await ensureAuditTableReady(client);
 
   const timestamp = toIso();
   const partitionKey = entity || "UNKNOWN";
@@ -93,16 +119,6 @@ async function writeAuditEvent({
     afterJson: safeJson(after, {}),
     metadataJson: safeJson(metadata, {})
   });
-}
-
-function parseJsonSafe(value, fallback = {}) {
-  if (!value) return fallback;
-
-  try {
-    return typeof value === "string" ? JSON.parse(value) : value;
-  } catch {
-    return fallback;
-  }
 }
 
 module.exports = {
