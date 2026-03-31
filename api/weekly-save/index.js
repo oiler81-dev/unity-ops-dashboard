@@ -1,19 +1,14 @@
-const crypto = require("crypto");
 const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
+const { writeAuditEvent, parseJsonSafe } = require("../shared/audit");
 
 const TABLE_NAME = "WeeklyRegionData";
-const AUDIT_TABLE_NAME = "WeeklyAuditLog";
 
 function toNumber(value, fallback = 0) {
   if (value == null || value === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function safeText(value) {
-  return value == null ? "" : String(value).trim();
 }
 
 function calculateDerived(values = {}) {
@@ -78,63 +73,34 @@ function calculateDerived(values = {}) {
   };
 }
 
-function summarizeExistingRecord(record) {
-  if (!record) return null;
-
+function buildAuditShape(entity, weekEnding, values, record = {}) {
   return {
-    entity: safeText(record.entity || record.partitionKey || record.PartitionKey),
-    weekEnding: safeText(record.weekEnding || record.rowKey || record.RowKey),
-    status: safeText(record.status),
-    valuesJson: safeText(record.valuesJson),
-    visitVolume: toNumber(record.visitVolume),
-    callVolume: toNumber(record.callVolume),
-    newPatients: toNumber(record.newPatients),
-    surgeries: toNumber(record.surgeries),
-    established: toNumber(record.established),
-    noShows: toNumber(record.noShows),
-    cancelled: toNumber(record.cancelled),
-    totalCalls: toNumber(record.totalCalls),
-    abandonedCalls: toNumber(record.abandonedCalls),
-    noShowRate: toNumber(record.noShowRate),
-    cancellationRate: toNumber(record.cancellationRate),
-    abandonedCallRate: toNumber(record.abandonedCallRate),
+    entity,
+    weekEnding,
 
-    ptScheduledVisits: toNumber(record.ptScheduledVisits),
-    ptCancellations: toNumber(record.ptCancellations),
-    ptNoShows: toNumber(record.ptNoShows),
-    ptReschedules: toNumber(record.ptReschedules),
-    ptTotalUnitsBilled: toNumber(record.ptTotalUnitsBilled),
-    ptVisitsSeen: toNumber(record.ptVisitsSeen),
-    ptWorkingDays: toNumber(record.ptWorkingDays),
-    ptUnitsPerVisit: toNumber(record.ptUnitsPerVisit),
-    ptVisitsPerDay: toNumber(record.ptVisitsPerDay),
+    newPatients: toNumber(values.newPatients ?? record.newPatients, 0),
+    surgeries: toNumber(values.surgeries ?? record.surgeries, 0),
+    established: toNumber(values.established ?? record.established, 0),
+    noShows: toNumber(values.noShows ?? record.noShows, 0),
+    cancelled: toNumber(values.cancelled ?? record.cancelled, 0),
+    totalCalls: toNumber(values.totalCalls ?? record.totalCalls ?? record.callVolume, 0),
+    abandonedCalls: toNumber(values.abandonedCalls ?? record.abandonedCalls, 0),
+    visitVolume: toNumber(values.visitVolume ?? record.visitVolume, 0),
+    callVolume: toNumber(values.callVolume ?? record.callVolume, 0),
+    noShowRate: toNumber(values.noShowRate ?? record.noShowRate, 0),
+    cancellationRate: toNumber(values.cancellationRate ?? record.cancellationRate, 0),
+    abandonedCallRate: toNumber(values.abandonedCallRate ?? record.abandonedCallRate, 0),
 
-    createdAt: safeText(record.createdAt),
-    createdBy: safeText(record.createdBy),
-    updatedAt: safeText(record.updatedAt),
-    updatedBy: safeText(record.updatedBy)
+    ptScheduledVisits: toNumber(values.ptScheduledVisits ?? record.ptScheduledVisits, 0),
+    ptCancellations: toNumber(values.ptCancellations ?? record.ptCancellations, 0),
+    ptNoShows: toNumber(values.ptNoShows ?? record.ptNoShows, 0),
+    ptReschedules: toNumber(values.ptReschedules ?? record.ptReschedules, 0),
+    ptTotalUnitsBilled: toNumber(values.ptTotalUnitsBilled ?? record.ptTotalUnitsBilled, 0),
+    ptVisitsSeen: toNumber(values.ptVisitsSeen ?? record.ptVisitsSeen, 0),
+    ptWorkingDays: toNumber(values.ptWorkingDays ?? record.ptWorkingDays, 5),
+    ptUnitsPerVisit: toNumber(values.ptUnitsPerVisit ?? record.ptUnitsPerVisit, 0),
+    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record.ptVisitsPerDay, 0)
   };
-}
-
-async function writeAuditLog(auditTable, payload) {
-  const now = new Date().toISOString();
-  const rowKey = `${now}__${crypto.randomUUID()}`;
-
-  await auditTable.upsertEntity({
-    partitionKey: safeText(payload.entity || "unknown"),
-    rowKey,
-    eventType: safeText(payload.eventType),
-    entity: safeText(payload.entity),
-    weekEnding: safeText(payload.weekEnding),
-    actorEmail: safeText(payload.actorEmail),
-    actorRole: safeText(payload.actorRole),
-    actionSource: safeText(payload.actionSource || "app"),
-    isAdminAction: payload.isAdminAction ? true : false,
-    timestamp: now,
-    summary: safeText(payload.summary),
-    beforeJson: JSON.stringify(payload.before ?? null),
-    afterJson: JSON.stringify(payload.after ?? null)
-  });
 }
 
 module.exports = async function (context, req) {
@@ -142,12 +108,12 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access.authenticated) {
+    if (!access.allowed) {
       return {
-        status: 401,
+        status: 403,
         body: {
           ok: false,
-          error: "Authentication required"
+          error: "Forbidden"
         }
       };
     }
@@ -172,7 +138,6 @@ module.exports = async function (context, req) {
     }
 
     const table = getTableClient(TABLE_NAME);
-    const auditTable = getTableClient(AUDIT_TABLE_NAME);
 
     let existing = null;
     try {
@@ -183,22 +148,18 @@ module.exports = async function (context, req) {
       }
     }
 
-    if (existing && !access.isAdmin) {
-      return {
-        status: 403,
-        body: {
-          ok: false,
-          error: "This entry already exists. Only admins can edit existing records."
-        }
-      };
-    }
-
-    const now = new Date().toISOString();
     const values = calculateDerived(input);
-    const before = summarizeExistingRecord(existing);
+    const now = new Date().toISOString();
+    const actorEmail = access.email || user?.userDetails || null;
+    const actorRole = access.role || "user";
 
+    const existingValues = existing ? parseJsonSafe(existing.valuesJson, {}) : {};
+    const beforeAudit = existing
+      ? buildAuditShape(entity, weekEnding, existingValues, existing)
+      : null;
+
+    const createdBy = existing?.createdBy || actorEmail;
     const createdAt = existing?.createdAt || now;
-    const createdBy = existing?.createdBy || access.email || user?.userDetails || null;
 
     const nextRecord = {
       partitionKey: entity,
@@ -232,46 +193,42 @@ module.exports = async function (context, req) {
       ptVisitsPerDay: values.ptVisitsPerDay,
 
       source: "app",
-      createdAt,
       createdBy,
-      updatedBy: access.email || user?.userDetails || null,
+      createdAt,
+      updatedBy: actorEmail,
       updatedAt: now
     };
 
     await table.upsertEntity(nextRecord);
 
-    const after = summarizeExistingRecord(nextRecord);
+    const afterAudit = buildAuditShape(entity, weekEnding, values, nextRecord);
 
-    await writeAuditLog(auditTable, {
+    await writeAuditEvent({
       eventType: existing ? "update" : "create",
       entity,
       weekEnding,
-      actorEmail: access.email || user?.userDetails || "",
-      actorRole: access.role || "user",
-      isAdminAction: !!access.isAdmin,
-      summary: existing
-        ? `Updated ${entity} ${weekEnding}`
-        : `Created ${entity} ${weekEnding}`,
-      before,
-      after
+      actorEmail,
+      actorRole,
+      before: beforeAudit || {},
+      after: afterAudit,
+      metadata: {
+        source: "weekly-save"
+      }
     });
 
     return {
       status: 200,
       body: {
         ok: true,
-        message: existing ? "Updated successfully" : "Saved successfully",
+        message: "Saved successfully",
         status: "saved",
         entity,
         weekEnding,
-        isNew: !existing,
-        adminEdited: !!existing && !!access.isAdmin,
         values,
-        audit: {
-          eventType: existing ? "update" : "create",
-          actorEmail: access.email || user?.userDetails || null,
-          timestamp: now
-        }
+        createdBy,
+        createdAt,
+        updatedBy: actorEmail,
+        updatedAt: now
       }
     };
   } catch (error) {
