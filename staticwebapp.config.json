@@ -1,11 +1,11 @@
 {
   "routes": [
     {
-      "route": "/admin-import.html",
+      "route": "/api/*",
       "allowedRoles": ["authenticated"]
     },
     {
-      "route": "/api/*",
+      "route": "/*",
       "allowedRoles": ["authenticated"]
     }
   ],
