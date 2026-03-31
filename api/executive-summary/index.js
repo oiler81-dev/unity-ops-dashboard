@@ -48,13 +48,31 @@ function mapRecord(record) {
       0,
 
     visitVolume:
-      toNumber(values.totalVisits) || toNumber(record.visitVolume),
+      toNumber(values.visitVolume ?? values.totalVisits) || toNumber(record.visitVolume),
 
     callVolume:
-      toNumber(values.totalCalls) || toNumber(record.callVolume),
+      toNumber(values.callVolume ?? values.totalCalls) || toNumber(record.callVolume),
 
     newPatients:
-      toNumber(values.npActual) || toNumber(record.newPatients),
+      toNumber(values.newPatients ?? values.npActual) || toNumber(record.newPatients),
+
+    surgeries:
+      toNumber(values.surgeries ?? values.surgeryActual) || toNumber(record.surgeries),
+
+    established:
+      toNumber(values.established ?? values.establishedActual) || toNumber(record.established),
+
+    noShows:
+      toNumber(values.noShows) || toNumber(record.noShows),
+
+    cancelled:
+      toNumber(values.cancelled) || toNumber(record.cancelled),
+
+    totalCalls:
+      toNumber(values.totalCalls ?? values.callVolume) || toNumber(record.totalCalls ?? record.callVolume),
+
+    abandonedCalls:
+      toNumber(values.abandonedCalls) || toNumber(record.abandonedCalls),
 
     noShowRate:
       toNumber(values.noShowRate) || toNumber(record.noShowRate),
@@ -149,7 +167,8 @@ module.exports = async function (context, req) {
     const totals = {
       visitVolume: rows.reduce((s, r) => s + r.visitVolume, 0),
       callVolume: rows.reduce((s, r) => s + r.callVolume, 0),
-      newPatients: rows.reduce((s, r) => s + r.newPatients, 0)
+      newPatients: rows.reduce((s, r) => s + r.newPatients, 0),
+      surgeries: rows.reduce((s, r) => s + r.surgeries, 0)
     };
 
     const budgetTotals = {
