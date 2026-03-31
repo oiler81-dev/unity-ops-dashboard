@@ -37,7 +37,8 @@ function resolveAccess(user) {
 }
 
 function canAccessEntity(access, entity) {
-  return !!access?.authenticated;
+  if (!access?.allowed) return false;
+  return true;
 }
 
 module.exports = {
