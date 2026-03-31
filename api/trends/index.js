@@ -2,184 +2,94 @@ const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
-const REGION_TABLE = "WeeklyRegionData";
+const TABLE_NAME = "WeeklyRegionData";
 
-function toNumber(value) {
-  if (value == null || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
+function parseJsonSafely(value, fallback = {}) {
+  if (!value) return fallback;
 
-function parseValuesJson(valuesJson) {
-  if (!valuesJson) return {};
   try {
-    return typeof valuesJson === "string" ? JSON.parse(valuesJson) : valuesJson;
+    return typeof value === "string" ? JSON.parse(value) : value;
   } catch {
-    return {};
+    return fallback;
   }
 }
 
-function normalizeStatus(status) {
-  const s = String(status || "").trim().toLowerCase();
-  if (s === "approved") return "Approved";
-  if (s === "submitted") return "submitted";
-  if (s === "draft") return "draft";
-  return status || "draft";
+function toNumber(value, fallback = 0) {
+  if (value == null || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
-function mapRow(entity) {
-  const values = parseValuesJson(entity.valuesJson);
-
+function normalizeWeeklyValues(values = {}, record = null) {
   return {
-    entity: entity.entity || entity.partitionKey,
-    weekEnding: entity.weekEnding || entity.rowKey,
-    status: normalizeStatus(entity.status),
+    newPatients: toNumber(values.newPatients ?? values.npActual ?? record?.newPatients, 0),
+    surgeries: toNumber(values.surgeries ?? values.surgeryActual ?? record?.surgeries, 0),
+    established: toNumber(values.established ?? values.establishedActual ?? record?.established, 0),
+    noShows: toNumber(values.noShows ?? record?.noShows, 0),
+    cancelled: toNumber(values.cancelled ?? record?.cancelled, 0),
+    totalCalls: toNumber(values.totalCalls ?? values.callVolume ?? record?.totalCalls ?? record?.callVolume, 0),
+    abandonedCalls: toNumber(values.abandonedCalls ?? record?.abandonedCalls, 0),
 
-    newPatients:
-      toNumber(values.newPatients ?? values.npActual) ??
-      toNumber(entity.newPatients) ??
-      0,
+    visitVolume: toNumber(values.visitVolume ?? values.totalVisits ?? record?.visitVolume, 0),
+    callVolume: toNumber(values.callVolume ?? values.totalCalls ?? record?.callVolume ?? record?.totalCalls, 0),
+    noShowRate: toNumber(values.noShowRate ?? record?.noShowRate, 0),
+    cancellationRate: toNumber(values.cancellationRate ?? record?.cancellationRate, 0),
+    abandonedCallRate: toNumber(
+      values.abandonedCallRate ?? values.abandonmentRate ?? record?.abandonedCallRate,
+      0
+    ),
 
-    surgeries:
-      toNumber(values.surgeries ?? values.surgeryActual) ??
-      toNumber(entity.surgeries) ??
-      0,
-
-    established:
-      toNumber(values.established ?? values.establishedActual) ??
-      toNumber(entity.established) ??
-      0,
-
-    noShows:
-      toNumber(values.noShows) ??
-      toNumber(entity.noShows) ??
-      0,
-
-    cancelled:
-      toNumber(values.cancelled) ??
-      toNumber(entity.cancelled) ??
-      0,
-
-    totalCalls:
-      toNumber(values.totalCalls ?? values.callVolume) ??
-      toNumber(entity.totalCalls ?? entity.callVolume) ??
-      0,
-
-    abandonedCalls:
-      toNumber(values.abandonedCalls) ??
-      toNumber(entity.abandonedCalls) ??
-      0,
-
-    visitVolume:
-      toNumber(values.visitVolume ?? values.totalVisits) ??
-      toNumber(entity.visitVolume) ??
-      0,
-
-    callVolume:
-      toNumber(values.callVolume ?? values.totalCalls) ??
-      toNumber(entity.callVolume ?? entity.totalCalls) ??
-      0,
-
-    noShowRate:
-      toNumber(values.noShowRate) ??
-      toNumber(entity.noShowRate) ??
-      0,
-
-    cancellationRate:
-      toNumber(values.cancellationRate) ??
-      toNumber(entity.cancellationRate) ??
-      0,
-
-    abandonedCallRate:
-      toNumber(values.abandonmentRate ?? values.abandonedCallRate) ??
-      toNumber(entity.abandonedCallRate) ??
-      0,
-
-    updatedBy: entity.updatedBy || entity.submittedBy || entity.approvedBy || null,
-    updatedAt: entity.updatedAt || entity.importedAt || entity.approvedAt || null,
-    source: entity.source || null
+    ptScheduledVisits: toNumber(values.ptScheduledVisits ?? record?.ptScheduledVisits, 0),
+    ptCancellations: toNumber(values.ptCancellations ?? record?.ptCancellations, 0),
+    ptNoShows: toNumber(values.ptNoShows ?? record?.ptNoShows, 0),
+    ptReschedules: toNumber(values.ptReschedules ?? record?.ptReschedules, 0),
+    ptTotalUnitsBilled: toNumber(values.ptTotalUnitsBilled ?? record?.ptTotalUnitsBilled, 0),
+    ptVisitsSeen: toNumber(values.ptVisitsSeen ?? record?.ptVisitsSeen, 0),
+    ptWorkingDays: toNumber(values.ptWorkingDays ?? record?.ptWorkingDays, 5),
+    ptUnitsPerVisit: toNumber(values.ptUnitsPerVisit ?? record?.ptUnitsPerVisit, 0),
+    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record?.ptVisitsPerDay, 0)
   };
 }
 
-function hasRealData(row) {
-  return (
-    (row.visitVolume ?? 0) > 0 ||
-    (row.callVolume ?? 0) > 0 ||
-    (row.newPatients ?? 0) > 0 ||
-    (row.surgeries ?? 0) > 0 ||
-    (row.established ?? 0) > 0 ||
-    (row.noShows ?? 0) > 0 ||
-    (row.cancelled ?? 0) > 0 ||
-    (row.totalCalls ?? 0) > 0 ||
-    (row.abandonedCalls ?? 0) > 0 ||
-    (row.noShowRate ?? 0) > 0 ||
-    (row.cancellationRate ?? 0) > 0 ||
-    (row.abandonedCallRate ?? 0) > 0
-  );
+function normalizeStatus(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "approved") return "approved";
+  if (s === "submitted") return "submitted";
+  return "draft";
 }
 
-function isFriday(isoDate) {
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  return d.getUTCDay() === 5;
-}
+function mapRecord(record) {
+  const values = normalizeWeeklyValues(parseJsonSafely(record.valuesJson, {}), record);
 
-function previousFridayForDate(isoDate) {
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  const day = d.getUTCDay();
-  const diff = (day + 2) % 7;
-  d.setUTCDate(d.getUTCDate() - diff);
-  return d.toISOString().slice(0, 10);
-}
+  return {
+    entity: record.partitionKey || record.PartitionKey || record.entity,
+    weekEnding: record.rowKey || record.RowKey || record.weekEnding,
+    status: normalizeStatus(record.status),
 
-function dedupeWeeks(items) {
-  const fridayRows = new Map();
-  const nonFridayRows = [];
+    newPatients: values.newPatients,
+    surgeries: values.surgeries,
+    established: values.established,
+    noShows: values.noShows,
+    cancelled: values.cancelled,
+    totalCalls: values.totalCalls,
+    abandonedCalls: values.abandonedCalls,
 
-  for (const item of items) {
-    if (isFriday(item.weekEnding)) {
-      const existing = fridayRows.get(item.weekEnding);
-      if (!existing) {
-        fridayRows.set(item.weekEnding, item);
-        continue;
-      }
+    visitVolume: values.visitVolume,
+    callVolume: values.callVolume,
+    noShowRate: values.noShowRate,
+    cancellationRate: values.cancellationRate,
+    abandonedCallRate: values.abandonedCallRate,
 
-      const existingScore =
-        (existing.source === "workbook-import" ? 2 : 0) +
-        (existing.status === "Approved" ? 1 : 0);
-
-      const itemScore =
-        (item.source === "workbook-import" ? 2 : 0) +
-        (item.status === "Approved" ? 1 : 0);
-
-      if (itemScore >= existingScore) {
-        fridayRows.set(item.weekEnding, item);
-      }
-    } else {
-      nonFridayRows.push(item);
-    }
-  }
-
-  const filteredNonFriday = nonFridayRows.filter((item) => {
-    const anchorFriday = previousFridayForDate(item.weekEnding);
-    return !fridayRows.has(anchorFriday);
-  });
-
-  return [...fridayRows.values(), ...filteredNonFriday].sort((a, b) =>
-    a.weekEnding < b.weekEnding ? 1 : -1
-  );
-}
-
-async function getRowsForEntity(table, entity) {
-  const filter = `PartitionKey eq '${entity.replace(/'/g, "''")}'`;
-  const rows = [];
-
-  for await (const row of table.listEntities({
-    queryOptions: { filter }
-  })) {
-    rows.push(row);
-  }
-
-  return rows;
+    ptScheduledVisits: values.ptScheduledVisits,
+    ptCancellations: values.ptCancellations,
+    ptNoShows: values.ptNoShows,
+    ptReschedules: values.ptReschedules,
+    ptTotalUnitsBilled: values.ptTotalUnitsBilled,
+    ptVisitsSeen: values.ptVisitsSeen,
+    ptWorkingDays: values.ptWorkingDays,
+    ptUnitsPerVisit: values.ptUnitsPerVisit,
+    ptVisitsPerDay: values.ptVisitsPerDay
+  };
 }
 
 module.exports = async function (context, req) {
@@ -189,9 +99,9 @@ module.exports = async function (context, req) {
 
     const entity = String(req.query.entity || "").trim();
     const mode = String(req.query.mode || "recent").trim();
+    const weeks = Math.max(1, Math.min(52, toNumber(req.query.weeks, 12)));
     const startDate = String(req.query.startDate || "").trim();
     const endDate = String(req.query.endDate || "").trim();
-    const weeks = Math.max(1, Math.min(52, Number(req.query.weeks || 8) || 8));
 
     if (!entity) {
       return {
@@ -213,18 +123,22 @@ module.exports = async function (context, req) {
       };
     }
 
-    const table = getTableClient(REGION_TABLE);
-    const rawRows = await getRowsForEntity(table, entity);
+    const table = getTableClient(TABLE_NAME);
+    const rows = await table.listByPartitionKey(entity);
+    const mapped = rows
+      .map(mapRecord)
+      .sort((a, b) => String(b.weekEnding).localeCompare(String(a.weekEnding)));
 
-    let items = rawRows.map(mapRow).filter(hasRealData);
-    items = dedupeWeeks(items);
+    let items = mapped;
 
-    if (mode === "dateRange" && startDate && endDate) {
-      items = items.filter(
-        (item) => item.weekEnding >= startDate && item.weekEnding <= endDate
-      );
+    if (mode === "dateRange") {
+      items = mapped.filter((item) => {
+        if (startDate && item.weekEnding < startDate) return false;
+        if (endDate && item.weekEnding > endDate) return false;
+        return true;
+      });
     } else {
-      items = items.slice(0, weeks);
+      items = mapped.slice(0, weeks);
     }
 
     return {
@@ -232,11 +146,11 @@ module.exports = async function (context, req) {
       body: {
         ok: true,
         entity,
+        mode,
+        weeksRequested: mode === "recent" ? weeks : null,
+        startDate: mode === "dateRange" ? startDate || null : null,
+        endDate: mode === "dateRange" ? endDate || null : null,
         count: items.length,
-        appliedFilter:
-          mode === "dateRange" && startDate && endDate
-            ? { mode: "dateRange", startDate, endDate }
-            : { mode: "recent", weeks },
         items
       }
     };
@@ -247,7 +161,7 @@ module.exports = async function (context, req) {
       status: 500,
       body: {
         ok: false,
-        error: "Failed to load trends",
+        error: "Failed to load trends data",
         details: error.message
       }
     };
