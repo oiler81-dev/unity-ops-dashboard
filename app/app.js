@@ -383,13 +383,43 @@ function renderNarrativePromptBox() {
   return `
     <div class="allEntryField narrativeFieldBlock" style="grid-column:1 / -1;">
       <div class="formSectionBreak">
-        <h4>Operations Narrative</h4>
+        <h4>Operator Notes</h4>
       </div>
-      <div class="narrativePromptBox">
-        ${OPERATIONS_NARRATIVE_PROMPTS.map((q) => `<div>• ${q}</div>`).join("")}
+
+      <div class="notesShell">
+        <div class="notesHeader">
+          <div class="notesEyebrow">Weekly Context</div>
+          <div class="notesTitle">Add color behind the numbers</div>
+          <div class="notesSubtext">Use this section to explain what drove performance, issues, changes, wins, and next-step planning.</div>
+        </div>
+
+        <div class="notesPromptGrid">
+          ${OPERATIONS_NARRATIVE_PROMPTS.map((q) => `
+            <div class="notesPromptCard">
+              <div class="notesPromptBullet"></div>
+              <div class="notesPromptText">${q}</div>
+            </div>
+          `).join("")}
+        </div>
+
+        <label for="operationsNarrative">Weekly Notes / Operations Narrative</label>
+        <textarea id="operationsNarrative" rows="10" placeholder="Example:
+
+What went well this week:
+Call volume improved and scheduling stabilized.
+
+What could have made it even better:
+Additional provider availability and lower cancellation volume.
+
+What were the major red flags:
+NP volume came in light and referral lag impacted throughput.
+
+Any adjustments or updates for next week:
+Reinforce outreach and review scheduling templates.
+
+Any additional insight:
+One high-value case closed and cash collections were strong."></textarea>
       </div>
-      <label for="operationsNarrative">Operations Narrative</label>
-      <textarea id="operationsNarrative" rows="8" placeholder="Enter the weekly operations narrative here..."></textarea>
     </div>
   `;
 }
@@ -1264,13 +1294,15 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
   const avgCancel = averageMetric(current.regions, "cancellationRate");
   const avgCxnsCombined = avgNoShow + avgCancel;
 
+  const visitVariance = normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume);
+
   const cards = [
     {
       label: "Visit Volume",
       value: formatWhole(current.totals?.visitVolume || 0),
       meta: compareAgainst === "budget"
         ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)}`
-        : `${normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume) >= 0 ? "+" : ""}${formatWhole(normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume))} vs prior`,
+        : `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)} vs prior`,
       className:
         compareAgainst === "budget"
           ? getTrendClass(current.totals?.visitVolume, current.budgetTotals?.visitVolumeBudget)
@@ -1574,17 +1606,80 @@ function injectUiPolishStyles() {
       background: rgba(255,255,255,0.06);
       color: #ffffff;
       resize: vertical;
+      line-height: 1.5;
     }
 
-    .narrativePromptBox {
-      margin-bottom: 10px;
-      padding: 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(255,255,255,0.04);
+    .narrativeFieldBlock {
+      margin-top: 10px;
+    }
+
+    .notesShell {
+      padding: 18px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(17,63,93,0.42) 0%, rgba(11,42,63,0.42) 100%);
+      border: 1px solid rgba(108,182,255,0.16);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+
+    .notesHeader {
+      margin-bottom: 14px;
+    }
+
+    .notesEyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #6cb6ff;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .notesTitle {
+      font-size: 22px;
+      font-weight: 900;
+      line-height: 1.05;
+      margin-bottom: 6px;
+      color: #f4f8fc;
+    }
+
+    .notesSubtext {
+      font-size: 13px;
       color: #b8d3e6;
-      font-size: 12px;
-      line-height: 1.6;
+      line-height: 1.5;
+    }
+
+    .notesPromptGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .notesPromptCard {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .notesPromptBullet {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #6cb6ff 0%, #74f0ff 100%);
+      margin-top: 5px;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 4px rgba(108,182,255,0.12);
+    }
+
+    .notesPromptText {
+      color: #dcebf8;
+      font-size: 13px;
+      line-height: 1.45;
+      font-weight: 700;
     }
 
     .summaryCard {
@@ -1612,6 +1707,16 @@ function injectUiPolishStyles() {
       min-width: 0;
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+
+    @media (max-width: 768px) {
+      .notesTitle {
+        font-size: 18px;
+      }
+
+      .notesPromptGrid {
+        grid-template-columns: 1fr;
+      }
     }
   `;
   document.head.appendChild(style);
