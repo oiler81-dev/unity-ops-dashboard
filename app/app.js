@@ -68,14 +68,9 @@ async function parseApiResponse(res) {
     throw new Error(message);
   }
 
-  if (data !== null) {
-    return data;
-  }
+  if (data !== null) return data;
 
-  return {
-    ok: true,
-    raw: text
-  };
+  return { ok: true, raw: text };
 }
 
 async function apiGet(url) {
@@ -136,25 +131,18 @@ function setTrendsDebug(data) {
 }
 
 function setImportStatus(message, isError = false) {
-  const el =
-    firstExistingId([
-      "importStatusMessage",
-      "adminImportStatusMessage",
-      "budgetImportStatusMessage"
-    ]);
-
+  const el = firstExistingId([
+    "importStatusMessage",
+    "adminImportStatusMessage",
+    "budgetImportStatusMessage"
+  ]);
   if (!el) return;
   el.textContent = message;
   el.style.color = isError ? "#ff8a8a" : "#7CFC98";
 }
 
 function setImportDebug(data) {
-  const el =
-    firstExistingId([
-      "importDebugOutput",
-      "adminImportDebugOutput"
-    ]);
-
+  const el = firstExistingId(["importDebugOutput", "adminImportDebugOutput"]);
   if (!el) return;
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
@@ -194,15 +182,20 @@ function normalizeNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
 function formatWhole(value) {
   return Math.round(normalizeNumber(value)).toLocaleString();
 }
 
-function formatCurrency(value) {
+function formatCurrency(value, decimals = 0) {
   return normalizeNumber(value).toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
   });
 }
 
@@ -210,11 +203,73 @@ function formatPercent(value, digits = 1) {
   return `${normalizeNumber(value).toFixed(digits)}%`;
 }
 
+function formatVariance(actual, target) {
+  const diff = normalizeNumber(actual) - normalizeNumber(target);
+  return `${diff >= 0 ? "+" : ""}${Math.round(diff).toLocaleString()}`;
+}
+
+function formatVariancePct(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return "n/a";
+  const pct = ((normalizeNumber(actual) - t) / t) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+function formatToGoal(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return "n/a";
+  return `${((normalizeNumber(actual) / t) * 100).toFixed(1)}%`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "n/a";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+}
+
 function getTrendClass(current, comparison) {
   const diff = normalizeNumber(current) - normalizeNumber(comparison);
   if (diff > 0) return "kpi-positive";
   if (diff < 0) return "kpi-negative";
   return "kpi-neutral";
+}
+
+function getGoalStatus(actual, target, inverse = false) {
+  const a = normalizeNumber(actual);
+  const t = normalizeNumber(target);
+
+  if (!t && !inverse) return "neutral";
+
+  if (inverse) {
+    if (a <= t) return "good";
+    if (a <= t * 1.15) return "warning";
+    return "bad";
+  }
+
+  const pct = t ? a / t : 0;
+  if (pct >= 1) return "good";
+  if (pct >= 0.92) return "warning";
+  return "bad";
+}
+
+function getMetricChipClass(status) {
+  if (status === "good") return "metricChip metricChipGood";
+  if (status === "warning") return "metricChip metricChipWarning";
+  if (status === "bad") return "metricChip metricChipBad";
+  return "metricChip";
+}
+
+function progressPercent(actual, target) {
+  const t = normalizeNumber(target);
+  if (!t) return 0;
+  return clamp((normalizeNumber(actual) / t) * 100, 0, 140);
+}
+
+function accessPercentFromAbandoned(rate, threshold = 10) {
+  const r = normalizeNumber(rate);
+  const pct = 100 - (r / threshold) * 100;
+  return clamp(pct, 0, 100);
 }
 
 function getEntityOptionByKey(key) {
@@ -242,11 +297,9 @@ function isSpineOneBaseEntity() {
   return getSelectedEntity() === "SpineOne" && !entityHasPtEntry();
 }
 
-function formatDateTime(value) {
-  if (!value) return "n/a";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
+function getSelectedTrendsEntity() {
+  const el = byId("trendsEntitySelect");
+  return el ? el.value : "LAOSS";
 }
 
 function calculateDerivedMetrics(values = {}) {
@@ -341,9 +394,7 @@ function updateDerivedDisplays() {
 function renderUser(userData) {
   const label = `${userData.user.userDetails} (${userData.access.role})`;
   const el = byId("userInfo");
-  if (el) {
-    el.innerText = label;
-  }
+  if (el) el.innerText = label;
 }
 
 function setupEntityDropdown() {
@@ -351,7 +402,6 @@ function setupEntityDropdown() {
   if (!select) return;
 
   select.innerHTML = "";
-
   ENTITY_OPTIONS.forEach((entry) => {
     const option = document.createElement("option");
     option.value = entry.key;
@@ -365,18 +415,12 @@ function setupTrendsEntityDropdown() {
   if (!select) return;
 
   select.innerHTML = "";
-
   ENTITIES.forEach((entity) => {
     const option = document.createElement("option");
     option.value = entity;
     option.textContent = entity;
     select.appendChild(option);
   });
-}
-
-function getSelectedTrendsEntity() {
-  const el = byId("trendsEntitySelect");
-  return el ? el.value : "LAOSS";
 }
 
 function renderNarrativePromptBox() {
@@ -403,22 +447,7 @@ function renderNarrativePromptBox() {
         </div>
 
         <label for="operationsNarrative">Weekly Notes / Operations Narrative</label>
-        <textarea id="operationsNarrative" rows="10" placeholder="Example:
-
-What went well this week:
-Call volume improved and scheduling stabilized.
-
-What could have made it even better:
-Additional provider availability and lower cancellation volume.
-
-What were the major red flags:
-NP volume came in light and referral lag impacted throughput.
-
-Any adjustments or updates for next week:
-Reinforce outreach and review scheduling templates.
-
-Any additional insight:
-One high-value case closed and cash collections were strong."></textarea>
+        <textarea id="operationsNarrative" rows="10" placeholder="Enter weekly notes here..."></textarea>
       </div>
     </div>
   `;
@@ -603,9 +632,7 @@ function renderForm() {
     "ptWorkingDays"
   ].forEach((id) => {
     const input = byId(id);
-    if (input) {
-      input.addEventListener("input", updateDerivedDisplays);
-    }
+    if (input) input.addEventListener("input", updateDerivedDisplays);
   });
 
   syncEntryModeVisibility();
@@ -646,13 +673,11 @@ function mapWeeklyValuesToFormData(values) {
     noShowRate: values?.noShowRate ?? "",
     cancellationRate: values?.cancellationRate ?? "",
     abandonedCallRate: values?.abandonedCallRate ?? values?.abandonmentRate ?? "",
-
     cashCollected: values?.cashCollected ?? values?.cashActual ?? "",
     ptoDays: values?.ptoDays ?? "",
     piNp: values?.piNp ?? "",
     piCashCollection: values?.piCashCollection ?? "",
     operationsNarrative: values?.operationsNarrative ?? "",
-
     ptScheduledVisits: values?.ptScheduledVisits ?? "",
     ptCancellations: values?.ptCancellations ?? "",
     ptNoShows: values?.ptNoShows ?? "",
@@ -722,13 +747,11 @@ function getFormValues() {
     cancelled: ptMode ? 0 : (byId("cancelled")?.value || ""),
     totalCalls: ptMode ? 0 : (byId("totalCalls")?.value || ""),
     abandonedCalls: ptMode ? 0 : (byId("abandonedCalls")?.value || ""),
-
     cashCollected: ptMode ? 0 : (byId("cashCollected")?.value || ""),
     ptoDays: byId("ptoDays")?.value || "",
     piNp: ptMode ? 0 : (byId("piNp")?.value || ""),
     piCashCollection: ptMode ? 0 : (byId("piCashCollection")?.value || ""),
     operationsNarrative: byId("operationsNarrative")?.value || "",
-
     ptScheduledVisits: ptMode ? (byId("ptScheduledVisits")?.value || "") : 0,
     ptCancellations: ptMode ? (byId("ptCancellations")?.value || "") : 0,
     ptNoShows: ptMode ? (byId("ptNoShows")?.value || "") : 0,
@@ -753,13 +776,11 @@ function getFormValues() {
     noShowRate: Number(derived.noShowRate.toFixed(2)),
     cancellationRate: Number(derived.cancellationRate.toFixed(2)),
     abandonedCallRate: Number(derived.abandonedCallRate.toFixed(2)),
-
     cashCollected: derived.cashCollected,
     ptoDays: derived.ptoDays,
     piNp: derived.piNp,
     piCashCollection: derived.piCashCollection,
     operationsNarrative: derived.operationsNarrative,
-
     ptScheduledVisits: derived.ptScheduledVisits,
     ptCancellations: derived.ptCancellations,
     ptNoShows: derived.ptNoShows,
@@ -839,54 +860,838 @@ function renderMetricCards(containerId, items) {
   `).join("");
 }
 
-async function loadWeek() {
-  const weekEnding = byId("weekEnding")?.value || getDefaultWeekEnding();
-  const entity = getSelectedEntity();
-  const selectedLabel = getSelectedEntryLabel();
+function buildVariancePct(current, comparison) {
+  const c = normalizeNumber(current);
+  const p = normalizeNumber(comparison);
+  if (!p) return null;
+  return ((c - p) / p) * 100;
+}
 
-  renderEntityBrand("entryBrandWrap", entity);
-  setStatus("Loading...");
+function getEntityMap(summary) {
+  const map = {};
+  (summary.regions || []).forEach((r) => {
+    map[r.entity] = r;
+  });
+  return map;
+}
 
-  const result = await apiGet(
-    `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
-  );
+function averageMetric(rows, key) {
+  if (!rows || !rows.length) return 0;
+  return rows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0) / rows.length;
+}
 
-  currentWeekData = result;
-  setFormValues(result.values || result.data || {});
-  renderEntryAuditSummary(result);
+function getPerformanceSummary(row, compareAgainst) {
+  if (compareAgainst !== "budget") {
+    const abandoned = normalizeNumber(row.abandonedCallRate);
+    if (abandoned >= 10) return { text: "Call access needs attention", tone: "bad" };
+    if (normalizeNumber(row.visitVolume) > 0 && normalizeNumber(row.newPatients) > 0) {
+      return { text: "Operating normally", tone: "good" };
+    }
+    return { text: "Review actuals", tone: "warning" };
+  }
 
-  setStatus(`Loaded ${selectedLabel} for ${weekEnding} (${result.status || "saved"})`);
-  setDebug({
-    selectedEntry: selectedLabel,
-    baseEntity: entity,
-    result
+  const visitDelta = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+  const npDelta = normalizeNumber(row.newPatients) - normalizeNumber(row.newPatientsBudget);
+
+  if (visitDelta >= 0 && npDelta >= 0) return { text: "Above budget on visits and NP", tone: "good" };
+  if (visitDelta < 0 && npDelta < 0) return { text: "Below budget on visits and NP", tone: "bad" };
+  if (visitDelta >= 0 && npDelta < 0) return { text: "Visits strong, NP below budget", tone: "warning" };
+  if (visitDelta < 0 && npDelta >= 0) return { text: "NP strong, visits below budget", tone: "warning" };
+
+  return { text: "Mixed performance", tone: "warning" };
+}
+
+function renderDashboardCards(current, comparison, compareAgainst, entityScope) {
+  const ptVisitsCurrent = normalizeNumber(current.ptTotals?.visitsSeen);
+  const ptVisitsComparison = normalizeNumber(comparison.ptTotals?.visitsSeen);
+
+  const avgNoShow = averageMetric(current.regions, "noShowRate");
+  const avgCancel = averageMetric(current.regions, "cancellationRate");
+  const avgCxnsCombined = avgNoShow + avgCancel;
+
+  const visitVariance = normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume);
+
+  const cards = [
+    {
+      label: "Visit Volume",
+      value: formatWhole(current.totals?.visitVolume || 0),
+      meta: compareAgainst === "budget"
+        ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)}`
+        : `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)} vs prior`,
+      className:
+        compareAgainst === "budget"
+          ? getTrendClass(current.totals?.visitVolume, current.budgetTotals?.visitVolumeBudget)
+          : getTrendClass(current.totals?.visitVolume, comparison.totals?.visitVolume)
+    },
+    {
+      label: "PT Visits",
+      value: formatWhole(ptVisitsCurrent),
+      meta: `${ptVisitsCurrent - ptVisitsComparison >= 0 ? "+" : ""}${formatWhole(ptVisitsCurrent - ptVisitsComparison)} vs prior`,
+      className: getTrendClass(ptVisitsCurrent, ptVisitsComparison)
+    },
+    {
+      label: "Cash Collected",
+      value: formatCurrency(current.totals?.cashCollected || 0),
+      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
+      className: "kpi-neutral"
+    },
+    {
+      label: "PTO Days",
+      value: formatWhole(current.totals?.ptoDays || 0),
+      meta: "Across selected scope",
+      className: "kpi-neutral"
+    },
+    {
+      label: "Total Surgeries",
+      value: formatWhole(current.totals?.surgeries || 0),
+      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
+      className: "kpi-neutral"
+    },
+    {
+      label: "Call Volume",
+      value: formatWhole(current.totals?.callVolume || 0),
+      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
+      className: "kpi-neutral"
+    },
+    {
+      label: "Avg CXNS %",
+      value: `${avgCxnsCombined.toFixed(1)}%`,
+      meta: `No Show ${avgNoShow.toFixed(1)}%\nCancel ${avgCancel.toFixed(1)}%`,
+      className: "kpi-neutral"
+    },
+    {
+      label: "Avg Abandoned %",
+      value: `${averageMetric(current.regions, "abandonedCallRate").toFixed(1)}%`,
+      meta: "Across selected scope",
+      className: "kpi-neutral"
+    }
+  ];
+
+  if (entityScope === "SpineOne") {
+    cards.push({
+      label: "SpineOne PI NP",
+      value: formatWhole(current.totals?.piNp || 0),
+      meta: "SpineOne only",
+      className: "kpi-neutral"
+    });
+
+    cards.push({
+      label: "SpineOne PI Cash",
+      value: formatCurrency(current.totals?.piCashCollection || 0),
+      meta: "SpineOne only",
+      className: "kpi-neutral"
+    });
+  }
+
+  renderMetricCards("dashboardCards", cards);
+}
+
+function renderDashboardEntities(current, comparison, compareAgainst, entityScope) {
+  const container = byId("dashboardEntities");
+  if (!container) return;
+
+  const currentMap = getEntityMap(current);
+  const comparisonMap = getEntityMap(comparison);
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
+
+  container.innerHTML = `
+    <div class="entityCardGrid">
+      ${entities.map((entity) => {
+        const brand = getBranding(entity);
+        const row = currentMap[entity] || {
+          entity,
+          status: "missing",
+          visitVolume: 0,
+          callVolume: 0,
+          newPatients: 0,
+          surgeries: 0,
+          cashCollected: 0,
+          ptoDays: 0,
+          noShowRate: 0,
+          cancellationRate: 0,
+          abandonedCallRate: 0,
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0,
+          pt: {
+            scheduledVisits: 0,
+            cancellations: 0,
+            noShows: 0,
+            reschedules: 0,
+            totalUnitsBilled: 0,
+            visitsSeen: 0,
+            unitsPerVisit: 0,
+            visitsPerDay: 0
+          }
+        };
+        const prior = comparisonMap[entity] || {
+          visitVolume: 0,
+          callVolume: 0,
+          newPatients: 0,
+          surgeries: 0,
+          pt: { visitsSeen: 0 },
+          visitVolumeBudget: 0,
+          newPatientsBudget: 0
+        };
+
+        const visitPct = buildVariancePct(row.visitVolume, prior.visitVolume);
+        const callPct = buildVariancePct(row.callVolume, prior.callVolume);
+        const npPct = buildVariancePct(row.newPatients, prior.newPatients);
+        const ptPct = buildVariancePct(row.pt?.visitsSeen, prior.pt?.visitsSeen);
+
+        const visitBudgetStatus = getGoalStatus(row.visitVolume, row.visitVolumeBudget);
+        const npBudgetStatus = getGoalStatus(row.newPatients, row.newPatientsBudget);
+        const callStatus = getGoalStatus(row.abandonedCallRate, 10, true);
+        const summary = getPerformanceSummary(row, compareAgainst);
+
+        const visitGoalPct = progressPercent(row.visitVolume, row.visitVolumeBudget);
+        const npGoalPct = progressPercent(row.newPatients, row.newPatientsBudget);
+        const accessPct = accessPercentFromAbandoned(row.abandonedCallRate, 10);
+
+        const fmtPct = (value) => value === null ? "n/a" : `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+
+        const comparisonBlock = compareAgainst === "budget"
+          ? `
+            <div class="entityBudgetGrid">
+              <div class="entityBudgetTile">
+                <div class="entityBudgetLabel">Visit Budget</div>
+                <div class="entityBudgetValue">${formatWhole(row.visitVolumeBudget)}</div>
+                <div class="${getMetricChipClass(visitBudgetStatus)}">
+                  ${visitBudgetStatus === "good" ? "Above Goal" : visitBudgetStatus === "warning" ? "Near Goal" : "Below Goal"}
+                </div>
+                <div class="entityBudgetMeta">Variance ${formatVariance(row.visitVolume, row.visitVolumeBudget)}</div>
+                <div class="entityBudgetMeta">To Goal ${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</div>
+                <div class="entityProgressWrap">
+                  <div class="entityProgressLabelRow">
+                    <span>Goal Progress</span>
+                    <strong>${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</strong>
+                  </div>
+                  <div class="entityProgressTrack">
+                    <div class="entityProgressBar ${visitBudgetStatus === "good" ? "entityProgressGood" : visitBudgetStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${visitGoalPct}%"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="entityBudgetTile">
+                <div class="entityBudgetLabel">NP Budget</div>
+                <div class="entityBudgetValue">${formatWhole(row.newPatientsBudget)}</div>
+                <div class="${getMetricChipClass(npBudgetStatus)}">
+                  ${npBudgetStatus === "good" ? "Above Goal" : npBudgetStatus === "warning" ? "Near Goal" : "Below Goal"}
+                </div>
+                <div class="entityBudgetMeta">Variance ${formatVariance(row.newPatients, row.newPatientsBudget)}</div>
+                <div class="entityBudgetMeta">To Goal ${formatToGoal(row.newPatients, row.newPatientsBudget)}</div>
+                <div class="entityProgressWrap">
+                  <div class="entityProgressLabelRow">
+                    <span>Goal Progress</span>
+                    <strong>${formatToGoal(row.newPatients, row.newPatientsBudget)}</strong>
+                  </div>
+                  <div class="entityProgressTrack">
+                    <div class="entityProgressBar ${npBudgetStatus === "good" ? "entityProgressGood" : npBudgetStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${npGoalPct}%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `
+          : `
+            <div class="entityCompareGrid">
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Visits vs Prior</span>
+                <strong>${fmtPct(visitPct)}</strong>
+              </div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Calls vs Prior</span>
+                <strong>${fmtPct(callPct)}</strong>
+              </div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">NP vs Prior</span>
+                <strong>${fmtPct(npPct)}</strong>
+              </div>
+            </div>
+          `;
+
+        return `
+          <div class="entityCard" style="border-top:4px solid ${brand.accent};">
+            <div class="entityCardHeader">
+              <div class="entityHeaderLeft">
+                <div class="entityStatusRow">
+                  <span class="entityStatusPill">${row.status || "missing"}</span>
+                  <span class="${summary.tone === "good" ? "metricChip metricChipGood" : summary.tone === "warning" ? "metricChip metricChipWarning" : "metricChip metricChipBad"}">${summary.text}</span>
+                </div>
+                <div class="entityTitle">${entity}</div>
+                <div class="entitySubtitle">${brand.fullName}</div>
+              </div>
+
+              <div class="entityLogoWrap">
+                <img src="${brand.logo}" alt="${brand.label}" class="entityLogo" />
+              </div>
+            </div>
+
+            <div class="entityTopMetrics">
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Visits</span>
+                <strong>${formatWhole(row.visitVolume)}</strong>
+              </div>
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">PT Visits</span>
+                <strong>${formatWhole(row.pt?.visitsSeen || 0)}</strong>
+              </div>
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Cash</span>
+                <strong class="entityCurrencyValue">${formatCurrency(row.cashCollected || 0)}</strong>
+              </div>
+            </div>
+
+            ${comparisonBlock}
+
+            <div class="entityHealthRow">
+              <div class="entityHealthItem">
+                <span>No Show</span>
+                <strong>${formatPercent(row.noShowRate)}</strong>
+              </div>
+              <div class="entityHealthItem">
+                <span>Cancel</span>
+                <strong>${formatPercent(row.cancellationRate)}</strong>
+              </div>
+              <div class="entityHealthItem">
+                <span>Abandoned</span>
+                <strong>${formatPercent(row.abandonedCallRate)}</strong>
+              </div>
+            </div>
+
+            <div class="entityAccessPanel">
+              <div class="entityProgressLabelRow">
+                <span>Access Health</span>
+                <strong>${Math.round(accessPct)}%</strong>
+              </div>
+              <div class="entityProgressTrack">
+                <div class="entityProgressBar ${callStatus === "good" ? "entityProgressGood" : callStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${accessPct}%"></div>
+              </div>
+            </div>
+
+            <details class="entityDetailDrawer">
+              <summary>More detail</summary>
+              <div class="entityDetailGrid">
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">Visit Variance</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.visitVolume, row.visitVolumeBudget) : fmtPct(visitPct)}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">PT Variance</div>
+                  <div class="entityDetailValue">${fmtPct(ptPct)}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">PTO Days</div>
+                  <div class="entityDetailValue">${formatWhole(row.ptoDays || 0)}</div>
+                </div>
+              </div>
+            </details>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderDashboardAlerts(current, comparison, entityScope, compareAgainst) {
+  const container = byId("dashboardAlerts");
+  if (!container) return;
+
+  const currentMap = getEntityMap(current);
+  const comparisonMap = getEntityMap(comparison);
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
+  const alerts = [];
+
+  entities.forEach((entity) => {
+    const row = currentMap[entity];
+    const prior = comparisonMap[entity] || {};
+
+    if (!row) {
+      alerts.push({ severity: "warning", text: `${entity} has no saved record in the selected period.` });
+      return;
+    }
+
+    if (normalizeNumber(row.noShowRate) >= 6) {
+      alerts.push({ severity: "bad", text: `${entity} no show rate is elevated at ${normalizeNumber(row.noShowRate).toFixed(1)}%.` });
+    }
+
+    if (normalizeNumber(row.cancellationRate) >= 8) {
+      alerts.push({ severity: "bad", text: `${entity} cancellation rate is elevated at ${normalizeNumber(row.cancellationRate).toFixed(1)}%.` });
+    }
+
+    if (normalizeNumber(row.abandonedCallRate) >= 10) {
+      alerts.push({ severity: "bad", text: `${entity} abandoned call rate is elevated at ${normalizeNumber(row.abandonedCallRate).toFixed(1)}%.` });
+    }
+
+    if (compareAgainst === "priorPeriod") {
+      const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
+      if (visitDiff < -100) {
+        alerts.push({ severity: "warning", text: `${entity} visit volume is down ${Math.abs(visitDiff)} vs prior period.` });
+      }
+    }
+
+    if (compareAgainst === "budget") {
+      const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+      if (normalizeNumber(row.visitVolumeBudget) > 0 && visitGap < 0) {
+        alerts.push({ severity: "warning", text: `${entity} is ${Math.abs(Math.round(visitGap))} visits below budget.` });
+      }
+    }
+  });
+
+  if (!alerts.length) {
+    alerts.push({ severity: "good", text: "No major operational alerts for the selected period." });
+  }
+
+  container.innerHTML = alerts.map((alert) => `
+    <div class="${alert.severity}" style="margin-bottom:8px; padding:12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
+      ${alert.text}
+    </div>
+  `).join("");
+}
+
+function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
+  const container = byId("dashboardWins");
+  if (!container) return;
+
+  const currentMap = getEntityMap(current);
+  const comparisonMap = getEntityMap(comparison);
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
+  const wins = [];
+
+  entities.forEach((entity) => {
+    const row = currentMap[entity];
+    const prior = comparisonMap[entity] || {};
+
+    if (!row) return;
+
+    if (compareAgainst === "budget") {
+      const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
+      if (normalizeNumber(row.visitVolumeBudget) > 0 && visitGap > 0) {
+        wins.push({ severity: "good", text: `${entity} is ${Math.round(visitGap)} visits above budget.` });
+      }
+    } else {
+      const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
+      const ptDiff = normalizeNumber(row.pt?.visitsSeen) - normalizeNumber(prior.pt?.visitsSeen);
+
+      if (visitDiff > 100) {
+        wins.push({ severity: "good", text: `${entity} visits improved by ${Math.round(visitDiff)} vs prior period.` });
+      }
+
+      if (ptDiff > 20) {
+        wins.push({ severity: "good", text: `${entity} PT visits improved by ${Math.round(ptDiff)} vs prior period.` });
+      }
+    }
+
+    if (normalizeNumber(row.abandonedCallRate) > 0 && normalizeNumber(row.abandonedCallRate) < 5) {
+      wins.push({ severity: "good", text: `${entity} has strong call handling with only ${normalizeNumber(row.abandonedCallRate).toFixed(1)}% abandoned calls.` });
+    }
+  });
+
+  if (!wins.length) {
+    wins.push({ severity: "warning", text: "No standout wins for the selected period yet." });
+  }
+
+  container.innerHTML = wins.map((win) => `
+    <div class="${win.severity}" style="margin-bottom:8px; padding:12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
+      ${win.text}
+    </div>
+  `).join("");
+}
+
+function renderDashboardSnapshot(current, entityScope, compareAgainst) {
+  const container = byId("dashboardSnapshot");
+  if (!container) return;
+
+  const rows = (current.regions || []).filter((r) => entityScope === "ALL" || r.entity === entityScope);
+
+  if (!rows.length) {
+    container.innerHTML = "<p>No saved entities found for the selected period.</p>";
+    return;
+  }
+
+  if (compareAgainst === "budget") {
+    container.innerHTML = `
+      <table class="regionTable">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Visits</th>
+            <th>Visit Budget</th>
+            <th>Visit Var</th>
+            <th>PT Visits</th>
+            <th>Cash</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r) => `
+            <tr>
+              <td>${r.entity}</td>
+              <td>${formatWhole(r.visitVolume)}</td>
+              <td>${formatWhole(r.visitVolumeBudget)}</td>
+              <td>${formatVariance(r.visitVolume, r.visitVolumeBudget)}</td>
+              <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
+              <td>${formatCurrency(r.cashCollected || 0)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Visit</th>
+          <th>PT</th>
+          <th>Cash</th>
+          <th>PTO</th>
+          <th>No Show</th>
+          <th>Cancel</th>
+          <th>Abandoned</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr>
+            <td>${r.entity}</td>
+            <td>${formatWhole(r.visitVolume)}</td>
+            <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
+            <td>${formatCurrency(r.cashCollected || 0)}</td>
+            <td>${formatWhole(r.ptoDays || 0)}</td>
+            <td>${formatPercent(r.noShowRate)}</td>
+            <td>${formatPercent(r.cancellationRate)}</td>
+            <td>${formatPercent(r.abandonedCallRate)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
+  const ctx = byId("visitsChart");
+  if (!ctx) return;
+
+  const validWeeks = (weeks || []).filter(Boolean);
+  const labels = validWeeks.map((w) => {
+    const parts = String(w).split("-");
+    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : w;
+  });
+
+  const totalsByWeek = validWeeks.map((week) => {
+    const rows = (currentData.regions || [])
+      .flatMap((region) => region.weekEntries || [])
+      .filter((entry) => entry.weekEnding === week);
+
+    return {
+      visitVolume: rows.reduce((sum, entry) => sum + normalizeNumber(entry.visitVolume), 0),
+      callVolume: rows.reduce((sum, entry) => sum + normalizeNumber(entry.callVolume), 0),
+      newPatients: rows.reduce((sum, entry) => sum + normalizeNumber(entry.newPatients), 0),
+      ptVisits: rows.reduce((sum, entry) => sum + normalizeNumber(entry.ptVisitsSeen), 0),
+      visitVolumeBudget: rows.reduce((sum, entry) => sum + normalizeNumber(entry.visitVolumeBudget), 0)
+    };
+  });
+
+  const visitData = totalsByWeek.map((row) => row.visitVolume);
+  const callData = totalsByWeek.map((row) => row.callVolume);
+  const npData = totalsByWeek.map((row) => row.newPatients);
+  const ptData = totalsByWeek.map((row) => row.ptVisits);
+  const budgetData = totalsByWeek.map((row) => row.visitVolumeBudget);
+
+  if (window.visitsChartInstance) {
+    window.visitsChartInstance.destroy();
+  }
+
+  window.visitsChartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Visits",
+          data: visitData,
+          tension: 0.35,
+          borderColor: "#6cb6ff",
+          backgroundColor: "rgba(108, 182, 255, 0.16)",
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: false
+        },
+        {
+          label: "PT Visits",
+          data: ptData,
+          tension: 0.35,
+          borderColor: "#b49cff",
+          backgroundColor: "rgba(180, 156, 255, 0.16)",
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: false
+        },
+        {
+          label: "Calls",
+          data: callData,
+          tension: 0.35,
+          borderColor: "#f7c62f",
+          backgroundColor: "rgba(247, 198, 47, 0.16)",
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: false,
+          hidden: true
+        },
+        {
+          label: "New Patients",
+          data: npData,
+          tension: 0.35,
+          borderColor: "#7cfc98",
+          backgroundColor: "rgba(124, 252, 152, 0.16)",
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: false
+        },
+        ...(compareAgainst === "budget"
+          ? [
+              {
+                label: "Visit Budget",
+                data: budgetData,
+                tension: 0.35,
+                borderColor: "#ff7d7d",
+                backgroundColor: "rgba(255, 125, 125, 0.12)",
+                borderDash: [6, 6],
+                borderWidth: 2,
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                fill: false
+              }
+            ]
+          : [])
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: "#b8d3e6",
+            boxWidth: 14,
+            boxHeight: 14
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#8eb2c9" },
+          grid: { color: "rgba(255,255,255,0.06)" }
+        },
+        y: {
+          ticks: { color: "#8eb2c9" },
+          grid: { color: "rgba(255,255,255,0.06)" }
+        }
+      }
+    }
   });
 }
 
-async function saveWeek() {
-  const payload = {
-    weekEnding: byId("weekEnding")?.value || "",
-    entity: getSelectedEntity(),
-    data: getFormValues()
+function renderExecutiveCards(summary) {
+  const rows = summary.regions || [];
+  const avg = (key) => {
+    if (!rows.length) return 0;
+    return rows.reduce((sum, r) => sum + normalizeNumber(r[key]), 0) / rows.length;
   };
 
-  setStatus("Saving...");
-  setDebug({
-    selectedEntry: getSelectedEntryLabel(),
-    baseEntity: getSelectedEntity(),
-    payload
-  });
+  renderMetricCards("executiveCards", [
+    { label: "Saved Regions", value: summary.entityCount || 0, className: "kpi-neutral" },
+    { label: "Visit Volume", value: formatWhole(summary.totals?.visitVolume || 0), className: "kpi-neutral" },
+    { label: "PT Visits", value: formatWhole(summary.ptTotals?.visitsSeen || 0), className: "kpi-neutral" },
+    { label: "Cash Collected", value: formatCurrency(summary.totals?.cashCollected || 0), className: "kpi-neutral" },
+    { label: "PTO Days", value: formatWhole(summary.totals?.ptoDays || 0), className: "kpi-neutral" },
+    { label: "Total Surgeries", value: formatWhole(summary.totals?.surgeries || 0), className: "kpi-neutral" },
+    { label: "Call Volume", value: formatWhole(summary.totals?.callVolume || 0), className: "kpi-neutral" },
+    { label: "New Patients", value: formatWhole(summary.totals?.newPatients || 0), className: "kpi-neutral" },
+    { label: "Avg No Show %", value: `${avg("noShowRate").toFixed(1)}%`, className: "kpi-neutral" },
+    { label: "Avg Cancel %", value: `${avg("cancellationRate").toFixed(1)}%`, className: "kpi-neutral" }
+  ]);
 
-  const result = await apiPost("/api/weekly-save", payload);
+  renderMetricCards("executivePtCards", [
+    {
+      label: "PT Summary",
+      value: formatWhole(summary.ptTotals?.visitsSeen || 0),
+      meta: `Units ${formatWhole(summary.ptTotals?.totalUnitsBilled || 0)}\nUnits/Visit ${normalizeNumber(summary.averages?.ptUnitsPerVisit).toFixed(2)}`,
+      className: "kpi-neutral"
+    },
+    {
+      label: "SpineOne PI",
+      value: formatWhole(summary.totals?.piNp || 0),
+      meta: `Cash ${formatCurrency(summary.totals?.piCashCollection || 0)}`,
+      className: "kpi-neutral"
+    }
+  ]);
+}
 
-  setStatus(result.message || "Saved successfully");
-  setDebug({
-    selectedEntry: getSelectedEntryLabel(),
-    baseEntity: getSelectedEntity(),
-    result
-  });
+function renderExecutiveRegions(summary) {
+  const container = byId("executiveRegions");
+  if (!container) return;
 
-  await loadWeek();
+  if (!summary.regions || !summary.regions.length) {
+    container.innerHTML = "<p>No saved regions found for this week.</p>";
+    const ptContainer = byId("executivePtRegions");
+    if (ptContainer) ptContainer.innerHTML = "<p>No PT activity found for this week.</p>";
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Visit</th>
+          <th>Cash</th>
+          <th>PTO</th>
+          <th>Calls</th>
+          <th>New</th>
+          <th>No Show</th>
+          <th>Cancel</th>
+          <th>Abandoned</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${summary.regions.map((r) => `
+          <tr>
+            <td>${r.entity}</td>
+            <td>${formatWhole(r.visitVolume)}</td>
+            <td>${formatCurrency(r.cashCollected || 0)}</td>
+            <td>${formatWhole(r.ptoDays || 0)}</td>
+            <td>${formatWhole(r.callVolume)}</td>
+            <td>${formatWhole(r.newPatients)}</td>
+            <td>${formatPercent(r.noShowRate)}</td>
+            <td>${formatPercent(r.cancellationRate)}</td>
+            <td>${formatPercent(r.abandonedCallRate)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  const ptContainer = byId("executivePtRegions");
+  if (!ptContainer) return;
+
+  ptContainer.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>PT Seen</th>
+          <th>Units</th>
+          <th>Units/Visit</th>
+          <th>PI NP</th>
+          <th>PI Cash</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${summary.regions.map((r) => `
+          <tr>
+            <td>${r.entity}</td>
+            <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
+            <td>${formatWhole(r.pt?.totalUnitsBilled || 0)}</td>
+            <td>${normalizeNumber(r.pt?.unitsPerVisit).toFixed(2)}</td>
+            <td>${formatWhole(r.piNp || 0)}</td>
+            <td>${formatCurrency(r.piCashCollection || 0)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderTrendsCards(result) {
+  const items = result.items || [];
+  const latest = items.length ? items[0] : null;
+  const previous = items.length > 1 ? items[1] : null;
+
+  const formatDelta = (current, prior) => {
+    const c = normalizeNumber(current);
+    const p = normalizeNumber(prior);
+    const diff = c - p;
+    return `${c} (${diff >= 0 ? "+" : ""}${diff})`;
+  };
+
+  renderMetricCards("trendsCards", [
+    { label: "Weeks Loaded", value: items.length, className: "kpi-neutral" },
+    {
+      label: "Latest Visit Volume",
+      value: latest ? formatDelta(latest.visitVolume, previous?.visitVolume) : "-",
+      className: latest ? getTrendClass(latest.visitVolume, previous?.visitVolume) : "kpi-neutral"
+    },
+    {
+      label: "Latest PT Visits",
+      value: latest ? formatDelta(latest.ptVisitsSeen, previous?.ptVisitsSeen) : "-",
+      className: latest ? getTrendClass(latest.ptVisitsSeen, previous?.ptVisitsSeen) : "kpi-neutral"
+    },
+    {
+      label: "Latest Cash",
+      value: latest ? formatCurrency(latest.cashCollected || 0) : "-",
+      className: "kpi-neutral"
+    },
+    {
+      label: "Latest Call Volume",
+      value: latest ? formatDelta(latest.callVolume, previous?.callVolume) : "-",
+      className: latest ? getTrendClass(latest.callVolume, previous?.callVolume) : "kpi-neutral"
+    }
+  ]);
+}
+
+function renderTrendsTable(result) {
+  const wrap = byId("trendsTableWrap");
+  if (!wrap) return;
+
+  const items = result.items || [];
+
+  if (!items.length) {
+    wrap.innerHTML = "<p>No trend data found for this entity.</p>";
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Week Ending</th>
+          <th>Visits</th>
+          <th>PT</th>
+          <th>Cash</th>
+          <th>PTO</th>
+          <th>Calls</th>
+          <th>No Show %</th>
+          <th>Cancel %</th>
+          <th>Abandoned %</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item) => `
+          <tr>
+            <td>${item.weekEnding}</td>
+            <td>${formatWhole(item.visitVolume)}</td>
+            <td>${formatWhole(item.ptVisitsSeen || 0)}</td>
+            <td>${formatCurrency(item.cashCollected || 0)}</td>
+            <td>${formatWhole(item.ptoDays || 0)}</td>
+            <td>${formatWhole(item.callVolume)}</td>
+            <td>${formatPercent(item.noShowRate)}</td>
+            <td>${formatPercent(item.cancellationRate)}</td>
+            <td>${formatPercent(item.abandonedCallRate)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 function hideAllViews() {
@@ -939,6 +1744,7 @@ function showTrendsView() {
   const el = byId("trendsView");
   if (el) el.style.display = "";
   setActiveNav("navTrendsBtn");
+  renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
 }
 
 function showImportView() {
@@ -1145,16 +1951,14 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
         visitVolume: normalizeNumber(region.visitVolume),
         callVolume: normalizeNumber(region.callVolume),
         newPatients: normalizeNumber(region.newPatients),
-        visitVolumeBudget: normalizeNumber(region.budget?.visitVolumeBudget),
-        newPatientsBudget: normalizeNumber(region.budget?.newPatientsBudget),
-        ptScheduledVisits: normalizeNumber(region.pt?.scheduledVisits),
-        ptCancellations: normalizeNumber(region.pt?.cancellations),
-        ptNoShows: normalizeNumber(region.pt?.noShows),
-        ptReschedules: normalizeNumber(region.pt?.reschedules),
-        ptTotalUnitsBilled: normalizeNumber(region.pt?.totalUnitsBilled),
         ptVisitsSeen: normalizeNumber(region.pt?.visitsSeen),
-        ptUnitsPerVisit: normalizeNumber(region.pt?.unitsPerVisit),
-        ptVisitsPerDay: normalizeNumber(region.pt?.visitsPerDay)
+        cashCollected: normalizeNumber(region.cashCollected),
+        ptoDays: normalizeNumber(region.ptoDays),
+        noShowRate: normalizeNumber(region.noShowRate),
+        cancellationRate: normalizeNumber(region.cancellationRate),
+        abandonedCallRate: normalizeNumber(region.abandonedCallRate),
+        visitVolumeBudget: normalizeNumber(region.budget?.visitVolumeBudget),
+        newPatientsBudget: normalizeNumber(region.budget?.newPatientsBudget)
       });
     });
   });
@@ -1269,225 +2073,13 @@ async function loadDashboardDataForWeeks(weeks, entityScope, options = {}) {
         totalUnitsBilled: 0,
         visitsSeen: 0
       },
-      ptAverages: {
-        unitsPerVisit: 0,
-        visitsPerDay: 0
-      },
+      ptAverages: { unitsPerVisit: 0, visitsPerDay: 0 },
       regions: []
     };
   }
 
   const summaries = await Promise.all(validWeeks.map((week) => fetchExecutiveSummaryByWeek(week)));
   return aggregateExecutiveSummaries(summaries, entityScope, options);
-}
-
-function averageMetric(rows, key) {
-  if (!rows || !rows.length) return 0;
-  return rows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0) / rows.length;
-}
-
-function renderDashboardCards(current, comparison, compareAgainst, entityScope) {
-  const ptVisitsCurrent = normalizeNumber(current.ptTotals?.visitsSeen);
-  const ptVisitsComparison = normalizeNumber(comparison.ptTotals?.visitsSeen);
-
-  const avgNoShow = averageMetric(current.regions, "noShowRate");
-  const avgCancel = averageMetric(current.regions, "cancellationRate");
-  const avgCxnsCombined = avgNoShow + avgCancel;
-
-  const visitVariance = normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume);
-
-  const cards = [
-    {
-      label: "Visit Volume",
-      value: formatWhole(current.totals?.visitVolume || 0),
-      meta: compareAgainst === "budget"
-        ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)}`
-        : `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)} vs prior`,
-      className:
-        compareAgainst === "budget"
-          ? getTrendClass(current.totals?.visitVolume, current.budgetTotals?.visitVolumeBudget)
-          : getTrendClass(current.totals?.visitVolume, comparison.totals?.visitVolume)
-    },
-    {
-      label: "PT Visits",
-      value: formatWhole(ptVisitsCurrent),
-      meta: `${ptVisitsCurrent - ptVisitsComparison >= 0 ? "+" : ""}${formatWhole(ptVisitsCurrent - ptVisitsComparison)} vs prior`,
-      className: getTrendClass(ptVisitsCurrent, ptVisitsComparison)
-    },
-    {
-      label: "Cash Collected",
-      value: formatCurrency(current.totals?.cashCollected || 0),
-      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
-      className: "kpi-neutral"
-    },
-    {
-      label: "PTO Days",
-      value: formatWhole(current.totals?.ptoDays || 0),
-      meta: "Across selected scope",
-      className: "kpi-neutral"
-    },
-    {
-      label: "Total Surgeries",
-      value: formatWhole(current.totals?.surgeries || 0),
-      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
-      className: "kpi-neutral"
-    },
-    {
-      label: "Call Volume",
-      value: formatWhole(current.totals?.callVolume || 0),
-      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
-      className: "kpi-neutral"
-    },
-    {
-      label: "Avg CXNS %",
-      value: `${avgCxnsCombined.toFixed(1)}%`,
-      meta: `No Show ${avgNoShow.toFixed(1)}%\nCancel ${avgCancel.toFixed(1)}%`,
-      className: "kpi-neutral"
-    },
-    {
-      label: "Avg Abandoned %",
-      value: `${averageMetric(current.regions, "abandonedCallRate").toFixed(1)}%`,
-      meta: "Across selected scope",
-      className: "kpi-neutral"
-    }
-  ];
-
-  if (entityScope === "SpineOne") {
-    cards.push({
-      label: "SpineOne PI NP",
-      value: formatWhole(current.totals?.piNp || 0),
-      meta: "SpineOne only",
-      className: "kpi-neutral"
-    });
-
-    cards.push({
-      label: "SpineOne PI Cash",
-      value: formatCurrency(current.totals?.piCashCollection || 0),
-      meta: "SpineOne only",
-      className: "kpi-neutral"
-    });
-  }
-
-  renderMetricCards("dashboardCards", cards);
-}
-
-function renderExecutiveCards(summary) {
-  const rows = summary.regions || [];
-  const avg = (key) => {
-    if (!rows.length) return 0;
-    return rows.reduce((sum, r) => sum + normalizeNumber(r[key]), 0) / rows.length;
-  };
-
-  renderMetricCards("executiveCards", [
-    { label: "Saved Regions", value: summary.entityCount || 0, className: "kpi-neutral" },
-    { label: "Visit Volume", value: formatWhole(summary.totals?.visitVolume || 0), className: "kpi-neutral" },
-    { label: "PT Visits", value: formatWhole(summary.ptTotals?.visitsSeen || 0), className: "kpi-neutral" },
-    { label: "Cash Collected", value: formatCurrency(summary.totals?.cashCollected || 0), className: "kpi-neutral" },
-    { label: "PTO Days", value: formatWhole(summary.totals?.ptoDays || 0), className: "kpi-neutral" },
-    { label: "Total Surgeries", value: formatWhole(summary.totals?.surgeries || 0), className: "kpi-neutral" },
-    { label: "Call Volume", value: formatWhole(summary.totals?.callVolume || 0), className: "kpi-neutral" },
-    { label: "New Patients", value: formatWhole(summary.totals?.newPatients || 0), className: "kpi-neutral" },
-    { label: "Avg No Show %", value: `${avg("noShowRate").toFixed(1)}%`, className: "kpi-neutral" },
-    { label: "Avg Cancel %", value: `${avg("cancellationRate").toFixed(1)}%`, className: "kpi-neutral" }
-  ]);
-
-  renderMetricCards("executivePtCards", [
-    {
-      label: "PT Summary",
-      value: formatWhole(summary.ptTotals?.visitsSeen || 0),
-      meta: `Units ${formatWhole(summary.ptTotals?.totalUnitsBilled || 0)}\nUnits/Visit ${normalizeNumber(summary.averages?.ptUnitsPerVisit).toFixed(2)}`,
-      className: "kpi-neutral"
-    },
-    {
-      label: "SpineOne PI",
-      value: formatWhole(summary.totals?.piNp || 0),
-      meta: `Cash ${formatCurrency(summary.totals?.piCashCollection || 0)}`,
-      className: "kpi-neutral"
-    }
-  ]);
-}
-
-function renderExecutiveRegions(summary) {
-  const container = byId("executiveRegions");
-  if (!container) return;
-
-  if (!summary.regions || !summary.regions.length) {
-    container.innerHTML = "<p>No saved regions found for this week.</p>";
-    const ptContainer = byId("executivePtRegions");
-    if (ptContainer) ptContainer.innerHTML = "<p>No PT activity found for this week.</p>";
-    return;
-  }
-
-  container.innerHTML = `
-    <table class="regionTable">
-      <thead>
-        <tr>
-          <th>Entity</th>
-          <th>Visit</th>
-          <th>Cash</th>
-          <th>PTO</th>
-          <th>Calls</th>
-          <th>New</th>
-          <th>No Show</th>
-          <th>Cancel</th>
-          <th>Abandoned</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${summary.regions.map((r) => `
-          <tr>
-            <td>${r.entity}</td>
-            <td>${formatWhole(r.visitVolume)}</td>
-            <td>${formatCurrency(r.cashCollected || 0)}</td>
-            <td>${formatWhole(r.ptoDays || 0)}</td>
-            <td>${formatWhole(r.callVolume)}</td>
-            <td>${formatWhole(r.newPatients)}</td>
-            <td>${formatPercent(r.noShowRate)}</td>
-            <td>${formatPercent(r.cancellationRate)}</td>
-            <td>${formatPercent(r.abandonedCallRate)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
-
-  const ptContainer = byId("executivePtRegions");
-  if (!ptContainer) return;
-
-  ptContainer.innerHTML = `
-    <table class="regionTable">
-      <thead>
-        <tr>
-          <th>Entity</th>
-          <th>PT Seen</th>
-          <th>Units</th>
-          <th>Units/Visit</th>
-          <th>PI NP</th>
-          <th>PI Cash</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${summary.regions.map((r) => `
-          <tr>
-            <td>${r.entity}</td>
-            <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
-            <td>${formatWhole(r.pt?.totalUnitsBilled || 0)}</td>
-            <td>${normalizeNumber(r.pt?.unitsPerVisit).toFixed(2)}</td>
-            <td>${formatWhole(r.piNp || 0)}</td>
-            <td>${formatCurrency(r.piCashCollection || 0)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
-}
-
-async function loadExecutiveSummary() {
-  const weekEnding = byId("executiveWeekEnding")?.value || getDefaultWeekEnding();
-  const result = await apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
-  renderExecutiveCards(result);
-  renderExecutiveRegions(result);
-  setExecutiveDebug(result);
 }
 
 async function loadDashboardLanding() {
@@ -1529,6 +2121,12 @@ async function loadDashboardLanding() {
   }
 
   renderDashboardCards(current, comparison, compareAgainst, entityScope);
+  renderDashboardEntities(current, comparison, compareAgainst, entityScope);
+  renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
+  renderDashboardWins(current, comparison, entityScope, compareAgainst);
+  renderDashboardSnapshot(current, entityScope, compareAgainst);
+  renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
+
   setDashboardDebug({
     compareAgainst,
     entityScope,
@@ -1536,6 +2134,74 @@ async function loadDashboardLanding() {
     current,
     comparison
   });
+}
+
+async function loadExecutiveSummary() {
+  const weekEnding = byId("executiveWeekEnding")?.value || getDefaultWeekEnding();
+  const result = await apiGet(`/api/executive-summary?weekEnding=${encodeURIComponent(weekEnding)}`);
+  renderExecutiveCards(result);
+  renderExecutiveRegions(result);
+  setExecutiveDebug(result);
+}
+
+async function loadWeek() {
+  const weekEnding = byId("weekEnding")?.value || getDefaultWeekEnding();
+  const entity = getSelectedEntity();
+  const selectedLabel = getSelectedEntryLabel();
+
+  renderEntityBrand("entryBrandWrap", entity);
+  setStatus("Loading...");
+
+  const result = await apiGet(
+    `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
+  );
+
+  currentWeekData = result;
+  setFormValues(result.values || result.data || {});
+  renderEntryAuditSummary(result);
+
+  setStatus(`Loaded ${selectedLabel} for ${weekEnding} (${result.status || "saved"})`);
+  setDebug({
+    selectedEntry: selectedLabel,
+    baseEntity: entity,
+    result
+  });
+}
+
+async function saveWeek() {
+  const payload = {
+    weekEnding: byId("weekEnding")?.value || "",
+    entity: getSelectedEntity(),
+    data: getFormValues()
+  };
+
+  setStatus("Saving...");
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    payload
+  });
+
+  const result = await apiPost("/api/weekly-save", payload);
+
+  setStatus(result.message || "Saved successfully");
+  setDebug({
+    selectedEntry: getSelectedEntryLabel(),
+    baseEntity: getSelectedEntity(),
+    result
+  });
+
+  await loadWeek();
+}
+
+async function loadTrends() {
+  const entity = getSelectedTrendsEntity();
+  renderEntityBrand("trendsBrandWrap", entity);
+
+  const result = await apiGet(`/api/trends?entity=${encodeURIComponent(entity)}&mode=recent&weeks=12`);
+  renderTrendsCards(result);
+  renderTrendsTable(result);
+  setTrendsDebug(result);
 }
 
 async function readFileAsBase64(file) {
@@ -1567,9 +2233,7 @@ async function runImport() {
   const fileInput = getWeeklyImportFileInput();
   const file = fileInput?.files && fileInput.files[0];
 
-  if (!file) {
-    throw new Error("Select a workbook file first");
-  }
+  if (!file) throw new Error("Select a workbook file first");
 
   setImportStatus("Reading workbook...");
   const fileBase64 = await readFileAsBase64(file);
@@ -1688,8 +2352,8 @@ function injectUiPolishStyles() {
     }
 
     .summaryCard .value {
-      font-size: clamp(1.7rem, 2.6vw, 2.5rem) !important;
-      line-height: 1.05 !important;
+      font-size: clamp(1.55rem, 2.2vw, 2.5rem) !important;
+      line-height: 1.02 !important;
       letter-spacing: -0.03em;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -1697,16 +2361,335 @@ function injectUiPolishStyles() {
       display: block;
     }
 
-    .summaryCard h3 {
+    .summaryCard h3,
+    .summaryCard div:not(.value):not(h3) {
       min-width: 0;
       overflow-wrap: anywhere;
       word-break: break-word;
     }
 
-    .summaryCard div:not(.value):not(h3) {
-      min-width: 0;
+    .entityCurrencyValue {
+      font-size: clamp(1.05rem, 1.5vw, 1.55rem) !important;
+      line-height: 1.05 !important;
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+
+    .entityCardGrid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+      gap:18px;
+    }
+
+    .entityCard {
+      background:linear-gradient(180deg, rgba(18,56,81,0.98) 0%, rgba(13,43,63,0.98) 100%);
+      border:1px solid rgba(108,182,255,0.12);
+      border-radius:18px;
+      padding:18px;
+      box-shadow:0 12px 24px rgba(0,0,0,0.14);
+      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .entityCard:hover {
+      transform:translateY(-3px);
+      box-shadow:0 18px 34px rgba(0,0,0,0.2);
+      border-color:rgba(108,182,255,0.24);
+    }
+
+    .entityCardHeader {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+      margin-bottom:14px;
+    }
+
+    .entityHeaderLeft {
+      min-width:0;
+      flex:1;
+    }
+
+    .entityStatusRow {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+
+    .entityStatusPill {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(124,252,152,0.14);
+      color:#7CFC98;
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+
+    .metricChip {
+      display:inline-flex;
+      align-items:center;
+      padding:4px 9px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.07);
+      color:#dcebf8;
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.03em;
+    }
+
+    .metricChipGood { background:rgba(124,252,152,0.12); color:#7CFC98; }
+    .metricChipWarning { background:rgba(247,198,47,0.14); color:#f7c62f; }
+    .metricChipBad { background:rgba(255,125,125,0.14); color:#ff9a9a; }
+
+    .entityTitle {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:6px;
+    }
+
+    .entitySubtitle {
+      font-size:12px;
+      color:#b8d3e6;
+      line-height:1.45;
+    }
+
+    .entityLogoWrap {
+      width:88px;
+      height:46px;
+      background:#fff;
+      border-radius:10px;
+      padding:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-shrink:0;
+    }
+
+    .entityLogo {
+      max-width:100%;
+      max-height:100%;
+      object-fit:contain;
+    }
+
+    .entityTopMetrics {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:14px;
+    }
+
+    .entityMetricHero {
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;
+      padding:12px;
+      min-width:0;
+    }
+
+    .entityMetricLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+
+    .entityMetricHero strong {
+      font-size:24px;
+      font-weight:900;
+      line-height:1;
+      letter-spacing:-.03em;
+      display:block;
+      min-width:0;
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
+
+    .entityBudgetGrid,
+    .entityCompareGrid {
+      display:grid;
+      gap:10px;
+      margin-bottom:14px;
+    }
+
+    .entityBudgetGrid {
+      grid-template-columns:repeat(2,1fr);
+    }
+
+    .entityCompareGrid {
+      grid-template-columns:repeat(3,1fr);
+    }
+
+    .entityBudgetTile,
+    .entityMiniStat {
+      background:linear-gradient(180deg, rgba(20,67,97,0.96) 0%, rgba(17,54,79,0.96) 100%);
+      border:1px solid rgba(108,182,255,0.12);
+      border-radius:14px;
+      padding:12px;
+    }
+
+    .entityBudgetLabel,
+    .entityMiniLabel {
+      display:block;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+
+    .entityBudgetValue,
+    .entityMiniStat strong {
+      font-size:22px;
+      font-weight:900;
+      line-height:1;
+      margin-bottom:8px;
+      display:block;
+    }
+
+    .entityBudgetMeta {
+      margin-top:6px;
+      font-size:12px;
+      color:#b8d3e6;
+    }
+
+    .entityProgressWrap {
+      margin-top:10px;
+    }
+
+    .entityProgressLabelRow {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      font-size:12px;
+      color:#b8d3e6;
+      margin-bottom:6px;
+    }
+
+    .entityProgressLabelRow strong {
+      color:#fff;
+      font-size:12px;
+    }
+
+    .entityProgressTrack {
+      width:100%;
+      height:10px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.08);
+      overflow:hidden;
+      position:relative;
+    }
+
+    .entityProgressBar {
+      height:100%;
+      border-radius:999px;
+      transition:width .28s ease;
+      background:linear-gradient(90deg, #6cb6ff, #74f0ff);
+    }
+
+    .entityProgressGood { background:linear-gradient(90deg, #33d17a, #7CFC98); }
+    .entityProgressWarning { background:linear-gradient(90deg, #f1b718, #f7c62f); }
+    .entityProgressBad { background:linear-gradient(90deg, #ff7d7d, #ff4f73); }
+
+    .entityHealthRow {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .entityHealthItem {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+      color:#b8d3e6;
+      font-size:13px;
+    }
+
+    .entityHealthItem strong {
+      color:#fff;
+      font-size:14px;
+    }
+
+    .entityAccessPanel {
+      margin-bottom:12px;
+      padding:12px;
+      border-radius:14px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+
+    .entityDetailDrawer {
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:12px;
+      background:rgba(7,31,51,0.34);
+      overflow:hidden;
+    }
+
+    .entityDetailDrawer summary {
+      cursor:pointer;
+      list-style:none;
+      padding:12px 14px;
+      font-weight:800;
+      font-size:13px;
+      color:#dcebf8;
+    }
+
+    .entityDetailDrawer summary::-webkit-details-marker { display:none; }
+
+    .entityDetailGrid {
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+      padding:0 14px 14px;
+    }
+
+    .entityDetailTile {
+      padding:12px;
+      border-radius:12px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+
+    .entityDetailLabel {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#8eb2c9;
+      margin-bottom:6px;
+      font-weight:800;
+    }
+
+    .entityDetailValue {
+      font-size:18px;
+      font-weight:900;
+      line-height:1.1;
+    }
+
+    @media (max-width: 820px) {
+      .entityTopMetrics,
+      .entityCompareGrid,
+      .entityHealthRow,
+      .entityDetailGrid {
+        grid-template-columns:1fr;
+      }
+      .entityBudgetGrid {
+        grid-template-columns:1fr;
+      }
     }
 
     @media (max-width: 768px) {
@@ -1730,6 +2713,7 @@ function injectUiPolishStyles() {
     setupEntityDropdown();
     setupTrendsEntityDropdown();
     renderForm();
+    injectUiPolishStyles();
 
     const defaultWeek = getDefaultWeekEnding();
 
@@ -1747,20 +2731,29 @@ function injectUiPolishStyles() {
     }
 
     renderEntityBrand("entryBrandWrap", getSelectedEntity());
-    injectUiPolishStyles();
 
     if (byId("entitySelect")) {
       byId("entitySelect").addEventListener("change", async () => {
         renderEntityBrand("entryBrandWrap", getSelectedEntity());
         syncEntryModeVisibility();
         updateDerivedDisplays();
-        await loadWeek();
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
       });
     }
 
     if (byId("weekEnding")) {
       byId("weekEnding").addEventListener("change", async () => {
-        await loadWeek();
+        try {
+          await loadWeek();
+        } catch (e) {
+          setStatus(e.message, true);
+          setDebug(String(e));
+        }
       });
     }
 
@@ -1778,7 +2771,11 @@ function injectUiPolishStyles() {
     if (byId("navDashboardBtn")) {
       byId("navDashboardBtn").addEventListener("click", async () => {
         showDashboardView();
-        await loadDashboardLanding();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
       });
     }
 
@@ -1789,12 +2786,23 @@ function injectUiPolishStyles() {
     if (byId("navExecutiveBtn")) {
       byId("navExecutiveBtn").addEventListener("click", async () => {
         showExecutiveView();
-        await loadExecutiveSummary();
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
       });
     }
 
     if (byId("navTrendsBtn")) {
-      byId("navTrendsBtn").addEventListener("click", showTrendsView);
+      byId("navTrendsBtn").addEventListener("click", async () => {
+        showTrendsView();
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
     }
 
     if (byId("navImportBtn")) {
@@ -1803,32 +2811,63 @@ function injectUiPolishStyles() {
 
     if (byId("loadDashboardBtn")) {
       byId("loadDashboardBtn").addEventListener("click", async () => {
-        await loadDashboardLanding();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
       });
     }
 
     if (byId("dashboardPeriodType")) {
       byId("dashboardPeriodType").addEventListener("change", async () => {
         syncDashboardPeriodUi();
-        await loadDashboardLanding();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
       });
     }
 
     if (byId("dashboardCompareAgainst")) {
       byId("dashboardCompareAgainst").addEventListener("change", async () => {
-        await loadDashboardLanding();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
       });
     }
 
     if (byId("dashboardEntityScope")) {
       byId("dashboardEntityScope").addEventListener("change", async () => {
-        await loadDashboardLanding();
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
       });
     }
 
     if (byId("loadExecutiveBtn")) {
       byId("loadExecutiveBtn").addEventListener("click", async () => {
-        await loadExecutiveSummary();
+        try {
+          await loadExecutiveSummary();
+        } catch (e) {
+          setExecutiveDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsEntitySelect")) {
+      byId("trendsEntitySelect").addEventListener("change", async () => {
+        renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
       });
     }
 
@@ -1850,6 +2889,8 @@ function injectUiPolishStyles() {
     setStatus(error.message || "Failed to load app", true);
     setDebug(String(error));
     setDashboardDebug(String(error));
+    setExecutiveDebug(String(error));
+    setTrendsDebug(String(error));
     setImportDebug(String(error));
   }
 })();
