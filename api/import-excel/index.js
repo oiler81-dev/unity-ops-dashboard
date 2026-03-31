@@ -23,26 +23,10 @@ const REGION_SHEET_TO_ENTITY = {
 };
 
 const CXNS_BLOCKS = [
-  {
-    entity: "MRO",
-    label: "Chicago",
-    start: 0
-  },
-  {
-    entity: "SpineOne",
-    label: "Denver",
-    start: 8
-  },
-  {
-    entity: "NES",
-    label: "Portland",
-    start: 16
-  },
-  {
-    entity: "LAOSS",
-    label: "LA",
-    start: 24
-  }
+  { entity: "MRO", label: "Chicago", start: 0 },
+  { entity: "SpineOne", label: "Denver", start: 8 },
+  { entity: "NES", label: "Portland", start: 16 },
+  { entity: "LAOSS", label: "LA", start: 24 }
 ];
 
 function sheetRows(ws) {
@@ -252,6 +236,10 @@ async function upsertBudgetRecord(table, entity, monthKey, values, meta = {}) {
     monthLabel: values.monthLabel,
     visitBudgetMonthly: values.visitBudgetMonthly ?? 0,
     newPatientsBudgetMonthly: values.newPatientsBudgetMonthly ?? 0,
+    npTargetMonthly: values.npTargetMonthly ?? 0,
+    establishedTargetMonthly: values.establishedTargetMonthly ?? 0,
+    ptTargetMonthly: values.ptTargetMonthly ?? 0,
+    surgeryTargetMonthly: values.surgeryTargetMonthly ?? 0,
     workingDaysInMonth: values.workingDaysInMonth ?? getWorkingDaysForMonth(monthKey),
     source: "workbook-import",
     importedAt: new Date().toISOString(),
@@ -937,7 +925,12 @@ function parseBudgetTargetsFromMainWorkbook(workbook) {
     const ptTarget = toNumber(row[4]) ?? 0;
     const surgeryTarget = toNumber(row[5]) ?? 0;
 
-    const visitBudgetMonthly = npTarget + establishedTarget + ptTarget + surgeryTarget;
+    const includePtInVisitBudget = entity !== "LAOSS";
+
+    const visitBudgetMonthly = includePtInVisitBudget
+      ? npTarget + establishedTarget + ptTarget + surgeryTarget
+      : npTarget + establishedTarget + surgeryTarget;
+
     const newPatientsBudgetMonthly = npTarget;
 
     const key = `${entity}|${monthKey}`;
@@ -947,6 +940,10 @@ function parseBudgetTargetsFromMainWorkbook(workbook) {
       monthLabel,
       visitBudgetMonthly,
       newPatientsBudgetMonthly,
+      npTargetMonthly: npTarget,
+      establishedTargetMonthly: establishedTarget,
+      ptTargetMonthly: ptTarget,
+      surgeryTargetMonthly: surgeryTarget,
       workingDaysInMonth: getWorkingDaysForMonth(monthKey)
     });
   }
