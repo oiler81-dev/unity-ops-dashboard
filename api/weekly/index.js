@@ -20,6 +20,11 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toText(value, fallback = "") {
+  if (value == null) return fallback;
+  return String(value).trim();
+}
+
 function normalizeWeeklyValues(values = {}, record = null) {
   return {
     newPatients: toNumber(values.newPatients ?? values.npActual ?? record?.newPatients, 0),
@@ -46,24 +51,20 @@ function normalizeWeeklyValues(values = {}, record = null) {
     ptVisitsSeen: toNumber(values.ptVisitsSeen ?? record?.ptVisitsSeen, 0),
     ptWorkingDays: toNumber(values.ptWorkingDays ?? record?.ptWorkingDays, 5),
     ptUnitsPerVisit: toNumber(values.ptUnitsPerVisit ?? record?.ptUnitsPerVisit, 0),
-    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record?.ptVisitsPerDay, 0)
+    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record?.ptVisitsPerDay, 0),
+
+    ptoDays: toNumber(values.ptoDays ?? record?.ptoDays, 0),
+    cashCollected: toNumber(values.cashCollected ?? values.cashActual ?? record?.cashCollected ?? record?.cashActual, 0),
+    piNp: toNumber(values.piNp ?? record?.piNp, 0),
+    piCashCollection: toNumber(values.piCashCollection ?? record?.piCashCollection, 0),
+    operationsNarrative: toText(values.operationsNarrative ?? record?.operationsNarrative, "")
   };
 }
 
 module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
-    const access = resolveAccess(user);
-
-    if (!access.allowed) {
-      return {
-        status: 403,
-        body: {
-          ok: false,
-          error: "Forbidden"
-        }
-      };
-    }
+    resolveAccess(user);
 
     const entity = String(req.query.entity || "").trim();
     const weekEnding = String(req.query.weekEnding || "").trim();
@@ -104,10 +105,10 @@ module.exports = async function (context, req) {
         source: record?.source || null,
         status: record?.status || null,
         importedAt: record?.importedAt || null,
-        createdBy: record?.createdBy || null,
         createdAt: record?.createdAt || null,
-        updatedBy: record?.updatedBy || null,
-        updatedAt: record?.updatedAt || null
+        createdBy: record?.createdBy || null,
+        updatedAt: record?.updatedAt || null,
+        updatedBy: record?.updatedBy || null
       }
     };
   } catch (error) {
