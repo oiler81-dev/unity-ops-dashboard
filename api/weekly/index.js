@@ -55,6 +55,16 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
+    if (!access.authenticated) {
+      return {
+        status: 401,
+        body: {
+          ok: false,
+          error: "Authentication required"
+        }
+      };
+    }
+
     const entity = String(req.query.entity || "").trim();
     const weekEnding = String(req.query.weekEnding || "").trim();
 
@@ -64,16 +74,6 @@ module.exports = async function (context, req) {
         body: {
           ok: false,
           error: "Missing entity or weekEnding"
-        }
-      };
-    }
-
-    if (!access.isAdmin && access.entity !== entity) {
-      return {
-        status: 403,
-        body: {
-          ok: false,
-          error: "Forbidden"
         }
       };
     }
@@ -104,7 +104,10 @@ module.exports = async function (context, req) {
         source: record?.source || null,
         status: record?.status || null,
         importedAt: record?.importedAt || null,
-        updatedAt: record?.updatedAt || null
+        updatedAt: record?.updatedAt || null,
+        createdAt: record?.createdAt || null,
+        createdBy: record?.createdBy || null,
+        updatedBy: record?.updatedBy || null
       }
     };
   } catch (error) {
