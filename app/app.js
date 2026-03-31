@@ -39,6 +39,8 @@ const ENTITY_BRANDING = {
 
 let currentUser = null;
 let currentWeekData = null;
+let currentActivityItems = [];
+let currentActivityModalData = null;
 
 async function parseApiResponse(res) {
   const text = await res.text();
@@ -100,6 +102,19 @@ function firstExistingId(ids) {
     if (el) return el;
   }
   return null;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function isPlainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
 }
 
 function setStatus(message, isError = false) {
@@ -804,11 +819,11 @@ function renderEntryAuditSummary(data) {
   }
 
   el.innerHTML = `
-    <strong>Created by:</strong> ${data.createdBy || "n/a"}<br />
-    <strong>Created at:</strong> ${formatDateTime(data.createdAt)}<br />
-    <strong>Last updated by:</strong> ${data.updatedBy || "n/a"}<br />
-    <strong>Last updated at:</strong> ${formatDateTime(data.updatedAt)}<br />
-    <strong>Status:</strong> ${data.status || "saved"}
+    <strong>Created by:</strong> ${escapeHtml(data.createdBy || "n/a")}<br />
+    <strong>Created at:</strong> ${escapeHtml(formatDateTime(data.createdAt))}<br />
+    <strong>Last updated by:</strong> ${escapeHtml(data.updatedBy || "n/a")}<br />
+    <strong>Last updated at:</strong> ${escapeHtml(formatDateTime(data.updatedAt))}<br />
+    <strong>Status:</strong> ${escapeHtml(data.status || "saved")}
   `;
 }
 
@@ -2541,11 +2556,193 @@ async function loadTrends() {
   setTrendsDebug(result);
 }
 
+function getActivityPillClass(eventType) {
+  const type = String(eventType || "").toLowerCase();
+  if (type === "create") return "activity-pill-create";
+  if (type === "update") return "activity-pill-update";
+  if (type === "delete") return "activity-pill-delete";
+  return "activity-pill-update";
+}
+
+function ensureActivityModal() {
+  if (byId("activityChangeModal")) return;
+
+  const modal = document.createElement("div");
+  modal.id = "activityChangeModal";
+  modal.className = "activity-change-modal";
+  modal.style.display = "none";
+  modal.innerHTML = `
+    <div class="activity-change-modal-backdrop" data-close-activity-modal="true"></div>
+    <div class="activity-change-modal-card">
+      <div class="activity-change-modal-header">
+        <div>
+          <div class="sectionEyebrow">Audit Detail</div>
+          <h3 id="activityModalTitle" style="margin:0;">Change Detail</h3>
+        </div>
+        <button id="activityModalCloseBtn" type="button" class="actionBtn">Close</button>
+      </div>
+      <div id="activityModalMeta" class="subtleBanner" style="margin-bottom:16px;"></div>
+      <div class="activity-change-grid">
+        <div class="activity-change-panel">
+          <h4>Before</h4>
+          <div id="activityModalBefore"></div>
+        </div>
+        <div class="activity-change-panel">
+          <h4>After</h4>
+          <div id="activityModalAfter"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeBtn = byId("activityModalCloseBtn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeActivityModal);
+  }
+
+  modal.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target && target.dataset && target.dataset.closeActivityModal === "true") {
+      closeActivityModal();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && modal.style.display !== "none") {
+      closeActivityModal();
+    }
+  });
+}
+
+function closeActivityModal() {
+  const modal = byId("activityChangeModal");
+  if (!modal) return;
+  modal.style.display = "none";
+  currentActivityModalData = null;
+}
+
+function flattenObject(source, prefix = "", result = {}) {
+  if (!isPlainObject(source)) return result;
+
+  Object.keys(source).forEach((key) => {
+    const value = source[key];
+    const nextKey = prefix ? `${prefix}.${key}` : key;
+
+    if (isPlainObject(value)) {
+      flattenObject(value, nextKey, result);
+    } else {
+      result[nextKey] = value;
+    }
+  });
+
+  return result;
+}
+
+function formatFieldValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "—";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (Array.isArray(value)) return value.length ? JSON.stringify(value) : "—";
+  if (isPlainObject(value)) return JSON.stringify(value);
+  return String(value);
+}
+
+function buildChangeRows(beforeObj, afterObj) {
+  const beforeFlat = flattenObject(beforeObj || {});
+  const afterFlat = flattenObject(afterObj || {});
+  const fieldSet = new Set([...Object.keys(beforeFlat), ...Object.keys(afterFlat)]);
+
+  const rows = Array.from(fieldSet)
+    .sort((a, b) => a.localeCompare(b))
+    .map((field) => {
+      const beforeValue = beforeFlat[field];
+      const afterValue = afterFlat[field];
+      const changed = JSON.stringify(beforeValue ?? null) !== JSON.stringify(afterValue ?? null);
+
+      return {
+        field,
+        beforeValue: formatFieldValue(beforeValue),
+        afterValue: formatFieldValue(afterValue),
+        changed
+      };
+    });
+
+  return rows;
+}
+
+function renderChangePanel(containerId, rows, side = "before") {
+  const container = byId(containerId);
+  if (!container) return;
+
+  if (!rows.length) {
+    container.innerHTML = `<div class="subtleBanner">No detail available.</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>${side === "before" ? "Previous Value" : "New Value"}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr class="${row.changed ? "activity-change-row" : ""}">
+            <td>${escapeHtml(row.field)}</td>
+            <td><code>${escapeHtml(side === "before" ? row.beforeValue : row.afterValue)}</code></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function openActivityModal(index) {
+  const item = currentActivityItems[index];
+  if (!item) return;
+
+  ensureActivityModal();
+  currentActivityModalData = item;
+
+  const rows = buildChangeRows(item.before || {}, item.after || {});
+  const changedOnly = rows.filter((row) => row.changed);
+  const rowsToRender = changedOnly.length ? changedOnly : rows;
+
+  const title = byId("activityModalTitle");
+  const meta = byId("activityModalMeta");
+  const modal = byId("activityChangeModal");
+
+  if (title) {
+    title.textContent = `${String(item.eventType || "").toUpperCase()} • ${item.entity || ""} • ${item.weekEnding || ""}`;
+  }
+
+  if (meta) {
+    meta.innerHTML = `
+      <strong>User:</strong> ${escapeHtml(item.actorEmail || "n/a")}<br />
+      <strong>Role:</strong> ${escapeHtml(item.actorRole || "n/a")}<br />
+      <strong>When:</strong> ${escapeHtml(formatDateTime(item.timestamp))}<br />
+      <strong>Summary:</strong> ${escapeHtml(item.summary || "n/a")}
+    `;
+  }
+
+  renderChangePanel("activityModalBefore", rowsToRender, "before");
+  renderChangePanel("activityModalAfter", rowsToRender, "after");
+
+  if (modal) {
+    modal.style.display = "block";
+  }
+}
+
 function renderActivityTable(result) {
   const wrap = byId("activityTableWrap");
   if (!wrap) return;
 
   const items = result.items || [];
+  currentActivityItems = items;
 
   if (!items.length) {
     wrap.innerHTML = "<p>No activity found for the selected filters.</p>";
@@ -2563,23 +2760,33 @@ function renderActivityTable(result) {
           <th>User</th>
           <th>Role</th>
           <th>Summary</th>
+          <th>Detail</th>
         </tr>
       </thead>
       <tbody>
-        ${items.map((item) => `
+        ${items.map((item, index) => `
           <tr>
-            <td>${formatDateTime(item.timestamp)}</td>
-            <td>${item.eventType}</td>
-            <td>${item.entity}</td>
-            <td>${item.weekEnding || ""}</td>
-            <td>${item.actorEmail || ""}</td>
-            <td>${item.actorRole || ""}</td>
-            <td>${item.summary || ""}</td>
+            <td>${escapeHtml(formatDateTime(item.timestamp))}</td>
+            <td><span class="${getActivityPillClass(item.eventType)}">${escapeHtml(item.eventType || "")}</span></td>
+            <td>${escapeHtml(item.entity || "")}</td>
+            <td>${escapeHtml(item.weekEnding || "")}</td>
+            <td>${escapeHtml(item.actorEmail || "")}</td>
+            <td>${escapeHtml(item.actorRole || "")}</td>
+            <td>${escapeHtml(item.summary || "")}</td>
+            <td>
+              <button type="button" class="actionBtn" data-action="view-change" data-index="${index}">View Changes</button>
+            </td>
           </tr>
         `).join("")}
       </tbody>
     </table>
   `;
+
+  wrap.querySelectorAll("button[data-action='view-change']").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openActivityModal(Number(btn.dataset.index));
+    });
+  });
 }
 
 async function loadActivityLog() {
@@ -3015,6 +3222,69 @@ async function runBudgetImport() {
       background:rgba(255,125,125,0.14);
       color:#ff9a9a;
     }
+    .activity-change-modal {
+      position:fixed;
+      inset:0;
+      z-index:9999;
+    }
+    .activity-change-modal-backdrop {
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,0.58);
+      backdrop-filter:blur(3px);
+    }
+    .activity-change-modal-card {
+      position:relative;
+      width:min(1200px, calc(100vw - 32px));
+      max-height:calc(100vh - 32px);
+      overflow:auto;
+      margin:16px auto;
+      background:linear-gradient(180deg, rgba(13,49,73,0.98) 0%, rgba(9,35,53,0.98) 100%);
+      border:1px solid rgba(108,182,255,0.16);
+      border-radius:18px;
+      box-shadow:0 24px 60px rgba(0,0,0,0.36);
+      padding:20px;
+      z-index:2;
+    }
+    .activity-change-modal-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+      margin-bottom:14px;
+    }
+    .activity-change-grid {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+    .activity-change-panel {
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;
+      padding:14px;
+    }
+    .activity-change-panel h4 {
+      margin:0 0 12px;
+      font-size:14px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+      color:#b8d3e6;
+    }
+    .activity-change-row {
+      background:rgba(247,198,47,0.08);
+    }
+    .activity-change-panel code {
+      font-family:Menlo, Monaco, Consolas, monospace;
+      color:#f4f8fc;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+    @media (max-width: 900px) {
+      .activity-change-grid {
+        grid-template-columns:1fr;
+      }
+    }
   `;
   document.head.appendChild(style);
 })();
@@ -3027,6 +3297,7 @@ async function runBudgetImport() {
     setupEntityDropdown();
     setupTrendsEntityDropdown();
     renderForm();
+    ensureActivityModal();
 
     const defaultWeek = getDefaultWeekEnding();
 
