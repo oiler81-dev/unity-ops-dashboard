@@ -466,47 +466,51 @@ function renderForm() {
   if (!container) return;
 
   container.innerHTML = `
-    <div class="formSectionBreak">
-      <h4>Team Inputs</h4>
+    <div class="nonPtField">
+      <div class="formSectionBreak">
+        <h4>Team Inputs</h4>
+      </div>
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="newPatients">New Patients</label>
       <input type="number" id="newPatients" step="1" min="0" />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="surgeries">Surgeries</label>
       <input type="number" id="surgeries" step="1" min="0" />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="established">Established</label>
       <input type="number" id="established" step="1" min="0" />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="noShows">No Shows</label>
       <input type="number" id="noShows" step="1" min="0" />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="cancelled">Cancelled</label>
       <input type="number" id="cancelled" step="1" min="0" />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="totalCalls">Total Calls</label>
       <input type="number" id="totalCalls" step="1" min="0" />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="abandonedCalls">Abandoned Calls</label>
       <input type="number" id="abandonedCalls" step="1" min="0" />
     </div>
 
-    <div class="formSectionBreak" id="ptSectionBreak" style="display:none;">
-      <h4>PT Inputs</h4>
+    <div class="ptField" style="display:none;">
+      <div class="formSectionBreak">
+        <h4>PT Inputs</h4>
+      </div>
     </div>
 
     <div class="ptField" style="display:none;">
@@ -544,28 +548,36 @@ function renderForm() {
       <input type="number" id="ptWorkingDays" step="1" min="1" value="5" />
     </div>
 
-    <div class="formSectionBreak">
-      <h4>Calculated</h4>
+    <div class="nonPtField">
+      <div class="formSectionBreak">
+        <h4>Calculated</h4>
+      </div>
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="visitVolume">Visit Volume</label>
       <input type="number" id="visitVolume" step="1" readonly />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="noShowRate">No Show %</label>
       <input type="number" id="noShowRate" step="0.1" readonly />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="cancellationRate">Cancellation %</label>
       <input type="number" id="cancellationRate" step="0.1" readonly />
     </div>
 
-    <div>
+    <div class="nonPtField">
       <label for="abandonedCallRate">Abandoned Call %</label>
       <input type="number" id="abandonedCallRate" step="0.1" readonly />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <div class="formSectionBreak">
+        <h4>PT Calculated</h4>
+      </div>
     </div>
 
     <div class="ptField" style="display:none;">
@@ -601,45 +613,56 @@ function renderForm() {
     }
   });
 
-  syncPtSectionVisibility();
+  syncEntryModeVisibility();
   updateDerivedDisplays();
 }
 
-function syncPtSectionVisibility() {
-  const showPt = entityHasPtEntry();
-
-  const sectionBreak = byId("ptSectionBreak");
-  if (sectionBreak) {
-    sectionBreak.style.display = showPt ? "" : "none";
-  }
+function syncEntryModeVisibility() {
+  const ptMode = entityHasPtEntry();
 
   document.querySelectorAll(".ptField").forEach((el) => {
-    el.style.display = showPt ? "" : "none";
+    el.style.display = ptMode ? "" : "none";
   });
 
-  if (!showPt) {
+  document.querySelectorAll(".nonPtField").forEach((el) => {
+    el.style.display = ptMode ? "none" : "";
+  });
+
+  if (ptMode) {
+    [
+      "newPatients",
+      "surgeries",
+      "established",
+      "noShows",
+      "cancelled",
+      "totalCalls",
+      "abandonedCalls",
+      "visitVolume",
+      "noShowRate",
+      "cancellationRate",
+      "abandonedCallRate"
+    ].forEach((id) => {
+      const input = byId(id);
+      if (!input) return;
+      input.value = "";
+    });
+  } else {
     [
       "ptScheduledVisits",
       "ptCancellations",
       "ptNoShows",
       "ptReschedules",
       "ptTotalUnitsBilled",
-      "ptVisitsSeen",
-      "ptWorkingDays",
-      "ptUnitsPerVisit",
-      "ptVisitsPerDay"
+      "ptVisitsSeen"
     ].forEach((id) => {
       const input = byId(id);
       if (!input) return;
-
-      if (id === "ptWorkingDays") {
-        input.value = "5";
-      } else if (id === "ptUnitsPerVisit" || id === "ptVisitsPerDay") {
-        input.value = "0.00";
-      } else {
-        input.value = "";
-      }
+      input.value = "";
     });
+
+    if (byId("ptWorkingDays")) byId("ptWorkingDays").value = "5";
+    if (byId("ptUnitsPerVisit")) byId("ptUnitsPerVisit").value = "0.00";
+    if (byId("ptVisitsPerDay")) byId("ptVisitsPerDay").value = "0.00";
   }
 }
 
@@ -720,7 +743,7 @@ function setFormValues(data) {
     input.value = mapped[key] !== null && mapped[key] !== undefined ? mapped[key] : "";
   });
 
-  syncPtSectionVisibility();
+  syncEntryModeVisibility();
   updateDerivedDisplays();
 }
 
@@ -728,13 +751,13 @@ function getFormValues() {
   const ptMode = entityHasPtEntry();
 
   const raw = {
-    newPatients: byId("newPatients")?.value || "",
-    surgeries: byId("surgeries")?.value || "",
-    established: byId("established")?.value || "",
-    noShows: byId("noShows")?.value || "",
-    cancelled: byId("cancelled")?.value || "",
-    totalCalls: byId("totalCalls")?.value || "",
-    abandonedCalls: byId("abandonedCalls")?.value || "",
+    newPatients: ptMode ? 0 : (byId("newPatients")?.value || ""),
+    surgeries: ptMode ? 0 : (byId("surgeries")?.value || ""),
+    established: ptMode ? 0 : (byId("established")?.value || ""),
+    noShows: ptMode ? 0 : (byId("noShows")?.value || ""),
+    cancelled: ptMode ? 0 : (byId("cancelled")?.value || ""),
+    totalCalls: ptMode ? 0 : (byId("totalCalls")?.value || ""),
+    abandonedCalls: ptMode ? 0 : (byId("abandonedCalls")?.value || ""),
 
     ptScheduledVisits: ptMode ? (byId("ptScheduledVisits")?.value || "") : 0,
     ptCancellations: ptMode ? (byId("ptCancellations")?.value || "") : 0,
@@ -992,7 +1015,7 @@ function showEntryView() {
   if (el) el.style.display = "";
   setActiveNav("navEntryBtn");
   renderEntityBrand("entryBrandWrap", getSelectedEntity());
-  syncPtSectionVisibility();
+  syncEntryModeVisibility();
 }
 
 function showExecutiveView() {
@@ -2668,12 +2691,12 @@ async function runBudgetImport() {
 
     renderEntityBrand("entryBrandWrap", getSelectedEntity());
     renderEntityBrand("trendsBrandWrap", byId("trendsEntitySelect") ? getSelectedTrendsEntity() : "");
-    syncPtSectionVisibility();
+    syncEntryModeVisibility();
 
     if (byId("entitySelect")) {
       byId("entitySelect").addEventListener("change", async () => {
         renderEntityBrand("entryBrandWrap", getSelectedEntity());
-        syncPtSectionVisibility();
+        syncEntryModeVisibility();
         updateDerivedDisplays();
         try {
           await loadWeek();
