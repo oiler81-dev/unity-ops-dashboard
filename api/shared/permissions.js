@@ -29,17 +29,15 @@ function resolveAccess(user) {
   return {
     authenticated: true,
     email,
-    role: "guest",
+    role: "user",
     entity: null,
-    allowed: false,
+    allowed: true,
     isAdmin: false
   };
 }
 
 function canAccessEntity(access, entity) {
-  if (!access?.allowed) return false;
-  if (access.isAdmin) return true;
-  return access.entity === entity;
+  return !!access?.authenticated;
 }
 
 module.exports = {
