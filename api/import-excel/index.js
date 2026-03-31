@@ -46,6 +46,11 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function nz(value) {
+  const n = toNumber(value);
+  return n == null ? 0 : n;
+}
+
 function percentToDisplay(value) {
   const n = toNumber(value);
   if (n == null) return null;
@@ -264,7 +269,8 @@ function buildRegionValues(sheetName, rowIndex, row) {
     surgeryActual,
     imagingActual,
     totalCalls,
-    abandonedCalls
+    abandonedCalls,
+    cashActual
   );
 
   const hasUsableDays = daysInPeriod != null && daysInPeriod > 0;
@@ -274,14 +280,7 @@ function buildRegionValues(sheetName, rowIndex, row) {
     return {
       accept: false,
       reason: "days-not-positive",
-      rowIndex,
-      weekNumber,
-      weekEnding,
-      daysInPeriod,
-      monthTag,
-      totalVisits,
-      totalCalls,
-      cashActual
+      rowIndex
     };
   }
 
@@ -289,13 +288,7 @@ function buildRegionValues(sheetName, rowIndex, row) {
     return {
       accept: false,
       reason: "missing-month-tag",
-      rowIndex,
-      weekNumber,
-      weekEnding,
-      daysInPeriod,
-      totalVisits,
-      totalCalls,
-      cashActual
+      rowIndex
     };
   }
 
@@ -303,14 +296,7 @@ function buildRegionValues(sheetName, rowIndex, row) {
     return {
       accept: false,
       reason: "no-real-data",
-      rowIndex,
-      weekNumber,
-      weekEnding,
-      daysInPeriod,
-      monthTag,
-      totalVisits,
-      totalCalls,
-      cashActual
+      rowIndex
     };
   }
 
@@ -452,36 +438,6 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
   const portlandReschedules = toNumber(row[25]);
   const portlandUnits = toNumber(row[26]);
 
-  const byEntity = {
-    MRO: {
-      scheduledVisits: chicagoScheduled ?? 0,
-      cancellations: chicagoCancels ?? 0,
-      noShows: chicagoNoShows ?? 0,
-      reschedules: chicagoReschedules ?? 0,
-      totalUnitsBilled: chicagoUnits ?? 0
-    },
-    SpineOne: {
-      scheduledVisits: denverScheduled ?? 0,
-      cancellations: denverCancels ?? 0,
-      noShows: denverNoShows ?? 0,
-      reschedules: denverReschedules ?? 0,
-      totalUnitsBilled: denverUnits ?? 0
-    },
-    NES: {
-      scheduledVisits: portlandScheduled ?? 0,
-      cancellations: portlandCancels ?? 0,
-      noShows: portlandNoShows ?? 0,
-      reschedules: portlandReschedules ?? 0,
-      totalUnitsBilled: portlandUnits ?? 0
-    }
-  };
-
-  const ptScheduledVisits = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.scheduledVisits), 0);
-  const ptCancellations = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.cancellations), 0);
-  const ptNoShows = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.noShows), 0);
-  const ptReschedules = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.reschedules), 0);
-  const totalUnitsBilled = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.totalUnitsBilled), 0);
-
   const alignedWeek = chicagoWeek === denverWeek && chicagoWeek === portlandWeek;
   const alignedMonthTag =
     !!chicagoMonthTag &&
@@ -489,6 +445,55 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
     chicagoMonthTag === portlandMonthTag;
 
   const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
+
+  const byEntity = {
+    MRO: {
+      scheduledVisits: nz(chicagoScheduled),
+      cancellations: nz(chicagoCancels),
+      noShows: nz(chicagoNoShows),
+      reschedules: nz(chicagoReschedules),
+      totalUnitsBilled: nz(chicagoUnits)
+    },
+    SpineOne: {
+      scheduledVisits: nz(denverScheduled),
+      cancellations: nz(denverCancels),
+      noShows: nz(denverNoShows),
+      reschedules: nz(denverReschedules),
+      totalUnitsBilled: nz(denverUnits)
+    },
+    NES: {
+      scheduledVisits: nz(portlandScheduled),
+      cancellations: nz(portlandCancels),
+      noShows: nz(portlandNoShows),
+      reschedules: nz(portlandReschedules),
+      totalUnitsBilled: nz(portlandUnits)
+    }
+  };
+
+  const ptScheduledVisits =
+    byEntity.MRO.scheduledVisits +
+    byEntity.SpineOne.scheduledVisits +
+    byEntity.NES.scheduledVisits;
+
+  const ptCancellations =
+    byEntity.MRO.cancellations +
+    byEntity.SpineOne.cancellations +
+    byEntity.NES.cancellations;
+
+  const ptNoShows =
+    byEntity.MRO.noShows +
+    byEntity.SpineOne.noShows +
+    byEntity.NES.noShows;
+
+  const ptReschedules =
+    byEntity.MRO.reschedules +
+    byEntity.SpineOne.reschedules +
+    byEntity.NES.reschedules;
+
+  const totalUnitsBilled =
+    byEntity.MRO.totalUnitsBilled +
+    byEntity.SpineOne.totalUnitsBilled +
+    byEntity.NES.totalUnitsBilled;
 
   const hasRealData = hasPositiveNumber(
     ptScheduledVisits,
@@ -525,7 +530,6 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
       accept: false,
       reason: "no-working-days",
       rowIndex,
-      chicagoWeek,
       weekEnding
     };
   }
@@ -535,7 +539,6 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
       accept: false,
       reason: "no-real-data",
       rowIndex,
-      chicagoWeek,
       weekEnding
     };
   }
@@ -557,11 +560,6 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
       byEntity
     }
   };
-}
-
-function normalizeNullNumber(value) {
-  const n = toNumber(value);
-  return n == null ? 0 : n;
 }
 
 async function importPtSheet(sharedTable, ws, workingDaysMap) {
@@ -694,11 +692,7 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "unaligned-week",
-      rowIndex,
-      chicagoWeek,
-      denverWeek,
-      portlandWeek,
-      laWeek
+      rowIndex
     };
   }
 
@@ -706,11 +700,7 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "unaligned-month-tag",
-      rowIndex,
-      chicagoMonthTag,
-      denverMonthTag,
-      portlandMonthTag,
-      laMonthTag
+      rowIndex
     };
   }
 
@@ -718,9 +708,7 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "no-working-days",
-      rowIndex,
-      chicagoWeek,
-      weekEnding
+      rowIndex
     };
   }
 
@@ -728,9 +716,7 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "no-real-data",
-      rowIndex,
-      chicagoWeek,
-      weekEnding
+      rowIndex
     };
   }
 
@@ -804,10 +790,7 @@ async function importHolidaysSheet(referenceTable, ws) {
       if (row.some((v) => v != null && v !== "")) {
         rejectedRows.push({
           rowIndex: r + 1,
-          reason: "missing-required-fields",
-          holidayDate,
-          monthTag: derivedMonthTag,
-          workingDays
+          reason: "missing-required-fields"
         });
       }
       continue;
