@@ -143,6 +143,11 @@ module.exports = async function (context, req) {
         callVolume: toNumber(values.totalCalls ?? values.callVolume ?? record?.callVolume, 0),
         newPatients: toNumber(values.npActual ?? values.newPatients ?? record?.newPatients, 0),
         surgeries: toNumber(values.surgeryActual ?? values.surgeries ?? record?.surgeries, 0),
+        established: toNumber(values.establishedActual ?? values.established ?? record?.established, 0),
+        noShows: toNumber(values.noShows ?? record?.noShows, 0),
+        cancelled: toNumber(values.cancelled ?? record?.cancelled, 0),
+        totalCalls: toNumber(values.totalCalls ?? values.callVolume ?? record?.totalCalls ?? record?.callVolume, 0),
+        abandonedCalls: toNumber(values.abandonedCalls ?? record?.abandonedCalls, 0),
 
         noShowRate: toNumber(
           record?.noShowRate ??
