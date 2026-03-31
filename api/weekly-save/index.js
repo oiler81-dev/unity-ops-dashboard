@@ -1,7 +1,6 @@
 const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
-const { writeAuditEvent, parseJsonSafe } = require("../shared/audit");
 
 const TABLE_NAME = "WeeklyRegionData";
 
@@ -9,6 +8,11 @@ function toNumber(value, fallback = 0) {
   if (value == null || value === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function toText(value, fallback = "") {
+  if (value == null) return fallback;
+  return String(value).trim();
 }
 
 function calculateDerived(values = {}) {
@@ -47,6 +51,12 @@ function calculateDerived(values = {}) {
   const ptVisitsPerDay =
     ptWorkingDays > 0 ? ptVisitsSeen / ptWorkingDays : 0;
 
+  const ptoDays = toNumber(values.ptoDays, 0);
+  const cashCollected = toNumber(values.cashCollected, 0);
+  const piNp = toNumber(values.piNp, 0);
+  const piCashCollection = toNumber(values.piCashCollection, 0);
+  const operationsNarrative = toText(values.operationsNarrative, "");
+
   return {
     newPatients,
     surgeries,
@@ -69,37 +79,13 @@ function calculateDerived(values = {}) {
     ptVisitsSeen,
     ptWorkingDays,
     ptUnitsPerVisit: Number(ptUnitsPerVisit.toFixed(2)),
-    ptVisitsPerDay: Number(ptVisitsPerDay.toFixed(2))
-  };
-}
+    ptVisitsPerDay: Number(ptVisitsPerDay.toFixed(2)),
 
-function buildAuditShape(entity, weekEnding, values, record = {}) {
-  return {
-    entity,
-    weekEnding,
-
-    newPatients: toNumber(values.newPatients ?? record.newPatients, 0),
-    surgeries: toNumber(values.surgeries ?? record.surgeries, 0),
-    established: toNumber(values.established ?? record.established, 0),
-    noShows: toNumber(values.noShows ?? record.noShows, 0),
-    cancelled: toNumber(values.cancelled ?? record.cancelled, 0),
-    totalCalls: toNumber(values.totalCalls ?? record.totalCalls ?? record.callVolume, 0),
-    abandonedCalls: toNumber(values.abandonedCalls ?? record.abandonedCalls, 0),
-    visitVolume: toNumber(values.visitVolume ?? record.visitVolume, 0),
-    callVolume: toNumber(values.callVolume ?? record.callVolume, 0),
-    noShowRate: toNumber(values.noShowRate ?? record.noShowRate, 0),
-    cancellationRate: toNumber(values.cancellationRate ?? record.cancellationRate, 0),
-    abandonedCallRate: toNumber(values.abandonedCallRate ?? record.abandonedCallRate, 0),
-
-    ptScheduledVisits: toNumber(values.ptScheduledVisits ?? record.ptScheduledVisits, 0),
-    ptCancellations: toNumber(values.ptCancellations ?? record.ptCancellations, 0),
-    ptNoShows: toNumber(values.ptNoShows ?? record.ptNoShows, 0),
-    ptReschedules: toNumber(values.ptReschedules ?? record.ptReschedules, 0),
-    ptTotalUnitsBilled: toNumber(values.ptTotalUnitsBilled ?? record.ptTotalUnitsBilled, 0),
-    ptVisitsSeen: toNumber(values.ptVisitsSeen ?? record.ptVisitsSeen, 0),
-    ptWorkingDays: toNumber(values.ptWorkingDays ?? record.ptWorkingDays, 5),
-    ptUnitsPerVisit: toNumber(values.ptUnitsPerVisit ?? record.ptUnitsPerVisit, 0),
-    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record.ptVisitsPerDay, 0)
+    ptoDays,
+    cashCollected,
+    piNp,
+    piCashCollection,
+    operationsNarrative
   };
 }
 
@@ -107,16 +93,6 @@ module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
-
-    if (!access.allowed) {
-      return {
-        status: 403,
-        body: {
-          ok: false,
-          error: "Forbidden"
-        }
-      };
-    }
 
     const entity = String(req.body?.entity || "").trim();
     const weekEnding = String(req.body?.weekEnding || "").trim();
@@ -149,19 +125,8 @@ module.exports = async function (context, req) {
     }
 
     const values = calculateDerived(input);
-    const now = new Date().toISOString();
-    const actorEmail = access.email || user?.userDetails || null;
-    const actorRole = access.role || "user";
 
-    const existingValues = existing ? parseJsonSafe(existing.valuesJson, {}) : {};
-    const beforeAudit = existing
-      ? buildAuditShape(entity, weekEnding, existingValues, existing)
-      : null;
-
-    const createdBy = existing?.createdBy || actorEmail;
-    const createdAt = existing?.createdAt || now;
-
-    const nextRecord = {
+    await table.upsertEntity({
       partitionKey: entity,
       rowKey: weekEnding,
       entity,
@@ -192,28 +157,17 @@ module.exports = async function (context, req) {
       ptUnitsPerVisit: values.ptUnitsPerVisit,
       ptVisitsPerDay: values.ptVisitsPerDay,
 
-      source: "app",
-      createdBy,
-      createdAt,
-      updatedBy: actorEmail,
-      updatedAt: now
-    };
+      ptoDays: values.ptoDays,
+      cashCollected: values.cashCollected,
+      piNp: values.piNp,
+      piCashCollection: values.piCashCollection,
+      operationsNarrative: values.operationsNarrative,
 
-    await table.upsertEntity(nextRecord);
-
-    const afterAudit = buildAuditShape(entity, weekEnding, values, nextRecord);
-
-    await writeAuditEvent({
-      eventType: existing ? "update" : "create",
-      entity,
-      weekEnding,
-      actorEmail,
-      actorRole,
-      before: beforeAudit || {},
-      after: afterAudit,
-      metadata: {
-        source: "weekly-save"
-      }
+      source: existing?.source || "app",
+      createdBy: existing?.createdBy || access.email || user?.userDetails || null,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedBy: access.email || user?.userDetails || null,
+      updatedAt: new Date().toISOString()
     });
 
     return {
@@ -224,11 +178,7 @@ module.exports = async function (context, req) {
         status: "saved",
         entity,
         weekEnding,
-        values,
-        createdBy,
-        createdAt,
-        updatedBy: actorEmail,
-        updatedAt: now
+        values
       }
     };
   } catch (error) {
