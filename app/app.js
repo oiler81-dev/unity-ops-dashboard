@@ -804,12 +804,12 @@ function renderEntryAuditSummary(data) {
   }
 
   el.innerHTML = `
-    <strong>Created by:</strong> ${data.createdBy || "n/a"}<br />
-    <strong>Created at:</strong> ${formatDateTime(data.createdAt)}<br />
-    <strong>Last updated by:</strong> ${data.updatedBy || "n/a"}<br />
-    <strong>Last updated at:</strong> ${formatDateTime(data.updatedAt)}<br />
-    <strong>Status:</strong> ${data.status || "saved"}
-  `;
+      <strong>Created by:</strong> ${data.createdBy || "n/a"}<br />
+      <strong>Created at:</strong> ${formatDateTime(data.createdAt)}<br />
+      <strong>Last updated by:</strong> ${data.updatedBy || "n/a"}<br />
+      <strong>Last updated at:</strong> ${formatDateTime(data.updatedAt)}<br />
+      <strong>Status:</strong> ${data.status || "saved"}
+    `;
 }
 
 function getBranding(entity) {
@@ -1001,18 +1001,10 @@ function showImportView() {
 }
 
 function buildWeekSets() {
-  const periodType = byId("dashboardPeriodType")?.value || "currentWeek";
+  const periodType = byId("dashboardPeriodType")?.value || "lastWeek";
   const anchorWeek = byId("dashboardWeekEnding")?.value || getDefaultWeekEnding();
   const customStart = byId("dashboardCustomStart")?.value || "";
   const customEnd = byId("dashboardCustomEnd")?.value || "";
-
-  if (periodType === "currentWeek") {
-    return {
-      primaryWeeks: [anchorWeek],
-      comparisonWeeks: [getPreviousWeekEnding(anchorWeek)],
-      summary: `Viewing Current Week anchored to ${anchorWeek}`
-    };
-  }
 
   if (periodType === "lastWeek") {
     const primary = getPreviousWeekEnding(anchorWeek);
@@ -1039,20 +1031,29 @@ function buildWeekSets() {
   }
 
   if (periodType === "mtd") {
-    const d = new Date(`${anchorWeek}T12:00:00Z`);
-    d.setUTCDate(1);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    const firstDay = new Date(year, month, 1);
+    const todayIso = new Date(year, month, now.getDate()).toISOString().slice(0, 10);
 
     const primaryWeeks = [];
-    while (d.toISOString().slice(0, 10) <= anchorWeek) {
-      if (d.getUTCDay() === 5) primaryWeeks.push(d.toISOString().slice(0, 10));
-      d.setUTCDate(d.getUTCDate() + 1);
+    const walker = new Date(firstDay);
+
+    while (walker <= now) {
+      if (walker.getDay() === 5) {
+        primaryWeeks.push(new Date(walker).toISOString().slice(0, 10));
+      }
+      walker.setDate(walker.getDate() + 1);
     }
 
     const comparisonWeeks = primaryWeeks.map((w) => addDays(w, -28));
+
     return {
       primaryWeeks,
       comparisonWeeks,
-      summary: `Viewing Month to Date through ${anchorWeek}`
+      summary: `Viewing Month to Date through ${todayIso}`
     };
   }
 
@@ -1099,22 +1100,24 @@ function buildWeekSets() {
     };
   }
 
+  const primary = getPreviousWeekEnding(anchorWeek);
   return {
-    primaryWeeks: [anchorWeek],
-    comparisonWeeks: [getPreviousWeekEnding(anchorWeek)],
-    summary: `Viewing Current Week anchored to ${anchorWeek}`
+    primaryWeeks: [primary],
+    comparisonWeeks: [getPreviousWeekEnding(primary)],
+    summary: `Viewing Last Week anchored from ${anchorWeek}`
   };
 }
 
 function syncDashboardPeriodUi() {
-  const periodType = byId("dashboardPeriodType")?.value || "currentWeek";
+  const periodType = byId("dashboardPeriodType")?.value || "lastWeek";
   const custom = periodType === "custom";
+  const hideAnchor = periodType === "mtd";
 
   const weekWrap = byId("dashboardWeekWrap");
   const startWrap = byId("dashboardCustomStartWrap");
   const endWrap = byId("dashboardCustomEndWrap");
 
-  if (weekWrap) weekWrap.style.display = custom ? "none" : "";
+  if (weekWrap) weekWrap.style.display = custom || hideAnchor ? "none" : "";
   if (startWrap) startWrap.style.display = custom ? "" : "none";
   if (endWrap) endWrap.style.display = custom ? "" : "none";
 }
@@ -1135,9 +1138,7 @@ async function applyDashboardPreset(preset) {
 
   if (!periodType) return;
 
-  if (preset === "currentWeek") {
-    periodType.value = "currentWeek";
-  } else if (preset === "lastWeek") {
+  if (preset === "lastWeek") {
     periodType.value = "lastWeek";
   } else if (preset === "mtd") {
     periodType.value = "mtd";
@@ -1370,6 +1371,17 @@ function renderDashboardCards(current, comparison, compareAgainst) {
   const ptVisitsCurrent = normalizeNumber(current.ptTotals?.visitsSeen);
   const ptVisitsComparison = normalizeNumber(comparison.ptTotals?.visitsSeen);
 
+  const avgNoShow = averageMetric(current.regions, "noShowRate");
+  const avgCancel = averageMetric(current.regions, "cancellationRate");
+  const avgCxnsCombined = avgNoShow + avgCancel;
+
+  const cxnsMeta = `
+<details class="metricDetails">
+  <summary>View split</summary>
+  <div>No Show ${avgNoShow.toFixed(1)}%</div>
+  <div>Cancel ${avgCancel.toFixed(1)}%</div>
+</details>`;
+
   if (compareAgainst === "budget") {
     const visitActual = normalizeNumber(current.totals?.visitVolume);
     const visitBudget = normalizeNumber(current.budgetTotals?.visitVolumeBudget);
@@ -1401,7 +1413,7 @@ Avg Units/Visit ${normalizeNumber(current.ptAverages?.unitsPerVisit).toFixed(2)}
       {
         label: "Call Volume",
         value: formatWhole(current.totals?.callVolume || 0),
-        meta: "Budget n/a\nVariance n/a\nTo Goal n/a",
+        meta: "Actual only",
         className: "kpi-neutral"
       },
       {
@@ -1413,21 +1425,15 @@ To Goal ${formatToGoal(npActual, npBudget)}`,
         className: getTrendClass(npActual, npBudget)
       },
       {
-        label: "Avg No Show %",
-        value: formatPercent(averageMetric(current.regions, "noShowRate")),
-        meta: "Actual only",
-        className: "kpi-neutral"
-      },
-      {
-        label: "Avg Cancel %",
-        value: formatPercent(averageMetric(current.regions, "cancellationRate")),
-        meta: "Actual only",
+        label: "Avg CXNS %",
+        value: `${avgCxnsCombined.toFixed(1)}%`,
+        meta: cxnsMeta,
         className: "kpi-neutral"
       },
       {
         label: "Avg Abandoned %",
         value: formatPercent(averageMetric(current.regions, "abandonedCallRate")),
-        meta: "Actual only",
+        meta: "Across saved entities",
         className: "kpi-neutral"
       }
     ];
@@ -1480,15 +1486,9 @@ To Goal ${formatToGoal(npActual, npBudget)}`,
       className: getTrendClass(npCurrent, npComparison)
     },
     {
-      label: "Avg No Show %",
-      value: `${averageMetric(current.regions, "noShowRate").toFixed(1)}%`,
-      meta: "Across saved entities",
-      className: "kpi-neutral"
-    },
-    {
-      label: "Avg Cancel %",
-      value: `${averageMetric(current.regions, "cancellationRate").toFixed(1)}%`,
-      meta: "Across saved entities",
+      label: "Avg CXNS %",
+      value: `${avgCxnsCombined.toFixed(1)}%`,
+      meta: cxnsMeta,
       className: "kpi-neutral"
     },
     {
@@ -2252,27 +2252,18 @@ function renderExecutiveCards(summary) {
 
   renderMetricCards("executivePtCards", [
     {
-      label: "PT Visits",
+      label: "PT Snapshot",
       value: formatWhole(summary.ptTotals?.visitsSeen || 0),
-      meta: `Scheduled ${formatWhole(summary.ptTotals?.scheduledVisits || 0)}`,
+      meta: `Units ${formatWhole(summary.ptTotals?.totalUnitsBilled || 0)}
+Units/Visit ${normalizeNumber(summary.ptAverages?.unitsPerVisit).toFixed(2)}`,
       className: "kpi-neutral"
     },
     {
-      label: "PT Units",
-      value: formatWhole(summary.ptTotals?.totalUnitsBilled || 0),
-      meta: `Avg Units/Visit ${normalizeNumber(summary.ptAverages?.unitsPerVisit).toFixed(2)}`,
-      className: "kpi-neutral"
-    },
-    {
-      label: "PT No Shows",
-      value: formatWhole(summary.ptTotals?.noShows || 0),
-      meta: `Cancels ${formatWhole(summary.ptTotals?.cancellations || 0)}`,
-      className: "kpi-neutral"
-    },
-    {
-      label: "PT Reschedules",
-      value: formatWhole(summary.ptTotals?.reschedules || 0),
-      meta: `Avg Visits/Day ${normalizeNumber(summary.ptAverages?.visitsPerDay).toFixed(2)}`,
+      label: "PT Scheduling",
+      value: formatWhole(summary.ptTotals?.scheduledVisits || 0),
+      meta: `No Shows ${formatWhole(summary.ptTotals?.noShows || 0)}
+Cancels ${formatWhole(summary.ptTotals?.cancellations || 0)}
+Reschedules ${formatWhole(summary.ptTotals?.reschedules || 0)}`,
       className: "kpi-neutral"
     }
   ]);
@@ -3071,6 +3062,29 @@ async function runBudgetImport() {
   document.head.appendChild(style);
 })();
 
+(function injectMetricDetailsStyles() {
+  if (document.getElementById("metric-details-style-block")) return;
+
+  const style = document.createElement("style");
+  style.id = "metric-details-style-block";
+  style.textContent = `
+    .metricDetails {
+      margin-top: 6px;
+    }
+    .metricDetails summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #dcebf8;
+      outline: none;
+    }
+    .metricDetails div {
+      margin-top: 4px;
+      color: #b8d3e6;
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
 (async function init() {
   try {
     currentUser = await apiGet("/api/me");
@@ -3089,6 +3103,15 @@ async function runBudgetImport() {
     if (byId("executiveWeekEnding")) byId("executiveWeekEnding").value = defaultWeek;
     if (byId("trendsStartDate")) byId("trendsStartDate").value = getDateWeeksAgo(12, defaultWeek);
     if (byId("trendsEndDate")) byId("trendsEndDate").value = defaultWeek;
+
+    const dashboardPeriodType = byId("dashboardPeriodType");
+    if (dashboardPeriodType) {
+      const currentWeekOption = dashboardPeriodType.querySelector('option[value="currentWeek"]');
+      if (currentWeekOption) currentWeekOption.remove();
+      dashboardPeriodType.value = "lastWeek";
+    }
+
+    document.querySelectorAll('.quickPresetPill[data-preset="currentWeek"]').forEach((btn) => btn.remove());
 
     if (byId("trendsRangeMode")) syncTrendsRangeUi();
     if (byId("dashboardPeriodType")) syncDashboardPeriodUi();
@@ -3234,7 +3257,8 @@ async function runBudgetImport() {
 
     if (byId("dashboardWeekEnding")) {
       byId("dashboardWeekEnding").addEventListener("change", async () => {
-        if ((byId("dashboardPeriodType")?.value || "currentWeek") !== "custom") {
+        const mode = byId("dashboardPeriodType")?.value || "lastWeek";
+        if (mode !== "custom" && mode !== "mtd") {
           try {
             await loadDashboardLanding();
           } catch (e) {
@@ -3246,7 +3270,7 @@ async function runBudgetImport() {
 
     if (byId("dashboardCustomStart")) {
       byId("dashboardCustomStart").addEventListener("change", async () => {
-        if ((byId("dashboardPeriodType")?.value || "currentWeek") === "custom") {
+        if ((byId("dashboardPeriodType")?.value || "lastWeek") === "custom") {
           try {
             await loadDashboardLanding();
           } catch (e) {
@@ -3258,7 +3282,7 @@ async function runBudgetImport() {
 
     if (byId("dashboardCustomEnd")) {
       byId("dashboardCustomEnd").addEventListener("change", async () => {
-        if ((byId("dashboardPeriodType")?.value || "currentWeek") === "custom") {
+        if ((byId("dashboardPeriodType")?.value || "lastWeek") === "custom") {
           try {
             await loadDashboardLanding();
           } catch (e) {
@@ -3420,7 +3444,7 @@ async function runBudgetImport() {
       });
     }
 
-    setActiveQuickPreset("currentWeek");
+    setActiveQuickPreset("lastWeek");
     showDashboardView();
     await loadDashboardLanding();
   } catch (error) {
