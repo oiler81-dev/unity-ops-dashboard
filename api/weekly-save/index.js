@@ -32,6 +32,20 @@ function calculateDerived(values = {}) {
   const abandonedCallRate =
     totalCalls > 0 ? (abandonedCalls / totalCalls) * 100 : 0;
 
+  const ptScheduledVisits = toNumber(values.ptScheduledVisits, 0);
+  const ptCancellations = toNumber(values.ptCancellations, 0);
+  const ptNoShows = toNumber(values.ptNoShows, 0);
+  const ptReschedules = toNumber(values.ptReschedules, 0);
+  const ptTotalUnitsBilled = toNumber(values.ptTotalUnitsBilled, 0);
+  const ptVisitsSeen = toNumber(values.ptVisitsSeen, 0);
+  const ptWorkingDays = Math.max(1, toNumber(values.ptWorkingDays, 5));
+
+  const ptUnitsPerVisit =
+    ptVisitsSeen > 0 ? ptTotalUnitsBilled / ptVisitsSeen : 0;
+
+  const ptVisitsPerDay =
+    ptWorkingDays > 0 ? ptVisitsSeen / ptWorkingDays : 0;
+
   return {
     newPatients,
     surgeries,
@@ -44,7 +58,17 @@ function calculateDerived(values = {}) {
     callVolume,
     noShowRate: Number(noShowRate.toFixed(2)),
     cancellationRate: Number(cancellationRate.toFixed(2)),
-    abandonedCallRate: Number(abandonedCallRate.toFixed(2))
+    abandonedCallRate: Number(abandonedCallRate.toFixed(2)),
+
+    ptScheduledVisits,
+    ptCancellations,
+    ptNoShows,
+    ptReschedules,
+    ptTotalUnitsBilled,
+    ptVisitsSeen,
+    ptWorkingDays,
+    ptUnitsPerVisit: Number(ptUnitsPerVisit.toFixed(2)),
+    ptVisitsPerDay: Number(ptVisitsPerDay.toFixed(2))
   };
 }
 
@@ -107,6 +131,7 @@ module.exports = async function (context, req) {
       weekEnding,
       status: nextStatus,
       valuesJson: JSON.stringify(values),
+
       visitVolume: values.visitVolume,
       callVolume: values.callVolume,
       newPatients: values.newPatients,
@@ -119,6 +144,17 @@ module.exports = async function (context, req) {
       noShowRate: values.noShowRate,
       cancellationRate: values.cancellationRate,
       abandonedCallRate: values.abandonedCallRate,
+
+      ptScheduledVisits: values.ptScheduledVisits,
+      ptCancellations: values.ptCancellations,
+      ptNoShows: values.ptNoShows,
+      ptReschedules: values.ptReschedules,
+      ptTotalUnitsBilled: values.ptTotalUnitsBilled,
+      ptVisitsSeen: values.ptVisitsSeen,
+      ptWorkingDays: values.ptWorkingDays,
+      ptUnitsPerVisit: values.ptUnitsPerVisit,
+      ptVisitsPerDay: values.ptVisitsPerDay,
+
       source: "app",
       updatedBy: access.email || user?.userDetails || null,
       updatedAt: new Date().toISOString()
