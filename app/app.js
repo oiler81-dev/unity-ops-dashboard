@@ -1270,7 +1270,7 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
       value: formatWhole(current.totals?.visitVolume || 0),
       meta: compareAgainst === "budget"
         ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)}`
-        : `${formatWhole(current.totals?.visitVolume || 0) - formatWhole(comparison.totals?.visitVolume || 0)} vs prior`,
+        : `${normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume) >= 0 ? "+" : ""}${formatWhole(normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume))} vs prior`,
       className:
         compareAgainst === "budget"
           ? getTrendClass(current.totals?.visitVolume, current.budgetTotals?.visitVolumeBudget)
@@ -1279,7 +1279,7 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
     {
       label: "PT Visits",
       value: formatWhole(ptVisitsCurrent),
-      meta: `${ptVisitsCurrent - ptVisitsComparison >= 0 ? "+" : ""}${ptVisitsCurrent - ptVisitsComparison} vs prior`,
+      meta: `${ptVisitsCurrent - ptVisitsComparison >= 0 ? "+" : ""}${formatWhole(ptVisitsCurrent - ptVisitsComparison)} vs prior`,
       className: getTrendClass(ptVisitsCurrent, ptVisitsComparison)
     },
     {
@@ -1320,7 +1320,7 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
     }
   ];
 
-  if (entityScope === "ALL" || entityScope === "SpineOne") {
+  if (entityScope === "SpineOne") {
     cards.push({
       label: "SpineOne PI NP",
       value: formatWhole(current.totals?.piNp || 0),
@@ -1559,6 +1559,64 @@ async function runImport() {
   setImportDebug(result);
 }
 
+function injectUiPolishStyles() {
+  if (document.getElementById("ops-dashboard-ui-polish")) return;
+
+  const style = document.createElement("style");
+  style.id = "ops-dashboard-ui-polish";
+  style.textContent = `
+    textarea {
+      width: 100%;
+      padding: 11px 12px;
+      box-sizing: border-box;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+      color: #ffffff;
+      resize: vertical;
+    }
+
+    .narrativePromptBox {
+      margin-bottom: 10px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: #b8d3e6;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .summaryCard {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .summaryCard .value {
+      font-size: clamp(1.7rem, 2.6vw, 2.5rem) !important;
+      line-height: 1.05 !important;
+      letter-spacing: -0.03em;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      max-width: 100%;
+      display: block;
+    }
+
+    .summaryCard h3 {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .summaryCard div:not(.value):not(h3) {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 (async function init() {
   try {
     currentUser = await apiGet("/api/me");
@@ -1584,6 +1642,7 @@ async function runImport() {
     }
 
     renderEntityBrand("entryBrandWrap", getSelectedEntity());
+    injectUiPolishStyles();
 
     if (byId("entitySelect")) {
       byId("entitySelect").addEventListener("change", async () => {
@@ -1679,31 +1738,6 @@ async function runImport() {
         }
       });
     }
-
-    const style = document.createElement("style");
-    style.textContent = `
-      textarea {
-        width: 100%;
-        padding: 11px 12px;
-        box-sizing: border-box;
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 12px;
-        background: rgba(255,255,255,0.06);
-        color: #ffffff;
-        resize: vertical;
-      }
-      .narrativePromptBox {
-        margin-bottom: 10px;
-        padding: 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(255,255,255,0.08);
-        background: rgba(255,255,255,0.04);
-        color: #b8d3e6;
-        font-size: 12px;
-        line-height: 1.6;
-      }
-    `;
-    document.head.appendChild(style);
 
     showDashboardView();
     await loadDashboardLanding();
