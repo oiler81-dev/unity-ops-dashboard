@@ -39,8 +39,6 @@ const ENTITY_BRANDING = {
 
 let currentUser = null;
 let currentWeekData = null;
-let currentActivityItems = [];
-let currentActivityModalData = null;
 
 async function parseApiResponse(res) {
   const text = await res.text();
@@ -102,19 +100,6 @@ function firstExistingId(ids) {
     if (el) return el;
   }
   return null;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function isPlainObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value);
 }
 
 function setStatus(message, isError = false) {
@@ -819,11 +804,11 @@ function renderEntryAuditSummary(data) {
   }
 
   el.innerHTML = `
-    <strong>Created by:</strong> ${escapeHtml(data.createdBy || "n/a")}<br />
-    <strong>Created at:</strong> ${escapeHtml(formatDateTime(data.createdAt))}<br />
-    <strong>Last updated by:</strong> ${escapeHtml(data.updatedBy || "n/a")}<br />
-    <strong>Last updated at:</strong> ${escapeHtml(formatDateTime(data.updatedAt))}<br />
-    <strong>Status:</strong> ${escapeHtml(data.status || "saved")}
+    <strong>Created by:</strong> ${data.createdBy || "n/a"}<br />
+    <strong>Created at:</strong> ${formatDateTime(data.createdAt)}<br />
+    <strong>Last updated by:</strong> ${data.updatedBy || "n/a"}<br />
+    <strong>Last updated at:</strong> ${formatDateTime(data.updatedAt)}<br />
+    <strong>Status:</strong> ${data.status || "saved"}
   `;
 }
 
@@ -1293,18 +1278,42 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
         newPatientsBudget: 0
       };
 
+  const ptTotals = {
+    scheduledVisits: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.scheduledVisits), 0),
+    cancellations: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.cancellations), 0),
+    noShows: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.noShows), 0),
+    reschedules: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.reschedules), 0),
+    totalUnitsBilled: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.totalUnitsBilled), 0),
+    visitsSeen: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.visitsSeen), 0)
+  };
+
+  const ptEntityRows = regions.filter((r) => {
+    const pt = r.pt || {};
+    return (
+      normalizeNumber(pt.scheduledVisits) > 0 ||
+      normalizeNumber(pt.visitsSeen) > 0 ||
+      normalizeNumber(pt.totalUnitsBilled) > 0 ||
+      normalizeNumber(pt.cancellations) > 0 ||
+      normalizeNumber(pt.noShows) > 0 ||
+      normalizeNumber(pt.reschedules) > 0
+    );
+  });
+
+  const ptAverages = {
+    unitsPerVisit: ptEntityRows.length
+      ? ptEntityRows.reduce((sum, r) => sum + normalizeNumber(r.pt?.unitsPerVisit), 0) / ptEntityRows.length
+      : 0,
+    visitsPerDay: ptEntityRows.length
+      ? ptEntityRows.reduce((sum, r) => sum + normalizeNumber(r.pt?.visitsPerDay), 0) / ptEntityRows.length
+      : 0
+  };
+
   return {
     entityCount: regions.length,
     totals,
     budgetTotals,
-    ptTotals: {
-      scheduledVisits: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.scheduledVisits), 0),
-      cancellations: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.cancellations), 0),
-      noShows: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.noShows), 0),
-      reschedules: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.reschedules), 0),
-      totalUnitsBilled: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.totalUnitsBilled), 0),
-      visitsSeen: regions.reduce((sum, r) => sum + normalizeNumber(r.pt?.visitsSeen), 0)
-    },
+    ptTotals,
+    ptAverages,
     regions
   };
 }
@@ -1324,6 +1333,10 @@ async function loadDashboardDataForWeeks(weeks, entityScope, options = {}) {
         reschedules: 0,
         totalUnitsBilled: 0,
         visitsSeen: 0
+      },
+      ptAverages: {
+        unitsPerVisit: 0,
+        visitsPerDay: 0
       },
       regions: []
     };
@@ -1354,6 +1367,9 @@ function buildVariancePct(current, comparison) {
 }
 
 function renderDashboardCards(current, comparison, compareAgainst) {
+  const ptVisitsCurrent = normalizeNumber(current.ptTotals?.visitsSeen);
+  const ptVisitsComparison = normalizeNumber(comparison.ptTotals?.visitsSeen);
+
   if (compareAgainst === "budget") {
     const visitActual = normalizeNumber(current.totals?.visitVolume);
     const visitBudget = normalizeNumber(current.budgetTotals?.visitVolumeBudget);
@@ -1368,6 +1384,13 @@ function renderDashboardCards(current, comparison, compareAgainst) {
 Variance ${formatVariance(visitActual, visitBudget)} (${formatVariancePct(visitActual, visitBudget)})
 To Goal ${formatToGoal(visitActual, visitBudget)}`,
         className: getTrendClass(visitActual, visitBudget)
+      },
+      {
+        label: "PT Visits",
+        value: formatWhole(ptVisitsCurrent),
+        meta: `Units ${formatWhole(current.ptTotals?.totalUnitsBilled || 0)}
+Avg Units/Visit ${normalizeNumber(current.ptAverages?.unitsPerVisit).toFixed(2)}`,
+        className: "kpi-neutral"
       },
       {
         label: "Total Surgeries",
@@ -1433,6 +1456,12 @@ To Goal ${formatToGoal(npActual, npBudget)}`,
       className: getTrendClass(visitCurrent, visitComparison)
     },
     {
+      label: "PT Visits",
+      value: ptVisitsCurrent,
+      meta: `${ptVisitsCurrent - ptVisitsComparison >= 0 ? "+" : ""}${ptVisitsCurrent - ptVisitsComparison} vs prior period`,
+      className: getTrendClass(ptVisitsCurrent, ptVisitsComparison)
+    },
+    {
       label: "Total Surgeries",
       value: surgeriesCurrent,
       meta: `${surgeriesCurrent - surgeriesComparison >= 0 ? "+" : ""}${surgeriesCurrent - surgeriesComparison} vs prior period`,
@@ -1453,19 +1482,19 @@ To Goal ${formatToGoal(npActual, npBudget)}`,
     {
       label: "Avg No Show %",
       value: `${averageMetric(current.regions, "noShowRate").toFixed(1)}%`,
-      meta: "Across approved entities",
+      meta: "Across saved entities",
       className: "kpi-neutral"
     },
     {
       label: "Avg Cancel %",
       value: `${averageMetric(current.regions, "cancellationRate").toFixed(1)}%`,
-      meta: "Across approved entities",
+      meta: "Across saved entities",
       className: "kpi-neutral"
     },
     {
       label: "Avg Abandoned %",
       value: `${averageMetric(current.regions, "abandonedCallRate").toFixed(1)}%`,
-      meta: "Across approved entities",
+      meta: "Across saved entities",
       className: "kpi-neutral"
     }
   ];
@@ -1496,7 +1525,8 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           cancellationRate: 0,
           abandonedCallRate: 0,
           visitVolumeBudget: 0,
-          newPatientsBudget: 0
+          newPatientsBudget: 0,
+          pt: {}
         };
         const prior = comparisonMap[entity] || {
           visitVolume: 0,
@@ -1504,7 +1534,8 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           newPatients: 0,
           surgeries: 0,
           visitVolumeBudget: 0,
-          newPatientsBudget: 0
+          newPatientsBudget: 0,
+          pt: {}
         };
 
         const visitPct = buildVariancePct(row.visitVolume, prior.visitVolume);
@@ -1652,10 +1683,8 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
                   <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.newPatients, row.newPatientsBudget) : fmtPct(npPct)}</div>
                 </div>
                 <div class="entityDetailTile">
-                  <div class="entityDetailLabel">Access Signal</div>
-                  <div class="${getMetricChipClass(callStatus)}">
-                    ${callStatus === "good" ? "Healthy" : callStatus === "warning" ? "Watch" : "Needs Action"}
-                  </div>
+                  <div class="entityDetailLabel">PT Visits</div>
+                  <div class="entityDetailValue">${formatWhole(row.pt?.visitsSeen || 0)}</div>
                 </div>
               </div>
             </details>
@@ -1778,6 +1807,7 @@ function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
       const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
       const npDiff = normalizeNumber(row.newPatients) - normalizeNumber(prior.newPatients);
       const callDiff = normalizeNumber(row.callVolume) - normalizeNumber(prior.callVolume);
+      const ptDiff = normalizeNumber(row.pt?.visitsSeen) - normalizeNumber(prior.pt?.visitsSeen);
 
       if (visitDiff > 100) {
         wins.push({
@@ -1797,6 +1827,13 @@ function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
         wins.push({
           severity: "good",
           text: `${entity} call volume increased by ${Math.round(callDiff)} vs prior period.`
+        });
+      }
+
+      if (ptDiff > 0) {
+        wins.push({
+          severity: "good",
+          text: `${entity} PT visits improved by ${Math.round(ptDiff)} vs prior period.`
         });
       }
     }
@@ -1854,6 +1891,7 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
             <th>New Budget</th>
             <th>New Var</th>
             <th>Calls</th>
+            <th>PT Visits</th>
           </tr>
         </thead>
         <tbody>
@@ -1867,6 +1905,7 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
               <td>${formatWhole(r.newPatientsBudget)}</td>
               <td>${formatVariance(r.newPatients, r.newPatientsBudget)}</td>
               <td>${formatWhole(r.callVolume)}</td>
+              <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -1883,6 +1922,7 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
           <th>Visit</th>
           <th>Calls</th>
           <th>New</th>
+          <th>PT Visits</th>
           <th>No Show</th>
           <th>Cancel</th>
           <th>Abandoned</th>
@@ -1896,6 +1936,7 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
             <td>${formatWhole(r.visitVolume)}</td>
             <td>${formatWhole(r.callVolume)}</td>
             <td>${formatWhole(r.newPatients)}</td>
+            <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
             <td>${formatPercent(r.noShowRate)}</td>
             <td>${formatPercent(r.cancellationRate)}</td>
             <td>${formatPercent(r.abandonedCallRate)}</td>
@@ -2142,12 +2183,14 @@ async function loadDashboardLanding() {
       },
       budgetTotals: current.budgetTotals,
       ptTotals: current.ptTotals,
+      ptAverages: current.ptAverages,
       regions: (current.regions || []).map((r) => ({
         entity: r.entity,
         visitVolume: r.visitVolumeBudget,
         callVolume: 0,
         newPatients: r.newPatientsBudget,
-        surgeries: 0
+        surgeries: 0,
+        pt: r.pt || {}
       }))
     };
   } else {
@@ -2199,53 +2242,37 @@ function renderExecutiveCards(summary) {
   renderMetricCards("executiveCards", [
     { label: "Saved Regions", value: summary.entityCount || 0, className: "kpi-neutral" },
     { label: "Visit Volume", value: summary.totals?.visitVolume || 0, className: "kpi-neutral" },
+    { label: "PT Visits", value: formatWhole(summary.ptTotals?.visitsSeen || 0), className: "kpi-neutral" },
     { label: "Total Surgeries", value: summary.totals?.surgeries || 0, className: "kpi-neutral" },
     { label: "Call Volume", value: summary.totals?.callVolume || 0, className: "kpi-neutral" },
     { label: "New Patients", value: summary.totals?.newPatients || 0, className: "kpi-neutral" },
     { label: "Avg No Show %", value: `${avg("noShowRate").toFixed(1)}%`, className: "kpi-neutral" },
-    { label: "Avg Cancel %", value: `${avg("cancellationRate").toFixed(1)}%`, className: "kpi-neutral" },
-    { label: "Avg Abandoned %", value: `${avg("abandonedCallRate").toFixed(1)}%`, className: "kpi-neutral" }
+    { label: "Avg Cancel %", value: `${avg("cancellationRate").toFixed(1)}%`, className: "kpi-neutral" }
   ]);
 
   renderMetricCards("executivePtCards", [
     {
-      label: "PT Scheduled Visits",
-      value: formatWhole(summary.ptTotals?.scheduledVisits || 0),
-      className: "kpi-neutral"
-    },
-    {
-      label: "PT Visits Seen",
+      label: "PT Visits",
       value: formatWhole(summary.ptTotals?.visitsSeen || 0),
+      meta: `Scheduled ${formatWhole(summary.ptTotals?.scheduledVisits || 0)}`,
       className: "kpi-neutral"
     },
     {
-      label: "PT Units Billed",
+      label: "PT Units",
       value: formatWhole(summary.ptTotals?.totalUnitsBilled || 0),
-      className: "kpi-neutral"
-    },
-    {
-      label: "PT Cancellations",
-      value: formatWhole(summary.ptTotals?.cancellations || 0),
+      meta: `Avg Units/Visit ${normalizeNumber(summary.ptAverages?.unitsPerVisit).toFixed(2)}`,
       className: "kpi-neutral"
     },
     {
       label: "PT No Shows",
       value: formatWhole(summary.ptTotals?.noShows || 0),
+      meta: `Cancels ${formatWhole(summary.ptTotals?.cancellations || 0)}`,
       className: "kpi-neutral"
     },
     {
       label: "PT Reschedules",
       value: formatWhole(summary.ptTotals?.reschedules || 0),
-      className: "kpi-neutral"
-    },
-    {
-      label: "Avg PT Units/Visit",
-      value: normalizeNumber(summary.averages?.ptUnitsPerVisit).toFixed(2),
-      className: "kpi-neutral"
-    },
-    {
-      label: "Avg PT Visits/Day",
-      value: normalizeNumber(summary.averages?.ptVisitsPerDay).toFixed(2),
+      meta: `Avg Visits/Day ${normalizeNumber(summary.ptAverages?.visitsPerDay).toFixed(2)}`,
       className: "kpi-neutral"
     }
   ]);
@@ -2298,36 +2325,46 @@ function renderExecutiveRegions(summary) {
   const ptContainer = byId("executivePtRegions");
   if (!ptContainer) return;
 
-  const ptRows = summary.regions.map((r) => `
-    <tr>
-      <td>${r.entity}</td>
-      <td>${normalizeNumber(r.pt?.scheduledVisits)}</td>
-      <td>${normalizeNumber(r.pt?.visitsSeen)}</td>
-      <td>${normalizeNumber(r.pt?.totalUnitsBilled)}</td>
-      <td>${normalizeNumber(r.pt?.cancellations)}</td>
-      <td>${normalizeNumber(r.pt?.noShows)}</td>
-      <td>${normalizeNumber(r.pt?.reschedules)}</td>
-      <td>${normalizeNumber(r.pt?.unitsPerVisit).toFixed(2)}</td>
-      <td>${normalizeNumber(r.pt?.visitsPerDay).toFixed(2)}</td>
-    </tr>
-  `).join("");
+  const ptRows = (summary.regions || []).filter((r) => {
+    const pt = r.pt || {};
+    return (
+      normalizeNumber(pt.scheduledVisits) > 0 ||
+      normalizeNumber(pt.visitsSeen) > 0 ||
+      normalizeNumber(pt.totalUnitsBilled) > 0 ||
+      normalizeNumber(pt.cancellations) > 0 ||
+      normalizeNumber(pt.noShows) > 0
+    );
+  });
+
+  if (!ptRows.length) {
+    ptContainer.innerHTML = "<p>No PT activity found for this week.</p>";
+    return;
+  }
 
   ptContainer.innerHTML = `
     <table class="regionTable">
       <thead>
         <tr>
           <th>Entity</th>
-          <th>PT Scheduled</th>
           <th>PT Seen</th>
           <th>PT Units</th>
-          <th>PT Cancel</th>
-          <th>PT No Show</th>
-          <th>PT Reschedules</th>
           <th>Units/Visit</th>
-          <th>Visits/Day</th>
+          <th>No Shows</th>
+          <th>Cancels</th>
         </tr>
       </thead>
-      <tbody>${ptRows}</tbody>
+      <tbody>
+        ${ptRows.map((r) => `
+          <tr>
+            <td>${r.entity}</td>
+            <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
+            <td>${formatWhole(r.pt?.totalUnitsBilled || 0)}</td>
+            <td>${normalizeNumber(r.pt?.unitsPerVisit).toFixed(2)}</td>
+            <td>${formatWhole(r.pt?.noShows || 0)}</td>
+            <td>${formatWhole(r.pt?.cancellations || 0)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
     </table>
   `;
 }
@@ -2556,193 +2593,11 @@ async function loadTrends() {
   setTrendsDebug(result);
 }
 
-function getActivityPillClass(eventType) {
-  const type = String(eventType || "").toLowerCase();
-  if (type === "create") return "activity-pill-create";
-  if (type === "update") return "activity-pill-update";
-  if (type === "delete") return "activity-pill-delete";
-  return "activity-pill-update";
-}
-
-function ensureActivityModal() {
-  if (byId("activityChangeModal")) return;
-
-  const modal = document.createElement("div");
-  modal.id = "activityChangeModal";
-  modal.className = "activity-change-modal";
-  modal.style.display = "none";
-  modal.innerHTML = `
-    <div class="activity-change-modal-backdrop" data-close-activity-modal="true"></div>
-    <div class="activity-change-modal-card">
-      <div class="activity-change-modal-header">
-        <div>
-          <div class="sectionEyebrow">Audit Detail</div>
-          <h3 id="activityModalTitle" style="margin:0;">Change Detail</h3>
-        </div>
-        <button id="activityModalCloseBtn" type="button" class="actionBtn">Close</button>
-      </div>
-      <div id="activityModalMeta" class="subtleBanner" style="margin-bottom:16px;"></div>
-      <div class="activity-change-grid">
-        <div class="activity-change-panel">
-          <h4>Before</h4>
-          <div id="activityModalBefore"></div>
-        </div>
-        <div class="activity-change-panel">
-          <h4>After</h4>
-          <div id="activityModalAfter"></div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  const closeBtn = byId("activityModalCloseBtn");
-  if (closeBtn) {
-    closeBtn.addEventListener("click", closeActivityModal);
-  }
-
-  modal.addEventListener("click", (event) => {
-    const target = event.target;
-    if (target && target.dataset && target.dataset.closeActivityModal === "true") {
-      closeActivityModal();
-    }
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && modal.style.display !== "none") {
-      closeActivityModal();
-    }
-  });
-}
-
-function closeActivityModal() {
-  const modal = byId("activityChangeModal");
-  if (!modal) return;
-  modal.style.display = "none";
-  currentActivityModalData = null;
-}
-
-function flattenObject(source, prefix = "", result = {}) {
-  if (!isPlainObject(source)) return result;
-
-  Object.keys(source).forEach((key) => {
-    const value = source[key];
-    const nextKey = prefix ? `${prefix}.${key}` : key;
-
-    if (isPlainObject(value)) {
-      flattenObject(value, nextKey, result);
-    } else {
-      result[nextKey] = value;
-    }
-  });
-
-  return result;
-}
-
-function formatFieldValue(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "—";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (Array.isArray(value)) return value.length ? JSON.stringify(value) : "—";
-  if (isPlainObject(value)) return JSON.stringify(value);
-  return String(value);
-}
-
-function buildChangeRows(beforeObj, afterObj) {
-  const beforeFlat = flattenObject(beforeObj || {});
-  const afterFlat = flattenObject(afterObj || {});
-  const fieldSet = new Set([...Object.keys(beforeFlat), ...Object.keys(afterFlat)]);
-
-  const rows = Array.from(fieldSet)
-    .sort((a, b) => a.localeCompare(b))
-    .map((field) => {
-      const beforeValue = beforeFlat[field];
-      const afterValue = afterFlat[field];
-      const changed = JSON.stringify(beforeValue ?? null) !== JSON.stringify(afterValue ?? null);
-
-      return {
-        field,
-        beforeValue: formatFieldValue(beforeValue),
-        afterValue: formatFieldValue(afterValue),
-        changed
-      };
-    });
-
-  return rows;
-}
-
-function renderChangePanel(containerId, rows, side = "before") {
-  const container = byId(containerId);
-  if (!container) return;
-
-  if (!rows.length) {
-    container.innerHTML = `<div class="subtleBanner">No detail available.</div>`;
-    return;
-  }
-
-  container.innerHTML = `
-    <table class="regionTable">
-      <thead>
-        <tr>
-          <th>Field</th>
-          <th>${side === "before" ? "Previous Value" : "New Value"}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map((row) => `
-          <tr class="${row.changed ? "activity-change-row" : ""}">
-            <td>${escapeHtml(row.field)}</td>
-            <td><code>${escapeHtml(side === "before" ? row.beforeValue : row.afterValue)}</code></td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
-}
-
-function openActivityModal(index) {
-  const item = currentActivityItems[index];
-  if (!item) return;
-
-  ensureActivityModal();
-  currentActivityModalData = item;
-
-  const rows = buildChangeRows(item.before || {}, item.after || {});
-  const changedOnly = rows.filter((row) => row.changed);
-  const rowsToRender = changedOnly.length ? changedOnly : rows;
-
-  const title = byId("activityModalTitle");
-  const meta = byId("activityModalMeta");
-  const modal = byId("activityChangeModal");
-
-  if (title) {
-    title.textContent = `${String(item.eventType || "").toUpperCase()} • ${item.entity || ""} • ${item.weekEnding || ""}`;
-  }
-
-  if (meta) {
-    meta.innerHTML = `
-      <strong>User:</strong> ${escapeHtml(item.actorEmail || "n/a")}<br />
-      <strong>Role:</strong> ${escapeHtml(item.actorRole || "n/a")}<br />
-      <strong>When:</strong> ${escapeHtml(formatDateTime(item.timestamp))}<br />
-      <strong>Summary:</strong> ${escapeHtml(item.summary || "n/a")}
-    `;
-  }
-
-  renderChangePanel("activityModalBefore", rowsToRender, "before");
-  renderChangePanel("activityModalAfter", rowsToRender, "after");
-
-  if (modal) {
-    modal.style.display = "block";
-  }
-}
-
 function renderActivityTable(result) {
   const wrap = byId("activityTableWrap");
   if (!wrap) return;
 
   const items = result.items || [];
-  currentActivityItems = items;
 
   if (!items.length) {
     wrap.innerHTML = "<p>No activity found for the selected filters.</p>";
@@ -2760,33 +2615,23 @@ function renderActivityTable(result) {
           <th>User</th>
           <th>Role</th>
           <th>Summary</th>
-          <th>Detail</th>
         </tr>
       </thead>
       <tbody>
-        ${items.map((item, index) => `
+        ${items.map((item) => `
           <tr>
-            <td>${escapeHtml(formatDateTime(item.timestamp))}</td>
-            <td><span class="${getActivityPillClass(item.eventType)}">${escapeHtml(item.eventType || "")}</span></td>
-            <td>${escapeHtml(item.entity || "")}</td>
-            <td>${escapeHtml(item.weekEnding || "")}</td>
-            <td>${escapeHtml(item.actorEmail || "")}</td>
-            <td>${escapeHtml(item.actorRole || "")}</td>
-            <td>${escapeHtml(item.summary || "")}</td>
-            <td>
-              <button type="button" class="actionBtn" data-action="view-change" data-index="${index}">View Changes</button>
-            </td>
+            <td>${formatDateTime(item.timestamp)}</td>
+            <td>${item.eventType}</td>
+            <td>${item.entity}</td>
+            <td>${item.weekEnding || ""}</td>
+            <td>${item.actorEmail || ""}</td>
+            <td>${item.actorRole || ""}</td>
+            <td>${item.summary || ""}</td>
           </tr>
         `).join("")}
       </tbody>
     </table>
   `;
-
-  wrap.querySelectorAll("button[data-action='view-change']").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      openActivityModal(Number(btn.dataset.index));
-    });
-  });
 }
 
 async function loadActivityLog() {
@@ -3222,69 +3067,6 @@ async function runBudgetImport() {
       background:rgba(255,125,125,0.14);
       color:#ff9a9a;
     }
-    .activity-change-modal {
-      position:fixed;
-      inset:0;
-      z-index:9999;
-    }
-    .activity-change-modal-backdrop {
-      position:absolute;
-      inset:0;
-      background:rgba(0,0,0,0.58);
-      backdrop-filter:blur(3px);
-    }
-    .activity-change-modal-card {
-      position:relative;
-      width:min(1200px, calc(100vw - 32px));
-      max-height:calc(100vh - 32px);
-      overflow:auto;
-      margin:16px auto;
-      background:linear-gradient(180deg, rgba(13,49,73,0.98) 0%, rgba(9,35,53,0.98) 100%);
-      border:1px solid rgba(108,182,255,0.16);
-      border-radius:18px;
-      box-shadow:0 24px 60px rgba(0,0,0,0.36);
-      padding:20px;
-      z-index:2;
-    }
-    .activity-change-modal-header {
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:16px;
-      margin-bottom:14px;
-    }
-    .activity-change-grid {
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:16px;
-    }
-    .activity-change-panel {
-      background:rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.06);
-      border-radius:14px;
-      padding:14px;
-    }
-    .activity-change-panel h4 {
-      margin:0 0 12px;
-      font-size:14px;
-      text-transform:uppercase;
-      letter-spacing:.06em;
-      color:#b8d3e6;
-    }
-    .activity-change-row {
-      background:rgba(247,198,47,0.08);
-    }
-    .activity-change-panel code {
-      font-family:Menlo, Monaco, Consolas, monospace;
-      color:#f4f8fc;
-      white-space:pre-wrap;
-      word-break:break-word;
-    }
-    @media (max-width: 900px) {
-      .activity-change-grid {
-        grid-template-columns:1fr;
-      }
-    }
   `;
   document.head.appendChild(style);
 })();
@@ -3297,7 +3079,6 @@ async function runBudgetImport() {
     setupEntityDropdown();
     setupTrendsEntityDropdown();
     renderForm();
-    ensureActivityModal();
 
     const defaultWeek = getDefaultWeekEnding();
 
