@@ -32,7 +32,7 @@ module.exports = async function (context, req) {
 
     const now = new Date().toISOString();
 
-    record.status = "Approved";
+    record.status = "approved";
     record.approvedBy = access.email;
     record.approvedAt = now;
     record.updatedBy = access.email;
@@ -45,7 +45,7 @@ module.exports = async function (context, req) {
       message: "Approved successfully",
       entity,
       weekEnding,
-      status: "Approved"
+      status: "approved"
     });
   } catch (error) {
     context.log.error("approve-week failed", error);
