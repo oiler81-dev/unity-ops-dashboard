@@ -24,6 +24,7 @@
       <button id="navEntryBtn" type="button">Weekly Entry</button>
       <button id="navExecutiveBtn" type="button">Executive Summary</button>
       <button id="navTrendsBtn" type="button">Trends</button>
+      <button id="navActivityBtn" type="button">Activity Log</button>
       <button id="navImportBtn" type="button">Admin Import</button>
     </aside>
 
@@ -218,12 +219,20 @@
 
             <div id="entryBrandWrap" class="brandContextWrap"></div>
 
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Tracker</div>
+                <h3>Entry Audit</h3>
+              </div>
+              <div id="entryAuditSummary" class="subtleBanner">No entry loaded yet.</div>
+            </div>
+
             <section id="kpiForm"></section>
 
             <div class="buttonRow">
               <button id="saveBtn" type="button">Save</button>
-              <button id="submitBtn" type="button">Submit</button>
-              <button id="approveBtn" type="button">Approve</button>
+              <button id="submitBtn" type="button" style="display:none;">Submit</button>
+              <button id="approveBtn" type="button" style="display:none;">Approve</button>
             </div>
 
             <div id="statusMessage" class="statusMessage"></div>
@@ -360,6 +369,14 @@
 
               <div class="panel innerPanel ptInnerPanel">
                 <div class="sectionHeader compact">
+                  <div class="sectionEyebrow">PT Activity Trend</div>
+                  <h3>PT Visits and Units</h3>
+                </div>
+                <canvas id="trendsPtChart" height="120"></canvas>
+              </div>
+
+              <div class="panel innerPanel ptInnerPanel">
+                <div class="sectionHeader compact">
                   <div class="sectionEyebrow">PT Scheduling Health</div>
                   <h3>PT Weekly History</h3>
                 </div>
@@ -370,6 +387,63 @@
             <details class="debugPanel">
               <summary>Trends Debug Output</summary>
               <pre id="trendsDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="activityView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Tracker</div>
+              <h3>Activity Log</h3>
+              <p>See who created, updated, or deleted entries across the dashboard.</p>
+            </div>
+
+            <div class="fieldRow">
+              <div>
+                <label for="activityEntityFilter">Entity</label>
+                <select id="activityEntityFilter">
+                  <option value="">All Entities</option>
+                  <option value="LAOSS">LAOSS</option>
+                  <option value="NES">NES</option>
+                  <option value="SpineOne">SpineOne</option>
+                  <option value="MRO">MRO</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="activityWeekFilter">Week Ending</label>
+                <input type="date" id="activityWeekFilter" />
+              </div>
+
+              <div>
+                <label for="activityLimit">Rows</label>
+                <select id="activityLimit">
+                  <option value="25">25</option>
+                  <option value="50" selected>50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="loadActivityBtn" type="button">Load Activity</button>
+              </div>
+            </div>
+
+            <div id="activitySummary" class="subtleBanner">Load recent activity to review creates, updates, and deletes.</div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Audit Trail</div>
+                <h3>Recent Actions</h3>
+              </div>
+              <div id="activityTableWrap"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Activity Debug Output</summary>
+              <pre id="activityDebugOutput" class="debugOutput"></pre>
             </details>
           </div>
         </section>
