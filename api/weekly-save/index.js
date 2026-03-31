@@ -1,33 +1,51 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess, canAccessEntity } = require("../shared/permissions");
-const { ok, badRequest, forbidden, serverError } = require("../shared/response");
-const { ensureTable } = require("../shared/table");
-const { WEEKLY_TABLE, KPI_FIELDS } = require("../shared/constants");
+const { resolveAccess } = require("../shared/permissions");
+const { getTableClient } = require("../shared/table");
 
-function normalizeNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
+const TABLE_NAME = "WeeklyRegionData";
+
+function toNumber(value, fallback = 0) {
+  if (value == null || value === "") return fallback;
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n : fallback;
 }
 
-function legacyToValues(data) {
+function calculateDerived(values = {}) {
+  const newPatients = toNumber(values.newPatients, 0);
+  const surgeries = toNumber(values.surgeries, 0);
+  const established = toNumber(values.established, 0);
+  const noShows = toNumber(values.noShows, 0);
+  const cancelled = toNumber(values.cancelled, 0);
+  const totalCalls = toNumber(values.totalCalls ?? values.callVolume, 0);
+  const abandonedCalls = toNumber(values.abandonedCalls, 0);
+
+  const visitVolume = newPatients + surgeries + established;
+  const callVolume = totalCalls;
+  const scheduledAppointments = visitVolume + noShows + cancelled;
+
+  const noShowRate =
+    scheduledAppointments > 0 ? (noShows / scheduledAppointments) * 100 : 0;
+
+  const cancellationRate =
+    scheduledAppointments > 0 ? (cancelled / scheduledAppointments) * 100 : 0;
+
+  const abandonedCallRate =
+    totalCalls > 0 ? (abandonedCalls / totalCalls) * 100 : 0;
+
   return {
-    totalVisits: normalizeNumber(data.visitVolume),
-    totalCalls: normalizeNumber(data.callVolume),
-    npActual: normalizeNumber(data.newPatients),
-    noShowRate: normalizeNumber(data.noShowRate),
-    cancellationRate: normalizeNumber(data.cancellationRate),
-    abandonmentRate: normalizeNumber(data.abandonedCallRate)
+    newPatients,
+    surgeries,
+    established,
+    noShows,
+    cancelled,
+    totalCalls,
+    abandonedCalls,
+    visitVolume,
+    callVolume,
+    noShowRate: Number(noShowRate.toFixed(2)),
+    cancellationRate: Number(cancellationRate.toFixed(2)),
+    abandonedCallRate: Number(abandonedCallRate.toFixed(2))
   };
-}
-
-function parseValuesJson(valuesJson) {
-  if (!valuesJson) return {};
-  try {
-    return typeof valuesJson === "string" ? JSON.parse(valuesJson) : valuesJson;
-  } catch {
-    return {};
-  }
 }
 
 module.exports = async function (context, req) {
@@ -35,111 +53,98 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access.allowed) {
-      return forbidden();
+    const entity = String(req.body?.entity || "").trim();
+    const weekEnding = String(req.body?.weekEnding || "").trim();
+    const input =
+      req.body?.data && typeof req.body.data === "object"
+        ? req.body.data
+        : req.body?.values && typeof req.body.values === "object"
+          ? req.body.values
+          : {};
+
+    if (!entity || !weekEnding) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: "Missing entity or weekEnding"
+        }
+      };
     }
 
-    const body = req.body || {};
-    const weekEnding = body.weekEnding;
-    const entity = body.entity;
-    const data = body.data || {};
-
-    if (!weekEnding || !entity || !data) {
-      return badRequest("Missing required fields");
+    if (!access.isAdmin && access.entity !== entity) {
+      return {
+        status: 403,
+        body: {
+          ok: false,
+          error: "Forbidden"
+        }
+      };
     }
 
-    if (!canAccessEntity(access, entity)) {
-      return forbidden("You cannot edit this entity");
-    }
-
-    const client = await ensureTable(WEEKLY_TABLE);
+    const table = getTableClient(TABLE_NAME);
 
     let existing = null;
     try {
-      existing = await client.getEntity(entity, weekEnding);
-    } catch (error) {
-      if (error?.statusCode !== 404) {
-        throw error;
+      existing = await table.getEntity(entity, weekEnding);
+    } catch (err) {
+      if (err.statusCode !== 404) {
+        throw err;
       }
     }
 
-    const existingStatus = String(existing?.status || "").toLowerCase();
+    const values = calculateDerived(input);
 
-    if (
-      existing &&
-      (existingStatus === "submitted" || existingStatus === "approved") &&
-      !access.isAdmin
-    ) {
-      return forbidden("This week is locked and cannot be edited");
-    }
+    const nextStatus =
+      String(existing?.status || "draft").toLowerCase() === "approved"
+        ? "approved"
+        : "draft";
 
-    const sanitizedData = {};
-    for (const field of KPI_FIELDS) {
-      sanitizedData[field.key] = normalizeNumber(data[field.key]);
-    }
-
-    const existingValues = parseValuesJson(existing?.valuesJson);
-    const newValues = {
-      ...existingValues,
-      ...legacyToValues(sanitizedData)
-    };
-
-    const now = new Date().toISOString();
-
-    const entityRecord = {
+    await table.upsertEntity({
       partitionKey: entity,
       rowKey: weekEnding,
-
-      // keep flat fields for backward compatibility
-      ...sanitizedData,
-
-      // canonical rebuilt shape
       entity,
       weekEnding,
-      valuesJson: JSON.stringify(newValues),
-
-      status: existing?.status || "draft",
-      source: existing?.source || "manual-entry",
-      updatedBy: access.email,
-      updatedAt: now
-    };
-
-    if (existing?.submittedBy) entityRecord.submittedBy = existing.submittedBy;
-    if (existing?.submittedAt) entityRecord.submittedAt = existing.submittedAt;
-    if (existing?.approvedBy) entityRecord.approvedBy = existing.approvedBy;
-    if (existing?.approvedAt) entityRecord.approvedAt = existing.approvedAt;
-    if (existing?.importedAt) entityRecord.importedAt = existing.importedAt;
-    if (existing?.source && existing.source !== "manual-entry") {
-      entityRecord.source = existing.source;
-    }
-
-    if (
-      access.isAdmin &&
-      existing &&
-      (existingStatus === "submitted" || existingStatus === "approved")
-    ) {
-      entityRecord.overrideBy = access.email;
-      entityRecord.overrideAt = now;
-    }
-
-    await client.upsertEntity(entityRecord, "Replace");
-
-    return ok({
-      ok: true,
-      message:
-        access.isAdmin &&
-        existing &&
-        (existingStatus === "submitted" || existingStatus === "approved")
-          ? "Override saved successfully"
-          : "Saved successfully",
-      entity,
-      weekEnding,
-      data: sanitizedData,
-      values: newValues,
-      status: entityRecord.status
+      status: nextStatus,
+      valuesJson: JSON.stringify(values),
+      visitVolume: values.visitVolume,
+      callVolume: values.callVolume,
+      newPatients: values.newPatients,
+      surgeries: values.surgeries,
+      established: values.established,
+      noShows: values.noShows,
+      cancelled: values.cancelled,
+      totalCalls: values.totalCalls,
+      abandonedCalls: values.abandonedCalls,
+      noShowRate: values.noShowRate,
+      cancellationRate: values.cancellationRate,
+      abandonedCallRate: values.abandonedCallRate,
+      source: "app",
+      updatedBy: access.email || user?.userDetails || null,
+      updatedAt: new Date().toISOString()
     });
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        message: "Saved successfully",
+        status: nextStatus,
+        entity,
+        weekEnding,
+        values
+      }
+    };
   } catch (error) {
     context.log.error("weekly-save failed", error);
-    return serverError(error, "Failed to save weekly data");
+
+    return {
+      status: 500,
+      body: {
+        ok: false,
+        error: "Failed to save weekly region data.",
+        details: error.message
+      }
+    };
   }
 };
