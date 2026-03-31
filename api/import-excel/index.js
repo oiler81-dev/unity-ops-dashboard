@@ -22,13 +22,6 @@ const REGION_SHEET_TO_ENTITY = {
   Chicago: "MRO"
 };
 
-const CXNS_BLOCKS = [
-  { entity: "MRO", label: "Chicago", start: 0 },
-  { entity: "SpineOne", label: "Denver", start: 8 },
-  { entity: "NES", label: "Portland", start: 16 },
-  { entity: "LAOSS", label: "LA", start: 24 }
-];
-
 function sheetRows(ws) {
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
 }
@@ -179,18 +172,6 @@ async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) 
     approvedBy: "workbook-import",
     importedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    visitVolume: values.totalVisits ?? values.visitVolume ?? null,
-    callVolume: values.totalCalls ?? values.callVolume ?? null,
-    newPatients: values.npActual ?? values.newPatients ?? null,
-    surgeries: values.surgeryActual ?? values.surgeries ?? null,
-    established: values.establishedActual ?? values.established ?? null,
-    noShows: values.noShows ?? null,
-    cancelled: values.cancelled ?? values.cancellations ?? null,
-    totalCalls: values.totalCalls ?? null,
-    abandonedCalls: values.abandonedCalls ?? null,
-    noShowRate: values.noShowRate ?? null,
-    cancellationRate: values.cancellationRate ?? null,
-    abandonedCallRate: values.abandonmentRate ?? values.abandonedCallRate ?? null,
     ...meta
   });
 }
@@ -236,10 +217,6 @@ async function upsertBudgetRecord(table, entity, monthKey, values, meta = {}) {
     monthLabel: values.monthLabel,
     visitBudgetMonthly: values.visitBudgetMonthly ?? 0,
     newPatientsBudgetMonthly: values.newPatientsBudgetMonthly ?? 0,
-    npTargetMonthly: values.npTargetMonthly ?? 0,
-    establishedTargetMonthly: values.establishedTargetMonthly ?? 0,
-    ptTargetMonthly: values.ptTargetMonthly ?? 0,
-    surgeryTargetMonthly: values.surgeryTargetMonthly ?? 0,
     workingDaysInMonth: values.workingDaysInMonth ?? getWorkingDaysForMonth(monthKey),
     source: "workbook-import",
     importedAt: new Date().toISOString(),
@@ -352,11 +329,7 @@ function buildRegionValues(sheetName, rowIndex, row) {
     abandonmentRate: percentToDisplay(sheetName === "Denver" ? row[11] : row[10]),
     npToEstablishedConversion: percentToDisplay(sheetName === "Denver" ? row[12] : row[11]),
     npToSurgeryConversion: percentToDisplay(sheetName === "Denver" ? row[13] : row[12]),
-    cashActual,
-    noShows: 0,
-    cancelled: 0,
-    noShowRate: 0,
-    cancellationRate: 0
+    cashActual
   };
 
   if (sheetName === "Denver") {
@@ -479,35 +452,35 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
   const portlandReschedules = toNumber(row[25]);
   const portlandUnits = toNumber(row[26]);
 
-  const ptScheduledVisits = sumNumbers([
-    chicagoScheduled,
-    denverScheduled,
-    portlandScheduled
-  ]);
+  const byEntity = {
+    MRO: {
+      scheduledVisits: chicagoScheduled ?? 0,
+      cancellations: chicagoCancels ?? 0,
+      noShows: chicagoNoShows ?? 0,
+      reschedules: chicagoReschedules ?? 0,
+      totalUnitsBilled: chicagoUnits ?? 0
+    },
+    SpineOne: {
+      scheduledVisits: denverScheduled ?? 0,
+      cancellations: denverCancels ?? 0,
+      noShows: denverNoShows ?? 0,
+      reschedules: denverReschedules ?? 0,
+      totalUnitsBilled: denverUnits ?? 0
+    },
+    NES: {
+      scheduledVisits: portlandScheduled ?? 0,
+      cancellations: portlandCancels ?? 0,
+      noShows: portlandNoShows ?? 0,
+      reschedules: portlandReschedules ?? 0,
+      totalUnitsBilled: portlandUnits ?? 0
+    }
+  };
 
-  const ptCancellations = sumNumbers([
-    chicagoCancels,
-    denverCancels,
-    portlandCancels
-  ]);
-
-  const ptNoShows = sumNumbers([
-    chicagoNoShows,
-    denverNoShows,
-    portlandNoShows
-  ]);
-
-  const ptReschedules = sumNumbers([
-    chicagoReschedules,
-    denverReschedules,
-    portlandReschedules
-  ]);
-
-  const totalUnitsBilled = sumNumbers([
-    chicagoUnits,
-    denverUnits,
-    portlandUnits
-  ]);
+  const ptScheduledVisits = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.scheduledVisits), 0);
+  const ptCancellations = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.cancellations), 0);
+  const ptNoShows = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.noShows), 0);
+  const ptReschedules = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.reschedules), 0);
+  const totalUnitsBilled = Object.values(byEntity).reduce((sum, x) => sum + normalizeNullNumber(x.totalUnitsBilled), 0);
 
   const alignedWeek = chicagoWeek === denverWeek && chicagoWeek === portlandWeek;
   const alignedMonthTag =
@@ -580,9 +553,15 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
       ptCancellations,
       ptNoShows,
       ptReschedules,
-      totalUnitsBilled
+      totalUnitsBilled,
+      byEntity
     }
   };
+}
+
+function normalizeNullNumber(value) {
+  const n = toNumber(value);
+  return n == null ? 0 : n;
 }
 
 async function importPtSheet(sharedTable, ws, workingDaysMap) {
@@ -623,59 +602,124 @@ async function importPtSheet(sharedTable, ws, workingDaysMap) {
   return { imported, weekEndings, acceptedRows, rejectedRows };
 }
 
-function calculateCxnsRates(scheduledAppts, cancellations, noShows) {
-  const scheduled = toNumber(scheduledAppts) ?? 0;
-  const cancels = toNumber(cancellations) ?? 0;
-  const noShowCount = toNumber(noShows) ?? 0;
+function buildCxnsValues(rowIndex, row, workingDaysMap) {
+  const chicagoWeek = toNumber(row[0]);
+  const chicagoMonthTag = safeText(row[1]);
+  const weekEnding = weekEndingFromWeekNumber(chicagoWeek);
 
-  if (scheduled <= 0) {
-    return {
-      noShowRate: 0,
-      cancellationRate: 0
-    };
+  if (!chicagoWeek) {
+    return { accept: false, reason: "missing-chicago-week-number", rowIndex };
   }
 
-  return {
-    noShowRate: Number(((noShowCount / scheduled) * 100).toFixed(2)),
-    cancellationRate: Number(((cancels / scheduled) * 100).toFixed(2))
-  };
-}
-
-function buildCxnsRegionValues(rowIndex, row, block) {
-  const start = block.start;
-
-  const weekNumber = toNumber(row[start + 0]);
-  const monthTag = safeText(row[start + 1]);
-  const scheduledAppts = toNumber(row[start + 2]);
-  const cancellations = toNumber(row[start + 3]);
-  const noShows = toNumber(row[start + 4]);
-  const reschedules = toNumber(row[start + 5]);
-
-  if (!weekNumber) {
-    return { accept: false, reason: "missing-week-number", rowIndex, entity: block.entity };
-  }
-
-  const weekEnding = weekEndingFromWeekNumber(weekNumber);
   if (!weekEnding) {
+    return { accept: false, reason: "invalid-week-ending", rowIndex, chicagoWeek };
+  }
+
+  const denverWeek = toNumber(row[8]);
+  const denverMonthTag = safeText(row[9]);
+  const portlandWeek = toNumber(row[16]);
+  const portlandMonthTag = safeText(row[17]);
+  const laWeek = toNumber(row[24]);
+  const laMonthTag = safeText(row[25]);
+
+  const chicagoScheduled = toNumber(row[2]);
+  const chicagoCancels = toNumber(row[3]);
+  const chicagoNoShows = toNumber(row[4]);
+  const chicagoReschedules = toNumber(row[5]);
+
+  const denverScheduled = toNumber(row[10]);
+  const denverCancels = toNumber(row[11]);
+  const denverNoShows = toNumber(row[12]);
+  const denverReschedules = toNumber(row[13]);
+
+  const portlandScheduled = toNumber(row[18]);
+  const portlandCancels = toNumber(row[19]);
+  const portlandNoShows = toNumber(row[20]);
+  const portlandReschedules = toNumber(row[21]);
+
+  const laScheduled = toNumber(row[26]);
+  const laCancels = toNumber(row[27]);
+  const laNoShows = toNumber(row[28]);
+  const laReschedules = toNumber(row[29]);
+
+  const scheduledAppts = sumNumbers([
+    chicagoScheduled,
+    denverScheduled,
+    portlandScheduled,
+    laScheduled
+  ]);
+
+  const cancellations = sumNumbers([
+    chicagoCancels,
+    denverCancels,
+    portlandCancels,
+    laCancels
+  ]);
+
+  const noShows = sumNumbers([
+    chicagoNoShows,
+    denverNoShows,
+    portlandNoShows,
+    laNoShows
+  ]);
+
+  const reschedules = sumNumbers([
+    chicagoReschedules,
+    denverReschedules,
+    portlandReschedules,
+    laReschedules
+  ]);
+
+  const alignedWeek =
+    chicagoWeek === denverWeek &&
+    chicagoWeek === portlandWeek &&
+    chicagoWeek === laWeek;
+
+  const alignedMonthTag =
+    !!chicagoMonthTag &&
+    chicagoMonthTag === denverMonthTag &&
+    chicagoMonthTag === portlandMonthTag &&
+    chicagoMonthTag === laMonthTag;
+
+  const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
+
+  const hasRealData = hasPositiveNumber(
+    scheduledAppts,
+    cancellations,
+    noShows,
+    reschedules
+  );
+
+  if (!alignedWeek) {
     return {
       accept: false,
-      reason: "invalid-week-ending",
+      reason: "unaligned-week",
       rowIndex,
-      entity: block.entity,
-      weekNumber
+      chicagoWeek,
+      denverWeek,
+      portlandWeek,
+      laWeek
     };
   }
 
-  const hasMonthTag = !!monthTag;
-  const hasRealData = hasPositiveNumber(scheduledAppts, cancellations, noShows, reschedules);
-
-  if (!hasMonthTag) {
+  if (!alignedMonthTag) {
     return {
       accept: false,
-      reason: "missing-month-tag",
+      reason: "unaligned-month-tag",
       rowIndex,
-      entity: block.entity,
-      weekNumber,
+      chicagoMonthTag,
+      denverMonthTag,
+      portlandMonthTag,
+      laMonthTag
+    };
+  }
+
+  if (!hasWorkingDays) {
+    return {
+      accept: false,
+      reason: "no-working-days",
+      rowIndex,
+      chicagoWeek,
       weekEnding
     };
   }
@@ -685,155 +729,62 @@ function buildCxnsRegionValues(rowIndex, row, block) {
       accept: false,
       reason: "no-real-data",
       rowIndex,
-      entity: block.entity,
-      weekNumber,
+      chicagoWeek,
       weekEnding
     };
   }
 
-  const rates = calculateCxnsRates(scheduledAppts, cancellations, noShows);
-
   return {
     accept: true,
     rowIndex,
-    entity: block.entity,
-    label: block.label,
-    weekNumber,
+    weekNumber: chicagoWeek,
     weekEnding,
     values: {
-      weekNumber,
-      monthTag,
-      scheduledAppts: scheduledAppts ?? 0,
-      cancellations: cancellations ?? 0,
-      noShows: noShows ?? 0,
-      reschedules: reschedules ?? 0,
-      noShowRate: rates.noShowRate,
-      cancellationRate: rates.cancellationRate
+      weekNumber: chicagoWeek,
+      monthTag: chicagoMonthTag,
+      scheduledAppts,
+      cancellations,
+      noShows,
+      reschedules
     }
   };
 }
 
-async function patchRegionWithCxns(regionTable, entity, weekEnding, cxnsValues, blockLabel) {
-  let existing;
-  try {
-    existing = await regionTable.getEntity(entity, weekEnding);
-  } catch (error) {
-    if (error?.statusCode === 404) {
-      return { updated: false, reason: "missing-region-record", entity, weekEnding };
-    }
-    throw error;
-  }
-
-  let values = {};
-  try {
-    values = existing.valuesJson ? JSON.parse(existing.valuesJson) : {};
-  } catch {
-    values = {};
-  }
-
-  values.noShows = cxnsValues.noShows ?? 0;
-  values.cancelled = cxnsValues.cancellations ?? 0;
-  values.scheduledAppts = cxnsValues.scheduledAppts ?? 0;
-  values.reschedules = cxnsValues.reschedules ?? 0;
-  values.noShowRate = cxnsValues.noShowRate ?? 0;
-  values.cancellationRate = cxnsValues.cancellationRate ?? 0;
-
-  const updatedEntity = {
-    ...existing,
-    valuesJson: JSON.stringify(values),
-    noShows: cxnsValues.noShows ?? 0,
-    cancelled: cxnsValues.cancellations ?? 0,
-    noShowRate: cxnsValues.noShowRate ?? 0,
-    cancellationRate: cxnsValues.cancellationRate ?? 0,
-    updatedAt: new Date().toISOString(),
-    importedAt: new Date().toISOString(),
-    importCxnsSourceSheet: "CXNS",
-    importCxnsRegion: blockLabel
-  };
-
-  await regionTable.upsertEntity(updatedEntity, "Replace");
-
-  return { updated: true, entity, weekEnding };
-}
-
-async function importCxnsSheet(regionTable, sharedTable, ws) {
+async function importCxnsSheet(sharedTable, ws, workingDaysMap) {
   const rows = sheetRows(ws);
-
   let imported = 0;
   const weekEndings = [];
   const acceptedRows = [];
   const rejectedRows = [];
-  const patchResults = [];
 
   for (let r = 12; r < rows.length; r += 1) {
     const row = rows[r] || [];
+    const parsed = buildCxnsValues(r + 1, row, workingDaysMap);
 
-    const rowSummary = {
-      rowIndex: r + 1,
-      entities: []
-    };
-
-    for (const block of CXNS_BLOCKS) {
-      const parsed = buildCxnsRegionValues(r + 1, row, block);
-
-      if (!parsed.accept) {
-        if (parsed.reason !== "missing-week-number") {
-          rejectedRows.push(parsed);
-        }
-        continue;
+    if (!parsed.accept) {
+      if (parsed.reason !== "missing-chicago-week-number") {
+        rejectedRows.push(parsed);
       }
-
-      const patchResult = await patchRegionWithCxns(
-        regionTable,
-        parsed.entity,
-        parsed.weekEnding,
-        parsed.values,
-        parsed.label
-      );
-
-      await upsertSharedRecord(
-        sharedTable,
-        `CXNS-${parsed.entity}`,
-        parsed.weekEnding,
-        {
-          entity: parsed.entity,
-          regionLabel: parsed.label,
-          ...parsed.values
-        },
-        {
-          importSourceSheet: "CXNS",
-          importWeekNumber: parsed.weekNumber,
-          importMonthTag: parsed.values.monthTag
-        }
-      );
-
-      imported += 1;
-      weekEndings.push(parsed.weekEnding);
-      rowSummary.entities.push({
-        entity: parsed.entity,
-        weekEnding: parsed.weekEnding,
-        monthTag: parsed.values.monthTag,
-        scheduledAppts: parsed.values.scheduledAppts,
-        cancellations: parsed.values.cancellations,
-        noShows: parsed.values.noShows,
-        noShowRate: parsed.values.noShowRate,
-        cancellationRate: parsed.values.cancellationRate
-      });
-      patchResults.push(patchResult);
+      continue;
     }
 
-    if (rowSummary.entities.length) {
-      acceptedRows.push(rowSummary);
-    }
+    await upsertSharedRecord(sharedTable, "CXNS", parsed.weekEnding, parsed.values, {
+      importSourceSheet: "CXNS",
+      importWeekNumber: parsed.weekNumber,
+      importMonthTag: parsed.values.monthTag
+    });
+
+    imported += 1;
+    weekEndings.push(parsed.weekEnding);
+    acceptedRows.push({
+      rowIndex: parsed.rowIndex,
+      weekNumber: parsed.weekNumber,
+      weekEnding: parsed.weekEnding,
+      monthTag: parsed.values.monthTag
+    });
   }
 
-  return {
-    imported,
-    weekEndings: [...new Set(weekEndings)],
-    acceptedRows,
-    rejectedRows,
-    patchResults
-  };
+  return { imported, weekEndings, acceptedRows, rejectedRows };
 }
 
 async function importHolidaysSheet(referenceTable, ws) {
@@ -925,12 +876,7 @@ function parseBudgetTargetsFromMainWorkbook(workbook) {
     const ptTarget = toNumber(row[4]) ?? 0;
     const surgeryTarget = toNumber(row[5]) ?? 0;
 
-    const includePtInVisitBudget = entity !== "LAOSS";
-
-    const visitBudgetMonthly = includePtInVisitBudget
-      ? npTarget + establishedTarget + ptTarget + surgeryTarget
-      : npTarget + establishedTarget + surgeryTarget;
-
+    const visitBudgetMonthly = npTarget + establishedTarget + ptTarget + surgeryTarget;
     const newPatientsBudgetMonthly = npTarget;
 
     const key = `${entity}|${monthKey}`;
@@ -940,10 +886,6 @@ function parseBudgetTargetsFromMainWorkbook(workbook) {
       monthLabel,
       visitBudgetMonthly,
       newPatientsBudgetMonthly,
-      npTargetMonthly: npTarget,
-      establishedTargetMonthly: establishedTarget,
-      ptTargetMonthly: ptTarget,
-      surgeryTargetMonthly: surgeryTarget,
       workingDaysInMonth: getWorkingDaysForMonth(monthKey)
     });
   }
@@ -1029,16 +971,15 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, bu
   }
 
   if (workbook.Sheets.CXNS) {
-    const cxnsResult = await importCxnsSheet(regionTable, sharedTable, workbook.Sheets.CXNS);
+    const cxnsResult = await importCxnsSheet(sharedTable, workbook.Sheets.CXNS, workingDaysMap);
 
     results.shared.push({
       sheet: "CXNS",
       page: "CXNS",
       imported: cxnsResult.imported,
       weekEndings: cxnsResult.weekEndings,
-      acceptedRows: cxnsResult.acceptedRows.slice(0, 25),
-      rejectedRows: cxnsResult.rejectedRows.slice(0, 25),
-      patchedRegionRows: cxnsResult.patchResults
+      acceptedRows: cxnsResult.acceptedRows,
+      rejectedRows: cxnsResult.rejectedRows.slice(0, 15)
     });
   }
 
