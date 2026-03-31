@@ -1,4 +1,5 @@
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
+const PT_ENABLED_ENTITIES = new Set(["NES", "SpineOne", "MRO"]);
 
 const ENTITY_BRANDING = {
   LAOSS: {
@@ -281,6 +282,10 @@ function getTrendClass(current, comparison) {
   return "kpi-neutral";
 }
 
+function entityHasPt(entity) {
+  return PT_ENABLED_ENTITIES.has(entity);
+}
+
 function calculateDerivedMetrics(values = {}) {
   const newPatients = normalizeNumber(values.newPatients);
   const surgeries = normalizeNumber(values.surgeries);
@@ -297,6 +302,17 @@ function calculateDerivedMetrics(values = {}) {
   const cancellationRate = scheduledAppointments > 0 ? (cancelled / scheduledAppointments) * 100 : 0;
   const abandonedCallRate = totalCalls > 0 ? (abandonedCalls / totalCalls) * 100 : 0;
 
+  const ptScheduledVisits = normalizeNumber(values.ptScheduledVisits);
+  const ptCancellations = normalizeNumber(values.ptCancellations);
+  const ptNoShows = normalizeNumber(values.ptNoShows);
+  const ptReschedules = normalizeNumber(values.ptReschedules);
+  const ptTotalUnitsBilled = normalizeNumber(values.ptTotalUnitsBilled);
+  const ptVisitsSeen = normalizeNumber(values.ptVisitsSeen);
+  const ptWorkingDays = Math.max(1, normalizeNumber(values.ptWorkingDays || 5));
+
+  const ptUnitsPerVisit = ptVisitsSeen > 0 ? ptTotalUnitsBilled / ptVisitsSeen : 0;
+  const ptVisitsPerDay = ptWorkingDays > 0 ? ptVisitsSeen / ptWorkingDays : 0;
+
   return {
     newPatients,
     surgeries,
@@ -309,7 +325,17 @@ function calculateDerivedMetrics(values = {}) {
     callVolume: totalCalls,
     noShowRate,
     cancellationRate,
-    abandonedCallRate
+    abandonedCallRate,
+
+    ptScheduledVisits,
+    ptCancellations,
+    ptNoShows,
+    ptReschedules,
+    ptTotalUnitsBilled,
+    ptVisitsSeen,
+    ptWorkingDays,
+    ptUnitsPerVisit,
+    ptVisitsPerDay
   };
 }
 
@@ -321,7 +347,15 @@ function updateDerivedDisplays() {
     noShows: byId("noShows")?.value || "",
     cancelled: byId("cancelled")?.value || "",
     totalCalls: byId("totalCalls")?.value || "",
-    abandonedCalls: byId("abandonedCalls")?.value || ""
+    abandonedCalls: byId("abandonedCalls")?.value || "",
+
+    ptScheduledVisits: byId("ptScheduledVisits")?.value || "",
+    ptCancellations: byId("ptCancellations")?.value || "",
+    ptNoShows: byId("ptNoShows")?.value || "",
+    ptReschedules: byId("ptReschedules")?.value || "",
+    ptTotalUnitsBilled: byId("ptTotalUnitsBilled")?.value || "",
+    ptVisitsSeen: byId("ptVisitsSeen")?.value || "",
+    ptWorkingDays: byId("ptWorkingDays")?.value || "5"
   };
 
   const derived = calculateDerivedMetrics(currentValues);
@@ -330,6 +364,9 @@ function updateDerivedDisplays() {
   if (byId("noShowRate")) byId("noShowRate").value = derived.noShowRate.toFixed(1);
   if (byId("cancellationRate")) byId("cancellationRate").value = derived.cancellationRate.toFixed(1);
   if (byId("abandonedCallRate")) byId("abandonedCallRate").value = derived.abandonedCallRate.toFixed(1);
+
+  if (byId("ptUnitsPerVisit")) byId("ptUnitsPerVisit").value = derived.ptUnitsPerVisit.toFixed(2);
+  if (byId("ptVisitsPerDay")) byId("ptVisitsPerDay").value = derived.ptVisitsPerDay.toFixed(2);
 }
 
 function renderUser(userData) {
@@ -438,6 +475,45 @@ function renderForm() {
       <input type="number" id="abandonedCalls" step="1" min="0" />
     </div>
 
+    <div class="formSectionBreak" id="ptSectionBreak" style="display:none;">
+      <h4>PT Inputs</h4>
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptScheduledVisits">PT Scheduled Visits</label>
+      <input type="number" id="ptScheduledVisits" step="1" min="0" />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptCancellations">PT Cancellations</label>
+      <input type="number" id="ptCancellations" step="1" min="0" />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptNoShows">PT No Shows</label>
+      <input type="number" id="ptNoShows" step="1" min="0" />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptReschedules">PT Reschedules</label>
+      <input type="number" id="ptReschedules" step="1" min="0" />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptTotalUnitsBilled">PT Total Units Billed</label>
+      <input type="number" id="ptTotalUnitsBilled" step="1" min="0" />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptVisitsSeen">PT Visits Seen (wk)</label>
+      <input type="number" id="ptVisitsSeen" step="1" min="0" />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptWorkingDays">PT Working Days</label>
+      <input type="number" id="ptWorkingDays" step="1" min="1" value="5" />
+    </div>
+
     <div class="formSectionBreak">
       <h4>Calculated</h4>
     </div>
@@ -461,6 +537,16 @@ function renderForm() {
       <label for="abandonedCallRate">Abandoned Call %</label>
       <input type="number" id="abandonedCallRate" step="0.1" readonly />
     </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptUnitsPerVisit">PT Units/Visit</label>
+      <input type="number" id="ptUnitsPerVisit" step="0.01" readonly />
+    </div>
+
+    <div class="ptField" style="display:none;">
+      <label for="ptVisitsPerDay">PT Visits/Day (wk)</label>
+      <input type="number" id="ptVisitsPerDay" step="0.01" readonly />
+    </div>
   `;
 
   [
@@ -470,7 +556,14 @@ function renderForm() {
     "noShows",
     "cancelled",
     "totalCalls",
-    "abandonedCalls"
+    "abandonedCalls",
+    "ptScheduledVisits",
+    "ptCancellations",
+    "ptNoShows",
+    "ptReschedules",
+    "ptTotalUnitsBilled",
+    "ptVisitsSeen",
+    "ptWorkingDays"
   ].forEach((id) => {
     const input = byId(id);
     if (input) {
@@ -478,7 +571,47 @@ function renderForm() {
     }
   });
 
+  syncPtSectionVisibility();
   updateDerivedDisplays();
+}
+
+function syncPtSectionVisibility() {
+  const entity = getSelectedEntity();
+  const showPt = entityHasPt(entity);
+
+  const sectionBreak = byId("ptSectionBreak");
+  if (sectionBreak) {
+    sectionBreak.style.display = showPt ? "" : "none";
+  }
+
+  document.querySelectorAll(".ptField").forEach((el) => {
+    el.style.display = showPt ? "" : "none";
+  });
+
+  if (!showPt) {
+    [
+      "ptScheduledVisits",
+      "ptCancellations",
+      "ptNoShows",
+      "ptReschedules",
+      "ptTotalUnitsBilled",
+      "ptVisitsSeen",
+      "ptWorkingDays",
+      "ptUnitsPerVisit",
+      "ptVisitsPerDay"
+    ].forEach((id) => {
+      const input = byId(id);
+      if (!input) return;
+
+      if (id === "ptWorkingDays") {
+        input.value = "5";
+      } else if (id === "ptUnitsPerVisit" || id === "ptVisitsPerDay") {
+        input.value = "0.00";
+      } else {
+        input.value = "";
+      }
+    });
+  }
 }
 
 function mapWeeklyValuesToFormData(values) {
@@ -493,7 +626,17 @@ function mapWeeklyValuesToFormData(values) {
     visitVolume: values?.visitVolume ?? values?.totalVisits ?? "",
     noShowRate: values?.noShowRate ?? "",
     cancellationRate: values?.cancellationRate ?? "",
-    abandonedCallRate: values?.abandonedCallRate ?? values?.abandonmentRate ?? ""
+    abandonedCallRate: values?.abandonedCallRate ?? values?.abandonmentRate ?? "",
+
+    ptScheduledVisits: values?.ptScheduledVisits ?? "",
+    ptCancellations: values?.ptCancellations ?? "",
+    ptNoShows: values?.ptNoShows ?? "",
+    ptReschedules: values?.ptReschedules ?? "",
+    ptTotalUnitsBilled: values?.ptTotalUnitsBilled ?? "",
+    ptVisitsSeen: values?.ptVisitsSeen ?? "",
+    ptWorkingDays: values?.ptWorkingDays ?? 5,
+    ptUnitsPerVisit: values?.ptUnitsPerVisit ?? "",
+    ptVisitsPerDay: values?.ptVisitsPerDay ?? ""
   };
 
   const derived = calculateDerivedMetrics(mapped);
@@ -509,7 +652,17 @@ function mapWeeklyValuesToFormData(values) {
     visitVolume: derived.visitVolume,
     noShowRate: derived.noShowRate,
     cancellationRate: derived.cancellationRate,
-    abandonedCallRate: derived.abandonedCallRate
+    abandonedCallRate: derived.abandonedCallRate,
+
+    ptScheduledVisits: mapped.ptScheduledVisits,
+    ptCancellations: mapped.ptCancellations,
+    ptNoShows: mapped.ptNoShows,
+    ptReschedules: mapped.ptReschedules,
+    ptTotalUnitsBilled: mapped.ptTotalUnitsBilled,
+    ptVisitsSeen: mapped.ptVisitsSeen,
+    ptWorkingDays: mapped.ptWorkingDays,
+    ptUnitsPerVisit: derived.ptUnitsPerVisit,
+    ptVisitsPerDay: derived.ptVisitsPerDay
   };
 }
 
@@ -522,7 +675,14 @@ function setFormValues(data) {
     "noShows",
     "cancelled",
     "totalCalls",
-    "abandonedCalls"
+    "abandonedCalls",
+    "ptScheduledVisits",
+    "ptCancellations",
+    "ptNoShows",
+    "ptReschedules",
+    "ptTotalUnitsBilled",
+    "ptVisitsSeen",
+    "ptWorkingDays"
   ];
 
   keys.forEach((key) => {
@@ -531,6 +691,7 @@ function setFormValues(data) {
     input.value = mapped[key] !== null && mapped[key] !== undefined ? mapped[key] : "";
   });
 
+  syncPtSectionVisibility();
   updateDerivedDisplays();
 }
 
@@ -542,7 +703,15 @@ function getFormValues() {
     noShows: byId("noShows")?.value || "",
     cancelled: byId("cancelled")?.value || "",
     totalCalls: byId("totalCalls")?.value || "",
-    abandonedCalls: byId("abandonedCalls")?.value || ""
+    abandonedCalls: byId("abandonedCalls")?.value || "",
+
+    ptScheduledVisits: entityHasPt(getSelectedEntity()) ? (byId("ptScheduledVisits")?.value || "") : 0,
+    ptCancellations: entityHasPt(getSelectedEntity()) ? (byId("ptCancellations")?.value || "") : 0,
+    ptNoShows: entityHasPt(getSelectedEntity()) ? (byId("ptNoShows")?.value || "") : 0,
+    ptReschedules: entityHasPt(getSelectedEntity()) ? (byId("ptReschedules")?.value || "") : 0,
+    ptTotalUnitsBilled: entityHasPt(getSelectedEntity()) ? (byId("ptTotalUnitsBilled")?.value || "") : 0,
+    ptVisitsSeen: entityHasPt(getSelectedEntity()) ? (byId("ptVisitsSeen")?.value || "") : 0,
+    ptWorkingDays: entityHasPt(getSelectedEntity()) ? (byId("ptWorkingDays")?.value || "5") : 5
   };
 
   const derived = calculateDerivedMetrics(raw);
@@ -559,7 +728,17 @@ function getFormValues() {
     callVolume: derived.callVolume,
     noShowRate: Number(derived.noShowRate.toFixed(2)),
     cancellationRate: Number(derived.cancellationRate.toFixed(2)),
-    abandonedCallRate: Number(derived.abandonedCallRate.toFixed(2))
+    abandonedCallRate: Number(derived.abandonedCallRate.toFixed(2)),
+
+    ptScheduledVisits: derived.ptScheduledVisits,
+    ptCancellations: derived.ptCancellations,
+    ptNoShows: derived.ptNoShows,
+    ptReschedules: derived.ptReschedules,
+    ptTotalUnitsBilled: derived.ptTotalUnitsBilled,
+    ptVisitsSeen: derived.ptVisitsSeen,
+    ptWorkingDays: derived.ptWorkingDays,
+    ptUnitsPerVisit: Number(derived.ptUnitsPerVisit.toFixed(2)),
+    ptVisitsPerDay: Number(derived.ptVisitsPerDay.toFixed(2))
   };
 }
 
@@ -747,6 +926,7 @@ function showEntryView() {
   if (el) el.style.display = "";
   setActiveNav("navEntryBtn");
   renderEntityBrand("entryBrandWrap", getSelectedEntity());
+  syncPtSectionVisibility();
 }
 
 function showExecutiveView() {
@@ -2422,10 +2602,13 @@ async function runBudgetImport() {
 
     renderEntityBrand("entryBrandWrap", byId("entitySelect") ? getSelectedEntity() : "");
     renderEntityBrand("trendsBrandWrap", byId("trendsEntitySelect") ? getSelectedTrendsEntity() : "");
+    syncPtSectionVisibility();
 
     if (byId("entitySelect")) {
       byId("entitySelect").addEventListener("change", async () => {
         renderEntityBrand("entryBrandWrap", getSelectedEntity());
+        syncPtSectionVisibility();
+        updateDerivedDisplays();
         try {
           await loadWeek();
         } catch (e) {
