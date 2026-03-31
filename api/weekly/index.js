@@ -55,12 +55,12 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access.authenticated) {
+    if (!access.allowed) {
       return {
-        status: 401,
+        status: 403,
         body: {
           ok: false,
-          error: "Authentication required"
+          error: "Forbidden"
         }
       };
     }
@@ -104,10 +104,10 @@ module.exports = async function (context, req) {
         source: record?.source || null,
         status: record?.status || null,
         importedAt: record?.importedAt || null,
-        updatedAt: record?.updatedAt || null,
-        createdAt: record?.createdAt || null,
         createdBy: record?.createdBy || null,
-        updatedBy: record?.updatedBy || null
+        createdAt: record?.createdAt || null,
+        updatedBy: record?.updatedBy || null,
+        updatedAt: record?.updatedAt || null
       }
     };
   } catch (error) {
