@@ -14,6 +14,32 @@ function parseJsonSafely(value, fallback = {}) {
   }
 }
 
+function toNumber(value, fallback = 0) {
+  if (value == null || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeWeeklyValues(values = {}, record = null) {
+  return {
+    newPatients: toNumber(values.newPatients ?? values.npActual ?? record?.newPatients, 0),
+    surgeries: toNumber(values.surgeries ?? values.surgeryActual ?? record?.surgeries, 0),
+    established: toNumber(values.established ?? values.establishedActual ?? record?.established, 0),
+    noShows: toNumber(values.noShows ?? record?.noShows, 0),
+    cancelled: toNumber(values.cancelled ?? record?.cancelled, 0),
+    totalCalls: toNumber(values.totalCalls ?? values.callVolume ?? record?.totalCalls ?? record?.callVolume, 0),
+    abandonedCalls: toNumber(values.abandonedCalls ?? record?.abandonedCalls, 0),
+    visitVolume: toNumber(values.visitVolume ?? values.totalVisits ?? record?.visitVolume, 0),
+    callVolume: toNumber(values.callVolume ?? values.totalCalls ?? record?.callVolume ?? record?.totalCalls, 0),
+    noShowRate: toNumber(values.noShowRate ?? record?.noShowRate, 0),
+    cancellationRate: toNumber(values.cancellationRate ?? record?.cancellationRate, 0),
+    abandonedCallRate: toNumber(
+      values.abandonedCallRate ?? values.abandonmentRate ?? record?.abandonedCallRate,
+      0
+    )
+  };
+}
+
 module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
@@ -53,7 +79,8 @@ module.exports = async function (context, req) {
       }
     }
 
-    const values = record ? parseJsonSafely(record.valuesJson, {}) : {};
+    const rawValues = record ? parseJsonSafely(record.valuesJson, {}) : {};
+    const values = normalizeWeeklyValues(rawValues, record);
 
     return {
       status: 200,
