@@ -1,15 +1,9 @@
-const crypto = require("crypto");
 const { getUserFromRequest } = require("../shared/auth");
 const { resolveAccess } = require("../shared/permissions");
 const { ok, badRequest, forbidden, serverError } = require("../shared/response");
-const { getTableClient, ensureTable } = require("../shared/table");
+const { ensureTable } = require("../shared/table");
 const { WEEKLY_TABLE } = require("../shared/constants");
-
-const AUDIT_TABLE_NAME = "WeeklyAuditLog";
-
-function safeText(value) {
-  return value == null ? "" : String(value).trim();
-}
+const { writeAuditEvent, parseJsonSafe } = require("../shared/audit");
 
 function toNumber(value, fallback = 0) {
   if (value == null || value === "") return fallback;
@@ -17,63 +11,34 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function summarizeExistingRecord(record) {
-  if (!record) return null;
-
+function buildAuditShape(entity, weekEnding, values, record = {}) {
   return {
-    entity: safeText(record.entity || record.partitionKey || record.PartitionKey),
-    weekEnding: safeText(record.weekEnding || record.rowKey || record.RowKey),
-    status: safeText(record.status),
-    valuesJson: safeText(record.valuesJson),
-    visitVolume: toNumber(record.visitVolume),
-    callVolume: toNumber(record.callVolume),
-    newPatients: toNumber(record.newPatients),
-    surgeries: toNumber(record.surgeries),
-    established: toNumber(record.established),
-    noShows: toNumber(record.noShows),
-    cancelled: toNumber(record.cancelled),
-    totalCalls: toNumber(record.totalCalls),
-    abandonedCalls: toNumber(record.abandonedCalls),
-    noShowRate: toNumber(record.noShowRate),
-    cancellationRate: toNumber(record.cancellationRate),
-    abandonedCallRate: toNumber(record.abandonedCallRate),
+    entity,
+    weekEnding,
 
-    ptScheduledVisits: toNumber(record.ptScheduledVisits),
-    ptCancellations: toNumber(record.ptCancellations),
-    ptNoShows: toNumber(record.ptNoShows),
-    ptReschedules: toNumber(record.ptReschedules),
-    ptTotalUnitsBilled: toNumber(record.ptTotalUnitsBilled),
-    ptVisitsSeen: toNumber(record.ptVisitsSeen),
-    ptWorkingDays: toNumber(record.ptWorkingDays),
-    ptUnitsPerVisit: toNumber(record.ptUnitsPerVisit),
-    ptVisitsPerDay: toNumber(record.ptVisitsPerDay),
+    newPatients: toNumber(values.newPatients ?? record.newPatients, 0),
+    surgeries: toNumber(values.surgeries ?? record.surgeries, 0),
+    established: toNumber(values.established ?? record.established, 0),
+    noShows: toNumber(values.noShows ?? record.noShows, 0),
+    cancelled: toNumber(values.cancelled ?? record.cancelled, 0),
+    totalCalls: toNumber(values.totalCalls ?? record.totalCalls ?? record.callVolume, 0),
+    abandonedCalls: toNumber(values.abandonedCalls ?? record.abandonedCalls, 0),
+    visitVolume: toNumber(values.visitVolume ?? record.visitVolume, 0),
+    callVolume: toNumber(values.callVolume ?? record.callVolume, 0),
+    noShowRate: toNumber(values.noShowRate ?? record.noShowRate, 0),
+    cancellationRate: toNumber(values.cancellationRate ?? record.cancellationRate, 0),
+    abandonedCallRate: toNumber(values.abandonedCallRate ?? record.abandonedCallRate, 0),
 
-    createdAt: safeText(record.createdAt),
-    createdBy: safeText(record.createdBy),
-    updatedAt: safeText(record.updatedAt),
-    updatedBy: safeText(record.updatedBy)
+    ptScheduledVisits: toNumber(values.ptScheduledVisits ?? record.ptScheduledVisits, 0),
+    ptCancellations: toNumber(values.ptCancellations ?? record.ptCancellations, 0),
+    ptNoShows: toNumber(values.ptNoShows ?? record.ptNoShows, 0),
+    ptReschedules: toNumber(values.ptReschedules ?? record.ptReschedules, 0),
+    ptTotalUnitsBilled: toNumber(values.ptTotalUnitsBilled ?? record.ptTotalUnitsBilled, 0),
+    ptVisitsSeen: toNumber(values.ptVisitsSeen ?? record.ptVisitsSeen, 0),
+    ptWorkingDays: toNumber(values.ptWorkingDays ?? record.ptWorkingDays, 5),
+    ptUnitsPerVisit: toNumber(values.ptUnitsPerVisit ?? record.ptUnitsPerVisit, 0),
+    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record.ptVisitsPerDay, 0)
   };
-}
-
-async function writeAuditLog(auditTable, payload) {
-  const now = new Date().toISOString();
-  const rowKey = `${now}__${crypto.randomUUID()}`;
-
-  await auditTable.upsertEntity({
-    partitionKey: safeText(payload.entity || "unknown"),
-    rowKey,
-    eventType: safeText(payload.eventType),
-    entity: safeText(payload.entity),
-    weekEnding: safeText(payload.weekEnding),
-    actorEmail: safeText(payload.actorEmail),
-    actorRole: safeText(payload.actorRole),
-    actionSource: safeText(payload.actionSource || "app"),
-    isAdminAction: payload.isAdminAction ? true : false,
-    timestamp: now,
-    summary: safeText(payload.summary),
-    beforeJson: JSON.stringify(payload.before ?? null),
-    afterJson: JSON.stringify(payload.after ?? null)
-  });
 }
 
 module.exports = async function (context, req) {
@@ -94,7 +59,6 @@ module.exports = async function (context, req) {
     }
 
     const client = await ensureTable(WEEKLY_TABLE);
-    const auditTable = getTableClient(AUDIT_TABLE_NAME);
 
     let record;
     try {
@@ -106,31 +70,29 @@ module.exports = async function (context, req) {
       throw error;
     }
 
-    const before = summarizeExistingRecord(record);
+    const rawValues = parseJsonSafe(record.valuesJson, {});
+    const beforeAudit = buildAuditShape(entity, weekEnding, rawValues, record);
 
     await client.deleteEntity(entity, weekEnding);
 
-    await writeAuditLog(auditTable, {
+    await writeAuditEvent({
       eventType: "delete",
       entity,
       weekEnding,
-      actorEmail: access.email || user?.userDetails || "",
+      actorEmail: access.email,
       actorRole: access.role || "admin",
-      isAdminAction: true,
-      summary: `Deleted ${entity} ${weekEnding}`,
-      before,
-      after: null
+      before: beforeAudit,
+      after: {},
+      metadata: {
+        source: "delete-week"
+      }
     });
 
     return ok({
       ok: true,
       message: "Week deleted successfully",
       entity,
-      weekEnding,
-      audit: {
-        eventType: "delete",
-        actorEmail: access.email || user?.userDetails || null
-      }
+      weekEnding
     });
   } catch (error) {
     context.log.error("delete-week failed", error);
