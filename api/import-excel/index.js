@@ -46,11 +46,6 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function nz(value) {
-  const n = toNumber(value);
-  return n == null ? 0 : n;
-}
-
 function percentToDisplay(value) {
   const n = toNumber(value);
   if (n == null) return null;
@@ -162,6 +157,136 @@ function normalizeMonthFromBudgetSheet(value) {
   return map[normalized] || "";
 }
 
+function normalizeMonthTag(value) {
+  const text = safeText(value).toLowerCase();
+  if (!text) return "";
+
+  const map = {
+    jan: "Jan",
+    january: "Jan",
+    feb: "Feb",
+    february: "Feb",
+    mar: "Mar",
+    march: "Mar",
+    apr: "Apr",
+    april: "Apr",
+    may: "May",
+    jun: "Jun",
+    june: "Jun",
+    jul: "Jul",
+    july: "Jul",
+    aug: "Aug",
+    august: "Aug",
+    sep: "Sep",
+    sept: "Sep",
+    september: "Sep",
+    oct: "Oct",
+    october: "Oct",
+    nov: "Nov",
+    november: "Nov",
+    dec: "Dec",
+    december: "Dec"
+  };
+
+  return map[text] || map[text.slice(0, 3)] || "";
+}
+
+function detectEntityFromSheetName(sheetName) {
+  const s = safeText(sheetName).toLowerCase();
+
+  if (s.includes("la") || s.includes("laoss")) return "LAOSS";
+  if (s.includes("portland") || s.includes("nes")) return "NES";
+  if (s.includes("denver") || s.includes("spine")) return "SpineOne";
+  if (s.includes("chicago") || s.includes("mro") || s.includes("midland") || s.includes("riverside")) return "MRO";
+
+  return null;
+}
+
+function scanNearbyForNumber(rows, baseRow, baseCol) {
+  const candidates = [];
+
+  for (let r = Math.max(0, baseRow - 2); r <= Math.min(rows.length - 1, baseRow + 2); r += 1) {
+    const row = rows[r] || [];
+    for (let c = Math.max(0, baseCol - 1); c <= Math.min(row.length - 1, baseCol + 4); c += 1) {
+      const value = toNumber(row[c]);
+      if (value != null) {
+        candidates.push({ row: r, col: c, value });
+      }
+    }
+  }
+
+  if (!candidates.length) return null;
+
+  candidates.sort((a, b) => {
+    const da = Math.abs(a.row - baseRow) + Math.abs(a.col - baseCol);
+    const db = Math.abs(b.row - baseRow) + Math.abs(b.col - baseCol);
+    return da - db;
+  });
+
+  return candidates[0].value;
+}
+
+function findNearestMonthTag(rows, baseRow) {
+  for (let r = baseRow; r >= Math.max(0, baseRow - 12); r -= 1) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c += 1) {
+      const monthTag = normalizeMonthTag(row[c]);
+      if (monthTag) return monthTag;
+    }
+  }
+
+  for (let r = baseRow + 1; r <= Math.min(rows.length - 1, baseRow + 8); r += 1) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c += 1) {
+      const monthTag = normalizeMonthTag(row[c]);
+      if (monthTag) return monthTag;
+    }
+  }
+
+  return "";
+}
+
+function buildMorPtoMap(workbook) {
+  const result = {};
+
+  for (const sheetName of workbook.SheetNames) {
+    if (!/mor/i.test(sheetName)) continue;
+
+    const entity = detectEntityFromSheetName(sheetName);
+    if (!entity) continue;
+
+    const rows = sheetRows(workbook.Sheets[sheetName]);
+    if (!result[entity]) result[entity] = {};
+
+    for (let r = 0; r < rows.length; r += 1) {
+      const row = rows[r] || [];
+
+      for (let c = 0; c < row.length; c += 1) {
+        const text = safeText(row[c]).toLowerCase();
+        if (!text) continue;
+
+        const looksLikePto =
+          text === "pto" ||
+          text.includes("pto day") ||
+          text.includes("pto days") ||
+          text.includes("pto used") ||
+          text.includes("pto taken");
+
+        if (!looksLikePto) continue;
+
+        const monthTag = findNearestMonthTag(rows, r);
+        const ptoValue = scanNearbyForNumber(rows, r, c);
+
+        if (!monthTag || ptoValue == null) continue;
+
+        result[entity][monthTag] = ptoValue;
+      }
+    }
+  }
+
+  return result;
+}
+
 async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) {
   await table.upsertEntity({
     partitionKey: entity,
@@ -177,6 +302,9 @@ async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) 
     approvedBy: "workbook-import",
     importedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    ptoDays: values.ptoDays ?? 0,
+    cashCollected: values.cashCollected ?? 0,
+    operationsNarrative: values.operationsNarrative ?? "",
     ...meta
   });
 }
@@ -230,7 +358,7 @@ async function upsertBudgetRecord(table, entity, monthKey, values, meta = {}) {
   });
 }
 
-function buildRegionValues(sheetName, rowIndex, row) {
+function buildRegionValues(sheetName, rowIndex, row, ptoMap = {}) {
   const weekNumber = toNumber(row[0]);
   const daysInPeriod = toNumber(row[1]);
   const monthTag = safeText(sheetName === "Denver" ? row[18] : row[17]);
@@ -269,8 +397,7 @@ function buildRegionValues(sheetName, rowIndex, row) {
     surgeryActual,
     imagingActual,
     totalCalls,
-    abandonedCalls,
-    cashActual
+    abandonedCalls
   );
 
   const hasUsableDays = daysInPeriod != null && daysInPeriod > 0;
@@ -280,7 +407,14 @@ function buildRegionValues(sheetName, rowIndex, row) {
     return {
       accept: false,
       reason: "days-not-positive",
-      rowIndex
+      rowIndex,
+      weekNumber,
+      weekEnding,
+      daysInPeriod,
+      monthTag,
+      totalVisits,
+      totalCalls,
+      cashActual
     };
   }
 
@@ -288,7 +422,13 @@ function buildRegionValues(sheetName, rowIndex, row) {
     return {
       accept: false,
       reason: "missing-month-tag",
-      rowIndex
+      rowIndex,
+      weekNumber,
+      weekEnding,
+      daysInPeriod,
+      totalVisits,
+      totalCalls,
+      cashActual
     };
   }
 
@@ -296,9 +436,18 @@ function buildRegionValues(sheetName, rowIndex, row) {
     return {
       accept: false,
       reason: "no-real-data",
-      rowIndex
+      rowIndex,
+      weekNumber,
+      weekEnding,
+      daysInPeriod,
+      monthTag,
+      totalVisits,
+      totalCalls,
+      cashActual
     };
   }
+
+  const entity = REGION_SHEET_TO_ENTITY[sheetName];
 
   const values = {
     weekNumber,
@@ -315,7 +464,10 @@ function buildRegionValues(sheetName, rowIndex, row) {
     abandonmentRate: percentToDisplay(sheetName === "Denver" ? row[11] : row[10]),
     npToEstablishedConversion: percentToDisplay(sheetName === "Denver" ? row[12] : row[11]),
     npToSurgeryConversion: percentToDisplay(sheetName === "Denver" ? row[13] : row[12]),
-    cashActual
+    cashActual,
+    cashCollected: cashActual ?? 0,
+    ptoDays: ptoMap?.[entity]?.[monthTag] ?? 0,
+    operationsNarrative: ""
   };
 
   if (sheetName === "Denver") {
@@ -333,7 +485,7 @@ function buildRegionValues(sheetName, rowIndex, row) {
   };
 }
 
-async function importRegionSheet(regionTable, ws, sheetName) {
+async function importRegionSheet(regionTable, ws, sheetName, ptoMap) {
   const entity = REGION_SHEET_TO_ENTITY[sheetName];
   const rows = sheetRows(ws);
 
@@ -348,7 +500,7 @@ async function importRegionSheet(regionTable, ws, sheetName) {
 
   for (let r = 6; r < rows.length; r += 1) {
     const row = rows[r] || [];
-    const parsed = buildRegionValues(sheetName, r + 1, row);
+    const parsed = buildRegionValues(sheetName, r + 1, row, ptoMap);
 
     if (!parsed.accept) {
       if (parsed.reason !== "missing-week-number") {
@@ -370,7 +522,8 @@ async function importRegionSheet(regionTable, ws, sheetName) {
       weekNumber: parsed.weekNumber,
       weekEnding: parsed.weekEnding,
       monthTag: parsed.values.monthTag,
-      daysInPeriod: parsed.values.daysInPeriod
+      daysInPeriod: parsed.values.daysInPeriod,
+      ptoDays: parsed.values.ptoDays
     });
   }
 
@@ -438,6 +591,36 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
   const portlandReschedules = toNumber(row[25]);
   const portlandUnits = toNumber(row[26]);
 
+  const ptScheduledVisits = sumNumbers([
+    chicagoScheduled,
+    denverScheduled,
+    portlandScheduled
+  ]);
+
+  const ptCancellations = sumNumbers([
+    chicagoCancels,
+    denverCancels,
+    portlandCancels
+  ]);
+
+  const ptNoShows = sumNumbers([
+    chicagoNoShows,
+    denverNoShows,
+    portlandNoShows
+  ]);
+
+  const ptReschedules = sumNumbers([
+    chicagoReschedules,
+    denverReschedules,
+    portlandReschedules
+  ]);
+
+  const totalUnitsBilled = sumNumbers([
+    chicagoUnits,
+    denverUnits,
+    portlandUnits
+  ]);
+
   const alignedWeek = chicagoWeek === denverWeek && chicagoWeek === portlandWeek;
   const alignedMonthTag =
     !!chicagoMonthTag &&
@@ -445,55 +628,6 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
     chicagoMonthTag === portlandMonthTag;
 
   const hasWorkingDays = (workingDaysMap[weekEnding] ?? 0) > 0;
-
-  const byEntity = {
-    MRO: {
-      scheduledVisits: nz(chicagoScheduled),
-      cancellations: nz(chicagoCancels),
-      noShows: nz(chicagoNoShows),
-      reschedules: nz(chicagoReschedules),
-      totalUnitsBilled: nz(chicagoUnits)
-    },
-    SpineOne: {
-      scheduledVisits: nz(denverScheduled),
-      cancellations: nz(denverCancels),
-      noShows: nz(denverNoShows),
-      reschedules: nz(denverReschedules),
-      totalUnitsBilled: nz(denverUnits)
-    },
-    NES: {
-      scheduledVisits: nz(portlandScheduled),
-      cancellations: nz(portlandCancels),
-      noShows: nz(portlandNoShows),
-      reschedules: nz(portlandReschedules),
-      totalUnitsBilled: nz(portlandUnits)
-    }
-  };
-
-  const ptScheduledVisits =
-    byEntity.MRO.scheduledVisits +
-    byEntity.SpineOne.scheduledVisits +
-    byEntity.NES.scheduledVisits;
-
-  const ptCancellations =
-    byEntity.MRO.cancellations +
-    byEntity.SpineOne.cancellations +
-    byEntity.NES.cancellations;
-
-  const ptNoShows =
-    byEntity.MRO.noShows +
-    byEntity.SpineOne.noShows +
-    byEntity.NES.noShows;
-
-  const ptReschedules =
-    byEntity.MRO.reschedules +
-    byEntity.SpineOne.reschedules +
-    byEntity.NES.reschedules;
-
-  const totalUnitsBilled =
-    byEntity.MRO.totalUnitsBilled +
-    byEntity.SpineOne.totalUnitsBilled +
-    byEntity.NES.totalUnitsBilled;
 
   const hasRealData = hasPositiveNumber(
     ptScheduledVisits,
@@ -530,6 +664,7 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
       accept: false,
       reason: "no-working-days",
       rowIndex,
+      chicagoWeek,
       weekEnding
     };
   }
@@ -539,6 +674,7 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
       accept: false,
       reason: "no-real-data",
       rowIndex,
+      chicagoWeek,
       weekEnding
     };
   }
@@ -556,8 +692,7 @@ function buildPtValues(rowIndex, row, workingDaysMap) {
       ptCancellations,
       ptNoShows,
       ptReschedules,
-      totalUnitsBilled,
-      byEntity
+      totalUnitsBilled
     }
   };
 }
@@ -692,7 +827,11 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "unaligned-week",
-      rowIndex
+      rowIndex,
+      chicagoWeek,
+      denverWeek,
+      portlandWeek,
+      laWeek
     };
   }
 
@@ -700,7 +839,11 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "unaligned-month-tag",
-      rowIndex
+      rowIndex,
+      chicagoMonthTag,
+      denverMonthTag,
+      portlandMonthTag,
+      laMonthTag
     };
   }
 
@@ -708,7 +851,9 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "no-working-days",
-      rowIndex
+      rowIndex,
+      chicagoWeek,
+      weekEnding
     };
   }
 
@@ -716,7 +861,9 @@ function buildCxnsValues(rowIndex, row, workingDaysMap) {
     return {
       accept: false,
       reason: "no-real-data",
-      rowIndex
+      rowIndex,
+      chicagoWeek,
+      weekEnding
     };
   }
 
@@ -790,7 +937,10 @@ async function importHolidaysSheet(referenceTable, ws) {
       if (row.some((v) => v != null && v !== "")) {
         rejectedRows.push({
           rowIndex: r + 1,
-          reason: "missing-required-fields"
+          reason: "missing-required-fields",
+          holidayDate,
+          monthTag: derivedMonthTag,
+          workingDays
         });
       }
       continue;
@@ -910,11 +1060,13 @@ async function writeBudgetTargets(budgetTable, parsedBudget, fileName) {
 
 async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, budgetTable, workbook, fileName) {
   const workingDaysMap = buildWorkingDaysMapFromRegionSheets(workbook);
+  const ptoMap = buildMorPtoMap(workbook);
 
   const results = {
     workbookFile: fileName,
     workbookSheets: workbook.SheetNames,
     workingDaysMap,
+    ptoMap,
     regions: [],
     shared: [],
     reference: [],
@@ -929,7 +1081,7 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, bu
     const ws = workbook.Sheets[sheetName];
     if (!ws) continue;
 
-    const result = await importRegionSheet(regionTable, ws, sheetName);
+    const result = await importRegionSheet(regionTable, ws, sheetName, ptoMap);
     results.regions.push({
       sheet: sheetName,
       entity: result.entity,
@@ -1065,3 +1217,6 @@ module.exports = async function (context, req) {
     };
   }
 };
+'''
+open('/mnt/data/app_js_fix_cash_and_pto.txt', 'w').write(app_js)
+print("saved")
