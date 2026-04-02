@@ -1217,6 +1217,3 @@ module.exports = async function (context, req) {
     };
   }
 };
-'''
-open('/mnt/data/app_js_fix_cash_and_pto.txt', 'w').write(app_js)
-print("saved")
