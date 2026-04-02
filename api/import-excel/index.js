@@ -202,48 +202,25 @@ function detectEntityFromSheetName(sheetName) {
   return null;
 }
 
-function scanNearbyForNumber(rows, baseRow, baseCol) {
-  const candidates = [];
-
-  for (let r = Math.max(0, baseRow - 2); r <= Math.min(rows.length - 1, baseRow + 2); r += 1) {
+function findSheetMonthTag(rows) {
+  for (let r = 0; r < Math.min(rows.length, 5); r += 1) {
     const row = rows[r] || [];
-    for (let c = Math.max(0, baseCol - 1); c <= Math.min(row.length - 1, baseCol + 4); c += 1) {
-      const value = toNumber(row[c]);
-      if (value != null) {
-        candidates.push({ row: r, col: c, value });
-      }
+    for (let c = 0; c < Math.min(row.length, 6); c += 1) {
+      const monthTag = normalizeMonthTag(row[c]);
+      if (monthTag) return monthTag;
     }
   }
-
-  if (!candidates.length) return null;
-
-  candidates.sort((a, b) => {
-    const da = Math.abs(a.row - baseRow) + Math.abs(a.col - baseCol);
-    const db = Math.abs(b.row - baseRow) + Math.abs(b.col - baseCol);
-    return da - db;
-  });
-
-  return candidates[0].value;
+  return "";
 }
 
-function findNearestMonthTag(rows, baseRow) {
-  for (let r = baseRow; r >= Math.max(0, baseRow - 12); r -= 1) {
-    const row = rows[r] || [];
-    for (let c = 0; c < row.length; c += 1) {
-      const monthTag = normalizeMonthTag(row[c]);
-      if (monthTag) return monthTag;
-    }
-  }
+function scanRowForBestNumber(row) {
+  const numbers = (row || [])
+    .map((value) => toNumber(value))
+    .filter((value) => value != null);
 
-  for (let r = baseRow + 1; r <= Math.min(rows.length - 1, baseRow + 8); r += 1) {
-    const row = rows[r] || [];
-    for (let c = 0; c < row.length; c += 1) {
-      const monthTag = normalizeMonthTag(row[c]);
-      if (monthTag) return monthTag;
-    }
-  }
+  if (!numbers.length) return null;
 
-  return "";
+  return numbers[numbers.length - 1];
 }
 
 function buildMorPtoMap(workbook) {
@@ -256,6 +233,9 @@ function buildMorPtoMap(workbook) {
     if (!entity) continue;
 
     const rows = sheetRows(workbook.Sheets[sheetName]);
+    const monthTag = findSheetMonthTag(rows);
+
+    if (!monthTag) continue;
     if (!result[entity]) result[entity] = {};
 
     for (let r = 0; r < rows.length; r += 1) {
@@ -265,19 +245,14 @@ function buildMorPtoMap(workbook) {
         const text = safeText(row[c]).toLowerCase();
         if (!text) continue;
 
-        const looksLikePto =
-          text === "pto" ||
-          text.includes("pto day") ||
-          text.includes("pto days") ||
-          text.includes("pto used") ||
-          text.includes("pto taken");
+        const isPtoTotalRow =
+          text === "provider pto mtd total" ||
+          text.includes("provider pto mtd total");
 
-        if (!looksLikePto) continue;
+        if (!isPtoTotalRow) continue;
 
-        const monthTag = findNearestMonthTag(rows, r);
-        const ptoValue = scanNearbyForNumber(rows, r, c);
-
-        if (!monthTag || ptoValue == null) continue;
+        const ptoValue = scanRowForBestNumber(row);
+        if (ptoValue == null) continue;
 
         result[entity][monthTag] = ptoValue;
       }
