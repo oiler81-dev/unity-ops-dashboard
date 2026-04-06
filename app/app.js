@@ -2364,17 +2364,8 @@ function syncTrendsPtVisibility() {
 }
 
 function isMeaningfulTrendsRow(item) {
-  // Filter out rows that are all zeros (placeholder imports) or dated in the future
   const today = new Date().toISOString().slice(0, 10);
-  if (item.weekEnding > today) return false;
-  const hasData = (
-    normalizeNumber(item.visitVolume) > 0 ||
-    normalizeNumber(item.callVolume) > 0 ||
-    normalizeNumber(item.newPatients) > 0 ||
-    normalizeNumber(item.ptVisitsSeen) > 0 ||
-    normalizeNumber(item.cashCollected) > 0
-  );
-  return hasData;
+  return item.weekEnding <= today;
 }
 
 async function loadTrends() {
