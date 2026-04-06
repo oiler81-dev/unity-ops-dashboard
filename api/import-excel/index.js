@@ -22,6 +22,15 @@ const REGION_SHEET_TO_ENTITY = {
   Chicago: "MRO"
 };
 
+// PT sheet column offsets per region block (each block is 10 cols wide)
+// Cols: Week(0), MonthTag(1), Scheduled(2), Cancels(3), NoShows(4),
+//       Reschedules(5), TotalUnits(6), UnitsPerVisit(7), VisitsPerDay(8), VisitsSeen(9)
+const PT_REGION_OFFSETS = {
+  MRO: 0,       // Chicago block starts at col 0
+  SpineOne: 10, // Denver block starts at col 10
+  NES: 20       // Portland block starts at col 20
+};
+
 function sheetRows(ws) {
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
 }
@@ -277,9 +286,30 @@ async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) 
     approvedBy: "workbook-import",
     importedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    // Top-level fields for direct querying
+    visitVolume: values.totalVisits ?? values.visitVolume ?? 0,
+    callVolume: values.callVolume ?? values.totalCalls ?? 0,
+    newPatients: values.npActual ?? values.newPatients ?? 0,
+    surgeries: values.surgeryActual ?? values.surgeries ?? 0,
+    established: values.establishedActual ?? values.established ?? 0,
+    totalCalls: values.totalCalls ?? 0,
+    abandonedCalls: values.abandonedCalls ?? 0,
+    noShowRate: 0,
+    cancellationRate: 0,
+    abandonedCallRate: values.abandonmentRate ?? 0,
     ptoDays: values.ptoDays ?? 0,
-    cashCollected: values.cashCollected ?? 0,
+    cashCollected: values.cashActual ?? values.cashCollected ?? 0,
     operationsNarrative: values.operationsNarrative ?? "",
+    // PT fields — populated later by mergePtDataIntoRegionRecords
+    ptScheduledVisits: values.ptScheduledVisits ?? 0,
+    ptCancellations: values.ptCancellations ?? 0,
+    ptNoShows: values.ptNoShows ?? 0,
+    ptReschedules: values.ptReschedules ?? 0,
+    ptTotalUnitsBilled: values.ptTotalUnitsBilled ?? 0,
+    ptVisitsSeen: values.ptVisitsSeen ?? 0,
+    ptWorkingDays: values.ptWorkingDays ?? 5,
+    ptUnitsPerVisit: values.ptUnitsPerVisit ?? 0,
+    ptVisitsPerDay: values.ptVisitsPerDay ?? 0,
     ...meta
   });
 }
@@ -528,6 +558,94 @@ function buildWorkingDaysMapFromRegionSheets(workbook) {
   }
 
   return map;
+}
+
+// Builds per-entity PT data from the PT sheet
+// Returns { NES: { weekEnding: { ptVisitsSeen, ptTotalUnitsBilled, ... } }, SpineOne: {...}, MRO: {...} }
+function buildPerEntityPtMap(ws) {
+  const rows = sheetRows(ws);
+  const result = { NES: {}, SpineOne: {}, MRO: {} };
+
+  // Data starts at row index 12 (row 13 in sheet, 0-indexed = 12)
+  for (let r = 12; r < rows.length; r += 1) {
+    const row = rows[r] || [];
+
+    for (const [entity, offset] of Object.entries(PT_REGION_OFFSETS)) {
+      const weekNumber = toNumber(row[offset]);
+      if (!weekNumber) continue;
+
+      const weekEnding = weekEndingFromWeekNumber(weekNumber);
+      if (!weekEnding) continue;
+
+      const scheduled = toNumber(row[offset + 2]) ?? 0;
+      const cancellations = toNumber(row[offset + 3]) ?? 0;
+      const noShows = toNumber(row[offset + 4]) ?? 0;
+      const reschedules = toNumber(row[offset + 5]) ?? 0;
+      const totalUnitsBilled = toNumber(row[offset + 6]) ?? 0;
+      const unitsPerVisit = toNumber(row[offset + 7]) ?? 0;
+      const visitsPerDay = toNumber(row[offset + 8]) ?? 0;
+      const visitsSeen = toNumber(row[offset + 9]) ?? 0;
+
+      // Only store rows that have real PT data
+      if (!hasPositiveNumber(scheduled, visitsSeen, totalUnitsBilled)) continue;
+
+      result[entity][weekEnding] = {
+        ptScheduledVisits: scheduled,
+        ptCancellations: cancellations,
+        ptNoShows: noShows,
+        ptReschedules: reschedules,
+        ptTotalUnitsBilled: totalUnitsBilled,
+        ptVisitsSeen: visitsSeen,
+        ptWorkingDays: 5,
+        ptUnitsPerVisit: unitsPerVisit,
+        ptVisitsPerDay: visitsPerDay
+      };
+    }
+  }
+
+  return result;
+}
+
+// After region records are written, patch PT fields onto matching region records
+async function mergePtDataIntoRegionRecords(regionTable, ptMap) {
+  const merged = { NES: 0, SpineOne: 0, MRO: 0 };
+
+  for (const [entity, weekMap] of Object.entries(ptMap)) {
+    for (const [weekEnding, ptValues] of Object.entries(weekMap)) {
+      try {
+        // Fetch existing record first so we preserve all region fields
+        let existing = null;
+        try {
+          existing = await regionTable.getEntity(entity, weekEnding);
+        } catch (err) {
+          if (err.statusCode !== 404) throw err;
+        }
+
+        if (!existing) continue; // Only update records that already exist from region import
+
+        await regionTable.updateEntity({
+          partitionKey: entity,
+          rowKey: weekEnding,
+          ptScheduledVisits: ptValues.ptScheduledVisits,
+          ptCancellations: ptValues.ptCancellations,
+          ptNoShows: ptValues.ptNoShows,
+          ptReschedules: ptValues.ptReschedules,
+          ptTotalUnitsBilled: ptValues.ptTotalUnitsBilled,
+          ptVisitsSeen: ptValues.ptVisitsSeen,
+          ptWorkingDays: ptValues.ptWorkingDays,
+          ptUnitsPerVisit: ptValues.ptUnitsPerVisit,
+          ptVisitsPerDay: ptValues.ptVisitsPerDay,
+          updatedAt: new Date().toISOString()
+        }, "Merge");
+
+        merged[entity] += 1;
+      } catch (err) {
+        // Non-fatal — log and continue
+      }
+    }
+  }
+
+  return merged;
 }
 
 function buildPtValues(rowIndex, row, workingDaysMap) {
@@ -1049,9 +1167,11 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, bu
       imported: 0,
       acceptedRows: [],
       budgetSheet: null
-    }
+    },
+    ptMerge: {}
   };
 
+  // Step 1 — import region sheets
   for (const sheetName of ["LA", "Portland", "Denver", "Chicago"]) {
     const ws = workbook.Sheets[sheetName];
     if (!ws) continue;
@@ -1067,6 +1187,7 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, bu
     });
   }
 
+  // Step 2 — import PT sheet into SharedPageData (aggregate, unchanged)
   if (workbook.Sheets.PT) {
     const ptResult = await importPtSheet(sharedTable, workbook.Sheets.PT, workingDaysMap);
 
@@ -1078,6 +1199,11 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, bu
       acceptedRows: ptResult.acceptedRows,
       rejectedRows: ptResult.rejectedRows.slice(0, 15)
     });
+
+    // Step 3 — also merge per-entity PT data into WeeklyRegionData
+    const perEntityPtMap = buildPerEntityPtMap(workbook.Sheets.PT);
+    const mergeResult = await mergePtDataIntoRegionRecords(regionTable, perEntityPtMap);
+    results.ptMerge = mergeResult;
   }
 
   if (workbook.Sheets.CXNS) {
