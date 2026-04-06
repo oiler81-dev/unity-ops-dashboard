@@ -158,20 +158,31 @@ module.exports = async function (context, req) {
         totalCalls: toNumber(values.totalCalls ?? values.callVolume ?? record?.totalCalls ?? record?.callVolume, 0),
         abandonedCalls: toNumber(values.abandonedCalls ?? record?.abandonedCalls, 0),
 
-        noShowRate: toNumber(
-          record?.noShowRate ?? values.noShowRate,
-          0
-        ),
-        cancellationRate: toNumber(
-          record?.cancellationRate ?? values.cancellationRate,
-          0
-        ),
-        abandonedCallRate: toNumber(
-          record?.abandonedCallRate ??
-          values.abandonedCallRate ??
-          values.abandonmentRate,
-          0
-        ),
+        noShowRate: (() => {
+          const stored = toNumber(record?.noShowRate ?? values.noShowRate, 0);
+          if (stored > 0) return stored;
+          const noShowsRaw = toNumber(values.noShows ?? record?.noShows, 0);
+          const cancelledRaw = toNumber(values.cancelled ?? record?.cancelled, 0);
+          const visitVol = toNumber(values.totalVisits ?? values.visitVolume ?? record?.visitVolume, 0);
+          const scheduled = visitVol + noShowsRaw + cancelledRaw;
+          return scheduled > 0 ? Number(((noShowsRaw / scheduled) * 100).toFixed(2)) : 0;
+        })(),
+        cancellationRate: (() => {
+          const stored = toNumber(record?.cancellationRate ?? values.cancellationRate, 0);
+          if (stored > 0) return stored;
+          const noShowsRaw = toNumber(values.noShows ?? record?.noShows, 0);
+          const cancelledRaw = toNumber(values.cancelled ?? record?.cancelled, 0);
+          const visitVol = toNumber(values.totalVisits ?? values.visitVolume ?? record?.visitVolume, 0);
+          const scheduled = visitVol + noShowsRaw + cancelledRaw;
+          return scheduled > 0 ? Number(((cancelledRaw / scheduled) * 100).toFixed(2)) : 0;
+        })(),
+        abandonedCallRate: (() => {
+          const stored = toNumber(record?.abandonedCallRate ?? values.abandonedCallRate ?? values.abandonmentRate, 0);
+          if (stored > 0) return stored;
+          const abandonedRaw = toNumber(values.abandonedCalls ?? record?.abandonedCalls, 0);
+          const callsRaw = toNumber(values.totalCalls ?? values.callVolume ?? record?.totalCalls ?? record?.callVolume, 0);
+          return callsRaw > 0 ? Number(((abandonedRaw / callsRaw) * 100).toFixed(2)) : 0;
+        })(),
 
         cashCollected: toNumber(
           values.cashCollected ??
