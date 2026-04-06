@@ -955,13 +955,13 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
         ? getTrendClass(visitCurrent, current.budgetTotals?.visitVolumeBudget)
         : getTrendClass(visitCurrent, visitComparison)
     },
-    {
+    ...(entityHasPtData(entityScope) || entityScope === "ALL" ? [{
       label: "PT Visits",
       value: formatWhole(ptVisitsCurrent),
       movement: buildKpiMovement(ptVisitsCurrent, ptVisitsComparison, formatWhole),
       meta: `${ptVisitsCurrent - ptVisitsComparison >= 0 ? "+" : ""}${formatWhole(ptVisitsCurrent - ptVisitsComparison)} vs prior`,
       className: getTrendClass(ptVisitsCurrent, ptVisitsComparison)
-    },
+    }] : []),
     {
       label: "Cash Collected",
       value: formatCurrency(current.totals?.cashCollected || 0),
@@ -1163,10 +1163,11 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
                 <span class="entityMetricLabel">Visits</span>
                 <strong>${formatWhole(row.visitVolume)}</strong>
               </div>
+              ${entityHasPtData(entity) ? `
               <div class="entityMetricHero">
                 <span class="entityMetricLabel">PT Visits</span>
                 <strong>${formatWhole(row.pt?.visitsSeen || 0)}</strong>
-              </div>
+              </div>` : ""}
               <div class="entityMetricHero">
                 <span class="entityMetricLabel">Cash</span>
                 <strong class="entityCurrencyValue">${formatCurrency(row.cashCollected || 0)}</strong>
