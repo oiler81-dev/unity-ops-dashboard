@@ -1440,7 +1440,7 @@ function renderActivityTable(rows) {
             <td><strong>${item.entity}</strong></td>
             <td>${item.weekEnding || "—"}</td>
             <td><span class="${statusPillClass(item.status)}">${item.status || "saved"}</span></td>
-            <td>${item.updatedBy || <span style="color:#8eb2c9">—</span>}</td>
+            <td>${item.updatedBy || "—"}</td>
             <td>
               <div>${item.updatedAt ? formatDateTime(item.updatedAt) : "—"}</div>
             </td>
