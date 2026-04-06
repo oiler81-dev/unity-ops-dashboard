@@ -1823,7 +1823,7 @@ function renderTrendsTable(result) {
 }
 
 function hideAllViews() {
-  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "activityView", "importView"];
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "activityView", "importView", "helpView"];
   ids.forEach((id) => {
     const el = byId(id);
     if (el) el.style.display = "none";
@@ -1837,7 +1837,8 @@ function setActiveNav(buttonId) {
     "navExecutiveBtn",
     "navTrendsBtn",
     "navActivityBtn",
-    "navImportBtn"
+    "navImportBtn",
+    "navHelpBtn"
   ].forEach((id) => {
     const btn = byId(id);
     if (!btn) return;
@@ -1890,6 +1891,13 @@ function showImportView() {
   const el = byId("importView");
   if (el) el.style.display = "";
   setActiveNav("navImportBtn");
+}
+
+function showHelpView() {
+  hideAllViews();
+  const el = byId("helpView");
+  if (el) el.style.display = "";
+  setActiveNav("navHelpBtn");
 }
 
 function buildWeekSets() {
@@ -2911,6 +2919,10 @@ function injectUiPolishStyles() {
 
     if (byId("navImportBtn")) {
       byId("navImportBtn").addEventListener("click", showImportView);
+    }
+
+    if (byId("navHelpBtn")) {
+      byId("navHelpBtn").addEventListener("click", showHelpView);
     }
 
     if (byId("loadDashboardBtn")) {
