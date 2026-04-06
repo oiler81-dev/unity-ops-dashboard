@@ -20,6 +20,7 @@
 
       <div class="sidebarSectionLabel">Navigation</div>
 
+      <button id="navHelpBtn" type="button" style="background:linear-gradient(180deg,rgba(247,198,47,0.18) 0%,rgba(247,198,47,0.08) 100%);border-color:rgba(247,198,47,0.3);color:#f7c62f;">Help / ReadMe</button>
       <button id="navDashboardBtn" type="button">Dashboard</button>
       <button id="navEntryBtn" type="button">Weekly Entry</button>
       <button id="navExecutiveBtn" type="button">Executive Summary</button>
@@ -500,6 +501,301 @@
             </details>
           </div>
         </section>
+
+        <section id="helpView" style="display:none;">
+          <div class="panel heroPanel" style="padding-bottom:32px;">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Documentation</div>
+                <h3>UnityMSK Ops Dashboard — Help &amp; ReadMe</h3>
+                <p>Full reference guide for all views, fields, and metrics. Use the section links to jump to any topic.</p>
+              </div>
+            </div>
+
+            <div class="helpNavBar">
+              <a class="helpNavPill" href="#help-dashboard">Dashboard</a>
+              <a class="helpNavPill" href="#help-entry">Weekly Entry</a>
+              <a class="helpNavPill" href="#help-executive">Executive Summary</a>
+              <a class="helpNavPill" href="#help-trends">Trends</a>
+              <a class="helpNavPill" href="#help-activity">Activity Log</a>
+              <a class="helpNavPill" href="#help-import">Admin Import</a>
+              <a class="helpNavPill" href="#help-glossary">Glossary</a>
+            </div>
+          </div>
+
+          <!-- SECTION 1: DASHBOARD -->
+          <div class="panel sectionPanel" id="help-dashboard">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 1</div>
+              <h3>Dashboard</h3>
+              <p>The command center. Cross-entity performance for any selected time window — the first thing ops leadership should check every Monday morning.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Period Controls</h4>
+              <p class="helpBody">Use these controls to define what time window you are looking at and what you are comparing against.</p>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Control</th><th>What it does</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Period</strong></td><td>Sets the time window: Last Week, MTD, Last Month, Rolling 4 Weeks, or Custom Range.</td></tr>
+                  <tr><td><strong>Compare Against</strong></td><td>Prior Period compares to the same window one period back. Budget compares actuals to prorated monthly targets.</td></tr>
+                  <tr><td><strong>Entity Scope</strong></td><td>Filter to a single operating unit (LAOSS, NES, SpineOne, MRO) or view all four together.</td></tr>
+                  <tr><td><strong>Quick Presets</strong></td><td>The Last Week / MTD / Rolling 4 pills instantly switch the period without using the dropdowns.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Top-Line Metric Cards</h4>
+              <p class="helpBody">Eight cards giving the executive snapshot. Each shows the current period value and, where applicable, a movement arrow showing change vs. the comparison period.</p>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Metric</th><th>Definition &amp; Why It Matters</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Visit Volume</strong></td><td>New Patients + Surgeries + Established visits. The primary volume indicator. Green = above comparison, red = below.</td></tr>
+                  <tr><td><strong>PT Visits</strong></td><td>Physical therapy visits seen for NES, SpineOne, and MRO. Not shown for LAOSS which has no PT program.</td></tr>
+                  <tr><td><strong>Cash Collected</strong></td><td>Total cash received across entities in the period. This is cash collected, not billed revenue.</td></tr>
+                  <tr><td><strong>PTO Days</strong></td><td>Provider PTO taken in the period. Helps explain volume dips — if visits are down and PTO is up, that is your answer.</td></tr>
+                  <tr><td><strong>Total Surgeries</strong></td><td>Surgical cases performed. Tracked separately from visit volume to give surgical throughput visibility.</td></tr>
+                  <tr><td><strong>Call Volume</strong></td><td>Total inbound calls. A leading indicator of demand and front-desk load.</td></tr>
+                  <tr><td><strong>Avg CXNS %</strong></td><td>Combined average no-show and cancellation rate across entities. No Show and Cancel shown separately in the sub-label. Flag above 14% combined.</td></tr>
+                  <tr><td><strong>Avg Abandoned %</strong></td><td>Percentage of inbound calls abandoned before being answered. Above 10% is a watchlist trigger.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Volume Trends Chart</h4>
+              <p class="helpBody">Week-by-week movement across the selected period. Lines: Visits (blue), PT Visits (purple), New Patients (green), Calls (gold — hidden by default, click the legend to enable). In Budget mode, a red dashed line shows the visit volume target.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Entity Performance Cards</h4>
+              <p class="helpBody">Each operating unit gets its own card showing: status chip, performance summary signal, visit/PT/cash for the period, variance vs. prior or budget progress bars, health metrics (No Show %, Cancel %, Abandoned %), and the Access Health bar.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Alerts &amp; Wins</h4>
+              <p class="helpBody"><strong>Alerts</strong> flag entities exceeding thresholds: no-show rate above 6%, cancellation rate above 8%, abandoned calls above 10%, or visits down more than 100 vs. prior period. <strong>Wins</strong> surface positive signals: entities above budget, PT improvement, strong call handling below 5% abandoned. <strong>Entity Snapshot</strong> is a quick data table of actuals for the selected scope.</p>
+            </div>
+          </div>
+
+          <!-- SECTION 2: WEEKLY ENTRY -->
+          <div class="panel sectionPanel" id="help-entry">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 2</div>
+              <h3>Weekly Entry</h3>
+              <p>How each operating unit submits their operational data. Staff fill this in every Friday (or Monday for the prior week). The week ending date is always a Friday.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">How it works</h4>
+              <ul class="helpList">
+                <li>Select the entity and week ending date at the top. The entry audit panel shows whether a record already exists for that week.</li>
+                <li>The form auto-detects PT vs. standard entry and shows the correct fields.</li>
+                <li>Raw counts are entered. Rates (no-show %, cancellation %, abandoned call %) are calculated automatically — staff never type percentages.</li>
+                <li>Hit <strong>Save</strong> to store the draft. The entry is immediately visible in Trends and Activity Log.</li>
+              </ul>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Team Inputs (standard entry)</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>New Patients</strong></td><td>Count of new patient appointments seen this week.</td></tr>
+                  <tr><td><strong>Surgeries</strong></td><td>Count of surgical cases performed.</td></tr>
+                  <tr><td><strong>Established</strong></td><td>Count of established (returning) patient visits.</td></tr>
+                  <tr><td><strong>No Shows</strong></td><td>Appointments where the patient did not arrive and did not cancel.</td></tr>
+                  <tr><td><strong>Cancelled</strong></td><td>Appointments cancelled by the patient or clinic before the visit.</td></tr>
+                  <tr><td><strong>Total Calls</strong></td><td>Total inbound calls received by the front desk this week.</td></tr>
+                  <tr><td><strong>Abandoned Calls</strong></td><td>Calls that rang but were hung up before being answered.</td></tr>
+                  <tr><td><strong>Cash Collected</strong></td><td>Dollar amount of cash/copay collected at point of service this week.</td></tr>
+                  <tr><td><strong>PTO Days</strong></td><td>Provider PTO days taken during the week.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Calculated Fields (auto-computed, read-only)</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Field</th><th>Formula</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Visit Volume</strong></td><td>New Patients + Surgeries + Established</td></tr>
+                  <tr><td><strong>No Show %</strong></td><td>No Shows ÷ (Visit Volume + No Shows + Cancelled) × 100</td></tr>
+                  <tr><td><strong>Cancellation %</strong></td><td>Cancelled ÷ (Visit Volume + No Shows + Cancelled) × 100</td></tr>
+                  <tr><td><strong>Abandoned Call %</strong></td><td>Abandoned Calls ÷ Total Calls × 100</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">PT Inputs (PT entity entries only — NES-PT, SpineOne-PT, MRO-PT)</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>PT Scheduled Visits</strong></td><td>Total PT appointments scheduled for the week.</td></tr>
+                  <tr><td><strong>PT Cancellations</strong></td><td>PT appointments cancelled.</td></tr>
+                  <tr><td><strong>PT No Shows</strong></td><td>PT appointments where the patient did not arrive.</td></tr>
+                  <tr><td><strong>PT Reschedules</strong></td><td>PT appointments rescheduled (not cancelled outright).</td></tr>
+                  <tr><td><strong>PT Total Units Billed</strong></td><td>Total billing units generated by PT for the week.</td></tr>
+                  <tr><td><strong>PT Visits Seen</strong></td><td>Actual PT patient visits completed.</td></tr>
+                  <tr><td><strong>PT Working Days</strong></td><td>Number of days PT operated this week (default 5).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Operator Notes</h4>
+              <p class="helpBody">The free-text section at the bottom prompts for: what went well, what could be better, major red flags, adjustments for next week, and additional insight. These notes give leadership qualitative context behind the numbers and are stored with the weekly record.</p>
+            </div>
+          </div>
+
+          <!-- SECTION 3: EXECUTIVE SUMMARY -->
+          <div class="panel sectionPanel" id="help-executive">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 3</div>
+              <h3>Executive Summary</h3>
+              <p>Single-week deep dive across all four entities. Pick any week ending date and get a full roll-up. Designed for weekly leadership review calls.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">What is shown</h4>
+              <ul class="helpList">
+                <li><strong>10 top-line metric cards:</strong> Visit Volume, PT Visits, Cash Collected, PTO Days, Total Surgeries, Call Volume, New Patients, Avg No Show %, Avg Cancel %.</li>
+                <li><strong>Approved Regions table:</strong> one row per entity — visits, cash, PTO, calls, new patients, and all three rate metrics side by side.</li>
+                <li><strong>PT Productivity panel:</strong> PT totals and productivity metrics — units billed, units per visit, and a PT regional breakdown table for NES, SpineOne, and MRO.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- SECTION 4: TRENDS -->
+          <div class="panel sectionPanel" id="help-trends">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 4</div>
+              <h3>Trends</h3>
+              <p>Historical week-over-week movement for a single entity. Spot seasonality, catch multi-week declines early, or validate that an operational change had the intended effect.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Controls</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Control</th><th>Options</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Entity</strong></td><td>LAOSS, NES, SpineOne, MRO — one entity at a time.</td></tr>
+                  <tr><td><strong>Range Mode</strong></td><td>Recent Weeks shows the most recent N weeks of actual data. Date Range lets you specify start and end dates explicitly.</td></tr>
+                  <tr><td><strong>Weeks</strong></td><td>8, 12, 16, 24, or 52 weeks of history in Recent mode. Auto-loads when changed.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">What is shown</h4>
+              <ul class="helpList">
+                <li>Summary cards: Weeks Loaded, Latest Visit Volume (with delta vs. prior week), Latest PT Visits, Latest Cash, Latest Call Volume.</li>
+                <li>Trend History table: week-by-week breakdown of visits, PT, cash, PTO, calls, no-show %, cancel %, and abandoned %.</li>
+                <li>PT Historical Performance panel: shown for NES, SpineOne, and MRO. Hidden for LAOSS which has no PT program.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- SECTION 5: ACTIVITY LOG -->
+          <div class="panel sectionPanel" id="help-activity">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 5</div>
+              <h3>Activity Log</h3>
+              <p>The audit trail. Every weekly entry saved across all entities, with timestamps and the name of who saved it. Use this to confirm whether a location has submitted their weekly data.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Filters</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Filter</th><th>Purpose</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Entity</strong></td><td>Narrow to a single location or view all.</td></tr>
+                  <tr><td><strong>Week Ending</strong></td><td>Filter to a specific week.</td></tr>
+                  <tr><td><strong>Rows</strong></td><td>25, 50, 100, or 200 results per load.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Columns</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Entity</strong></td><td>Which operating unit submitted the entry.</td></tr>
+                  <tr><td><strong>Week Ending</strong></td><td>The Friday that closes the reporting week.</td></tr>
+                  <tr><td><strong>Status</strong></td><td>Saved (draft), Submitted, or Approved.</td></tr>
+                  <tr><td><strong>Updated By</strong></td><td>Email of the last person to modify the record.</td></tr>
+                  <tr><td><strong>Updated At</strong></td><td>Date and time of the last modification.</td></tr>
+                  <tr><td><strong>Created By / Created At</strong></td><td>Who originally created the entry and when.</td></tr>
+                  <tr><td><strong>Visits / New Pts</strong></td><td>Quick data columns to confirm the right entry was found.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SECTION 6: ADMIN IMPORT -->
+          <div class="panel sectionPanel" id="help-import">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 6</div>
+              <h3>Admin Import</h3>
+              <p>Admin-only. Bulk-loads historical weekly data and budget targets from the locked operational workbook. Not for daily use — for backfilling history and onboarding new data.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">What the import reads</h4>
+              <ul class="helpList">
+                <li><strong>LA, Portland, Denver, Chicago sheets</strong> — weekly visit, call, and cash data per entity.</li>
+                <li><strong>PT sheet</strong> — per-entity PT scheduling, visits seen, and units billed.</li>
+                <li><strong>MOR sheets</strong> — monthly provider PTO totals per entity.</li>
+                <li><strong>Budget V. Monthly Results sheet</strong> — monthly visit and new patient targets for all four entities across all 12 months.</li>
+              </ul>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Important notes</h4>
+              <ul class="helpList">
+                <li>The import is idempotent — running it twice with the same file produces the same result. Safe to re-run.</li>
+                <li>Budget targets are prorated daily, so a 5-week month distributes budget proportionally across each week.</li>
+                <li>PTO data comes from the MOR monthly summary tabs — these reflect whichever month the MOR tab is currently set to.</li>
+                <li>Weekly entry data submitted through the app takes precedence in the dashboard view over imported data.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- SECTION 7: GLOSSARY -->
+          <div class="panel sectionPanel" id="help-glossary">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 7</div>
+              <h3>Glossary — Key Terms</h3>
+              <p>Quick reference for every metric and term used across the dashboard.</p>
+            </div>
+            <div class="helpSubsection">
+              <table class="regionTable helpTable">
+                <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Visit Volume</strong></td><td>New Patients + Surgeries + Established visits. The primary volume metric.</td></tr>
+                  <tr><td><strong>No Show Rate</strong></td><td>% of scheduled appointments where the patient did not arrive and did not cancel. Flag above 6%.</td></tr>
+                  <tr><td><strong>Cancellation Rate</strong></td><td>% of scheduled appointments cancelled before the visit. Flag above 8%.</td></tr>
+                  <tr><td><strong>Abandoned Call Rate</strong></td><td>% of inbound calls hung up before being answered. Flag above 10%.</td></tr>
+                  <tr><td><strong>Access Health</strong></td><td>A composite signal (0–100%) derived from the abandoned call rate. Higher is better.</td></tr>
+                  <tr><td><strong>CXNS</strong></td><td>Cancellations and no-shows combined. CXNS % is the combined rate shown on the dashboard card.</td></tr>
+                  <tr><td><strong>PT Visits Seen</strong></td><td>Physical therapy patient visits actually completed in the week.</td></tr>
+                  <tr><td><strong>Units Billed</strong></td><td>PT billing units generated. Each visit generates multiple units depending on modalities used.</td></tr>
+                  <tr><td><strong>Units/Visit</strong></td><td>Average PT billing units per visit. A PT productivity efficiency metric.</td></tr>
+                  <tr><td><strong>Budget (prorated)</strong></td><td>Monthly budget targets divided proportionally across the working days in each week.</td></tr>
+                  <tr><td><strong>Prior Period</strong></td><td>The same-length window immediately before the current period. E.g., Last Week vs. the week before that.</td></tr>
+                  <tr><td><strong>Week Ending</strong></td><td>Always a Friday. The date that closes a Mon–Fri reporting week.</td></tr>
+                  <tr><td><strong>MTD</strong></td><td>Month to Date — accumulates all weeks with data from the 1st of the current month through today.</td></tr>
+                  <tr><td><strong>Rolling 4</strong></td><td>The four most recent completed weeks, regardless of month boundaries.</td></tr>
+                  <tr><td><strong>Approved</strong></td><td>A weekly entry that has been reviewed and marked approved by an administrator.</td></tr>
+                  <tr><td><strong>Saved / Draft</strong></td><td>An entry that has been entered and saved but not yet submitted or approved.</td></tr>
+                  <tr><td><strong>PTO Days</strong></td><td>Provider paid time off days taken in the period. Used to contextualize volume dips.</td></tr>
+                  <tr><td><strong>LAOSS</strong></td><td>Los Angeles Orthopedic Surgery Specialists.</td></tr>
+                  <tr><td><strong>NES</strong></td><td>Northwest Extremity Specialists (Portland).</td></tr>
+                  <tr><td><strong>SpineOne</strong></td><td>SpineOne (Denver).</td></tr>
+                  <tr><td><strong>MRO</strong></td><td>Midland &amp; Riverside Orthopedics (Chicago).</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </section>
+
       </main>
     </div>
   </div>
