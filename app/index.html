@@ -25,6 +25,7 @@
       <button id="navEntryBtn" type="button">Weekly Entry</button>
       <button id="navExecutiveBtn" type="button">Executive Summary</button>
       <button id="navTrendsBtn" type="button">Trends</button>
+      <button id="navPtoForecastBtn" type="button">PTO Forecast</button>
       <button id="navActivityBtn" type="button">Activity Log</button>
       <button id="navImportBtn" type="button">Admin Import</button>
     </aside>
@@ -500,6 +501,35 @@
               <pre id="importDebugOutput" class="debugOutput"></pre>
             </details>
           </div>
+        </section>
+
+        <section id="ptoForecastView" style="display:none;">
+          <div class="panel heroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Quarterly Planning</div>
+                <h3>PTO Forecast</h3>
+                <p>Enter projected clinical and surgical PTO days per entity. The system forecasts expected visit volume impact based on each entity&#39;s recent daily averages.</p>
+              </div>
+            </div>
+            <div class="subtleBanner" id="ptoForecastBanner">Loading forecast data...</div>
+          </div>
+
+          <div id="ptoForecastEntities"></div>
+
+          <div class="panel sectionPanel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Quarterly Summary</div>
+              <h3>3-Month Impact Forecast</h3>
+              <p>Projected total missed visits across all entities for the rolling quarter.</p>
+            </div>
+            <div id="ptoForecastSummary"></div>
+          </div>
+
+          <details class="debugPanel">
+            <summary>PTO Forecast Debug Output</summary>
+            <pre id="ptoForecastDebugOutput" class="debugOutput"></pre>
+          </details>
         </section>
 
         <section id="helpView" style="display:none;">
