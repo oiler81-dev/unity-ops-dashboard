@@ -294,9 +294,26 @@ async function upsertRegionRecord(table, entity, weekEnding, values, meta = {}) 
     established: values.establishedActual ?? values.established ?? 0,
     totalCalls: values.totalCalls ?? 0,
     abandonedCalls: values.abandonedCalls ?? 0,
-    noShowRate: 0,
-    cancellationRate: 0,
-    abandonedCallRate: values.abandonmentRate ?? 0,
+    noShowRate: (function() {
+      const visits = values.totalVisits ?? values.visitVolume ?? 0;
+      const noShows = values.noShows ?? 0;
+      const cancelled = values.cancelled ?? 0;
+      const scheduled = visits + noShows + cancelled;
+      return scheduled > 0 ? Number(((noShows / scheduled) * 100).toFixed(2)) : 0;
+    })(),
+    cancellationRate: (function() {
+      const visits = values.totalVisits ?? values.visitVolume ?? 0;
+      const noShows = values.noShows ?? 0;
+      const cancelled = values.cancelled ?? 0;
+      const scheduled = visits + noShows + cancelled;
+      return scheduled > 0 ? Number(((cancelled / scheduled) * 100).toFixed(2)) : 0;
+    })(),
+    abandonedCallRate: (function() {
+      const totalCalls = values.totalCalls ?? 0;
+      const abandonedCalls = values.abandonedCalls ?? 0;
+      if (values.abandonmentRate != null) return values.abandonmentRate;
+      return totalCalls > 0 ? Number(((abandonedCalls / totalCalls) * 100).toFixed(2)) : 0;
+    })(),
     ptoDays: values.ptoDays ?? 0,
     cashCollected: values.cashActual ?? values.cashCollected ?? 0,
     operationsNarrative: values.operationsNarrative ?? "",
