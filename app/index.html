@@ -1,1400 +1,835 @@
-:root {
-  --bg-main: #071f33;
-  --bg-sidebar: #041627;
-  --bg-panel: #0d3149;
-  --bg-panel-soft: #123a55;
-  --bg-panel-inner: #0a2639;
-  --bg-glass: rgba(255, 255, 255, 0.04);
-  --bg-glass-strong: rgba(255, 255, 255, 0.07);
-
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --border-mid: rgba(255, 255, 255, 0.14);
-  --border-strong: rgba(108, 182, 255, 0.24);
-
-  --text-main: #f4f8fc;
-  --text-soft: #b8d3e6;
-  --text-muted: #8eb2c9;
-
-  --accent: #f7c62f;
-  --accent-2: #6cb6ff;
-  --accent-3: #74f0ff;
-  --pt-accent: #8f7cff;
-  --pt-accent-2: #b49cff;
-
-  --good: #7cfc98;
-  --warning: #f7c62f;
-  --bad: #ff7d7d;
-
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.22);
-  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.18);
-  --shadow-sm: 0 6px 16px rgba(0, 0, 0, 0.12);
-
-  --radius-xl: 24px;
-  --radius-lg: 18px;
-  --radius-md: 12px;
-  --radius-sm: 8px;
-
-  --transition-fast: 0.16s ease;
-  --transition-med: 0.22s ease;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  font-family: Arial, Helvetica, sans-serif;
-  background:
-    radial-gradient(circle at top center, rgba(108, 182, 255, 0.1), transparent 24%),
-    radial-gradient(circle at 85% 15%, rgba(247, 198, 47, 0.07), transparent 18%),
-    linear-gradient(180deg, #08263a 0%, #071f33 100%);
-  color: var(--text-main);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-#appShell {
-  display: flex;
-  min-height: 100vh;
-}
-
-#sidebar {
-  width: 250px;
-  background:
-    linear-gradient(180deg, rgba(4, 22, 39, 0.98) 0%, rgba(6, 27, 44, 0.98) 100%);
-  padding: 24px 18px;
-  box-sizing: border-box;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow:
-    inset -1px 0 0 rgba(255, 255, 255, 0.03),
-    16px 0 40px rgba(0, 0, 0, 0.12);
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
-  min-height: 100vh;
-  z-index: 20;
-}
-
-.sidebarBrand {
-  margin-bottom: 22px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.sidebarBrandLogo {
-  display: block;
-  width: 100%;
-  max-width: 170px;
-  height: auto;
-  margin: 0 auto;
-  object-fit: contain;
-  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.18));
-}
-
-.sidebarSectionLabel {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-muted);
-  margin-bottom: 12px;
-  font-weight: 700;
-}
-
-#sidebar button {
-  display: block;
-  width: 100%;
-  margin-bottom: 10px;
-  padding: 12px 14px;
-  background: linear-gradient(180deg, rgba(17, 56, 83, 0.88) 0%, rgba(13, 45, 68, 0.88) 100%);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  cursor: pointer;
-  text-align: left;
-  font-weight: 700;
-  font-size: 14px;
-  transition:
-    all var(--transition-fast),
-    box-shadow var(--transition-med),
-    transform var(--transition-fast);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  position: relative;
-  overflow: hidden;
-}
-
-#sidebar button::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(108, 182, 255, 0.12), transparent 45%, rgba(247, 198, 47, 0.08));
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-  pointer-events: none;
-}
-
-#sidebar button:hover {
-  background: linear-gradient(180deg, rgba(23, 74, 108, 0.96) 0%, rgba(18, 63, 94, 0.96) 100%);
-  border-color: rgba(108, 182, 255, 0.22);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
-}
-
-#sidebar button:hover::before {
-  opacity: 1;
-}
-
-#mainContent {
-  flex: 1;
-  padding: 28px;
-  box-sizing: border-box;
-  min-width: 0;
-}
-
-#topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.pageHeading h1 {
-  margin: 0;
-  font-size: 36px;
-  line-height: 1.04;
-  letter-spacing: -0.03em;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
-}
-
-.pageSubheading {
-  margin: 8px 0 0;
-  color: var(--text-soft);
-  font-size: 14px;
-  max-width: 720px;
-}
-
-.eyebrow,
-.sectionEyebrow {
-  display: inline-block;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--accent-2);
-  font-weight: 800;
-  margin-bottom: 8px;
-}
-
-.topbarMeta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.topbarPill {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  padding: 10px 14px;
-  white-space: nowrap;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.pillLabel {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-#userInfo {
-  font-weight: 700;
-  color: var(--text-soft);
-}
-
-main {
-  display: grid;
-  gap: 18px;
-}
-
-.panel {
-  background:
-    linear-gradient(180deg, rgba(13, 49, 73, 0.96) 0%, rgba(11, 42, 63, 0.96) 100%);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  padding: 22px;
-  box-sizing: border-box;
-  box-shadow: var(--shadow-lg);
-  position: relative;
-}
-
-.panel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.heroPanel {
-  background:
-    radial-gradient(circle at top left, rgba(108, 182, 255, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(17, 63, 93, 0.98) 0%, rgba(11, 42, 63, 0.98) 100%);
-}
-
-.dashboardHeroPanel {
-  padding-top: 24px;
-}
-
-.heroPanelTop {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-
-.heroHighlights {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.heroHighlightCard {
-  min-width: 160px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: var(--shadow-sm);
-}
-
-.heroHighlightLabel {
-  display: block;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-  font-weight: 800;
-}
-
-.heroHighlightCard strong {
-  font-size: 14px;
-  color: var(--text-main);
-}
-
-.sectionPanel {
-  padding-top: 20px;
-}
-
-.innerPanel {
-  margin-top: 18px;
-  background: rgba(9, 35, 53, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: none;
-}
-
-.ptSectionPanel {
-  margin-top: 20px;
-  background:
-    radial-gradient(circle at top right, rgba(143, 124, 255, 0.14), transparent 28%),
-    linear-gradient(180deg, rgba(47, 36, 84, 0.96) 0%, rgba(32, 27, 63, 0.96) 100%);
-  border: 1px solid rgba(180, 156, 255, 0.22);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.03),
-    0 14px 32px rgba(68, 52, 132, 0.22);
-}
-
-.ptSectionPanel .sectionEyebrow {
-  color: var(--pt-accent-2);
-}
-
-.ptSectionPanel .sectionHeader p {
-  color: #d8d0ff;
-}
-
-.ptInnerPanel {
-  background:
-    linear-gradient(180deg, rgba(37, 30, 69, 0.88) 0%, rgba(28, 24, 55, 0.9) 100%);
-  border: 1px solid rgba(180, 156, 255, 0.18);
-}
-
-/* Wins panel accent */
-.winsPanel {
-  background:
-    radial-gradient(circle at top left, rgba(124, 252, 152, 0.06), transparent 30%),
-    linear-gradient(180deg, rgba(13, 49, 73, 0.96) 0%, rgba(11, 42, 63, 0.96) 100%);
-  border-color: rgba(124, 252, 152, 0.14);
-}
-
-.winsPanel .sectionEyebrow {
-  color: var(--good);
-}
-
-.sectionHeader {
-  margin-bottom: 18px;
-}
-
-.sectionHeader.compact {
-  margin-bottom: 14px;
-}
-
-.sectionHeader h3 {
-  margin: 0 0 6px;
-  font-size: 24px;
-  line-height: 1.1;
-}
-
-.sectionHeader.compact h3 {
-  font-size: 19px;
-  margin-bottom: 0;
-}
-
-.sectionHeader p {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 14px;
-}
-
-.sectionMiniTitle {
-  margin: 2px 0 0;
-  font-size: 18px;
-  line-height: 1.1;
-}
-
-.dashboardSectionTitleRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 20px;
-  margin-bottom: 6px;
-}
-
-.filterShell {
-  margin-top: 6px;
-  padding: 16px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-}
-
-.dashboardControlRow {
-  margin-bottom: 14px;
-}
-
-.dashboardButtonWrap {
-  min-width: 180px;
-}
-
-.fieldRow {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-}
-
-.fieldRow > div {
-  min-width: 180px;
-  flex: 1 1 180px;
-}
-
-label {
-  display: block;
-  margin-bottom: 7px;
-  font-weight: 700;
-  color: var(--text-soft);
-  font-size: 13px;
-}
-
-input,
-select {
-  width: 100%;
-  padding: 11px 12px;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #ffffff;
-  outline: none;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    background var(--transition-fast),
-    transform var(--transition-fast);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-input:hover,
-select:hover {
-  border-color: rgba(108, 182, 255, 0.24);
-}
-
-input:focus,
-select:focus {
-  border-color: rgba(108, 182, 255, 0.38);
-  box-shadow: 0 0 0 3px rgba(108, 182, 255, 0.12);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-input[readonly] {
-  background: rgba(255, 255, 255, 0.03);
-  color: #dcebf8;
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-select option {
-  color: #000;
-}
-
-.quickPresetBar {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.quickPresetLabel {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.quickPresetPills {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.quickPresetPill {
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: var(--text-soft);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  width: auto;
-  box-shadow: none;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast),
-    transform var(--transition-fast);
-}
-
-.quickPresetPill:hover {
-  background: rgba(255,255,255,0.09);
-  border-color: rgba(108, 182, 255, 0.22);
-  color: var(--text-main);
-  transform: translateY(-1px);
-  box-shadow: none;
-}
-
-.quickPresetPill.quickPresetActive {
-  background: linear-gradient(180deg, rgba(108, 182, 255, 0.22), rgba(108, 182, 255, 0.1));
-  border-color: rgba(108, 182, 255, 0.45);
-  color: #f4f8fc;
-  box-shadow: 0 0 0 1px rgba(108, 182, 255, 0.18) inset;
-}
-
-#kpiForm {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.formSectionBreak {
-  grid-column: 1 / -1;
-  margin-top: 6px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255,255,255,0.08);
-}
-
-.formSectionBreak h4 {
-  margin: 0 0 10px;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-#kpiForm > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.buttonRow {
-  display: flex;
-  gap: 10px;
-  margin-top: 22px;
-  flex-wrap: wrap;
-}
-
-.buttonAlignBottom {
-  display: flex;
-  align-items: flex-end;
-}
-
-button {
-  padding: 11px 18px;
-  background: linear-gradient(180deg, #f7cf45 0%, #f0bf1f 100%);
-  color: #0f1720;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 800;
-  font-size: 14px;
-  transition:
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast),
-    opacity var(--transition-fast),
-    filter var(--transition-fast);
-  box-shadow: 0 10px 24px rgba(242, 194, 48, 0.16);
-  position: relative;
-  overflow: hidden;
-}
-
-button::before {
-  content: "";
-  position: absolute;
-  top: -50%;
-  left: -30%;
-  width: 40%;
-  height: 200%;
-  background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.22), rgba(255,255,255,0));
-  transform: rotate(18deg);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-  pointer-events: none;
-}
-
-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(242, 194, 48, 0.22);
-  filter: brightness(1.02);
-}
-
-button:hover::before {
-  opacity: 1;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.statusMessage {
-  margin-top: 16px;
-  font-weight: 700;
-  min-height: 22px;
-}
-
-.debugPanel {
-  margin-top: 18px;
-  border: 1px solid #1d435b;
-  border-radius: 12px;
-  background: #0a2233;
-  overflow: hidden;
-}
-
-.debugPanel summary {
-  cursor: pointer;
-  padding: 13px 14px;
-  font-weight: 700;
-  background: #102d42;
-  border-bottom: 1px solid #1d435b;
-  user-select: none;
-}
-
-.debugOutput {
-  margin: 0;
-  white-space: pre-wrap;
-  background: #0a2233;
-  padding: 14px;
-  overflow-x: auto;
-  max-height: 420px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #d8e8f6;
-}
-
-.cardGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
-  gap: 16px;
-  margin-top: 18px;
-}
-
-.summaryCard {
-  background:
-    linear-gradient(180deg, rgba(18, 56, 81, 0.96) 0%, rgba(18, 50, 72, 0.96) 100%);
-  border: 1px solid rgba(108, 182, 255, 0.12);
-  border-radius: 18px;
-  padding: 18px;
-  min-height: 138px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    0 10px 22px rgba(0, 0, 0, 0.12);
-  position: relative;
-  overflow: hidden;
-  transition:
-    transform var(--transition-fast),
-    box-shadow var(--transition-med),
-    border-color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.summaryCard::before {
-  content: "";
-  position: absolute;
-  inset: auto -10% 0 -10%;
-  height: 6px;
-  background: linear-gradient(90deg, rgba(108, 182, 255, 0), rgba(108, 182, 255, 0.45), rgba(247, 198, 47, 0.35), rgba(108, 182, 255, 0));
-  opacity: 0.9;
-}
-
-.summaryCard:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    0 16px 30px rgba(0, 0, 0, 0.22);
-  border-color: rgba(108, 182, 255, 0.22);
-}
-
-.summaryCard h3 {
-  margin: 0 0 10px 0;
-  font-size: 12px;
-  color: #b8d9ea;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.summaryCard .value {
-  font-size: 40px;
-  font-weight: 900;
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
-}
-
-.summaryCard .kpiMeta {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-soft);
-}
-
-.summaryCard .kpiMovement {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 800;
-  margin-top: 6px;
-  padding: 3px 8px;
-  border-radius: 999px;
-}
-
-.kpiMovementUp {
-  background: rgba(124, 252, 152, 0.12);
-  color: #7cfc98;
-}
-
-.kpiMovementDown {
-  background: rgba(255, 125, 125, 0.12);
-  color: #ff9b9b;
-}
-
-.kpiMovementFlat {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-muted);
-}
-
-.kpiArrow {
-  font-size: 10px;
-  line-height: 1;
-}
-
-.summaryCard.kpi-positive {
-  background:
-    linear-gradient(180deg, rgba(16, 60, 48, 0.98) 0%, rgba(13, 46, 37, 0.98) 100%) !important;
-  border-color: rgba(124, 252, 152, 0.45) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.03),
-    0 12px 30px rgba(48, 170, 102, 0.18) !important;
-}
-
-.summaryCard.kpi-positive::before {
-  background: linear-gradient(90deg, rgba(124,252,152,0), rgba(124,252,152,0.95), rgba(124,252,152,0)) !important;
-}
-
-.summaryCard.kpi-positive .value {
-  color: #7cfc98 !important;
-}
-
-.summaryCard.kpi-positive h3 {
-  color: #d9ffea;
-}
-
-.summaryCard.kpi-negative {
-  background:
-    linear-gradient(180deg, rgba(68, 28, 34, 0.98) 0%, rgba(51, 22, 27, 0.98) 100%) !important;
-  border-color: rgba(255, 125, 125, 0.45) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.03),
-    0 12px 30px rgba(176, 70, 70, 0.18) !important;
-}
-
-.summaryCard.kpi-negative::before {
-  background: linear-gradient(90deg, rgba(255,125,125,0), rgba(255,125,125,0.95), rgba(255,125,125,0)) !important;
-}
-
-.summaryCard.kpi-negative .value {
-  color: #ff9b9b !important;
-}
-
-.summaryCard.kpi-negative h3 {
-  color: #ffe1e1;
-}
-
-.summaryCard.kpi-neutral {
-  background:
-    linear-gradient(180deg, rgba(68, 57, 18, 0.98) 0%, rgba(53, 43, 15, 0.98) 100%) !important;
-  border-color: rgba(247, 198, 47, 0.48) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.03),
-    0 12px 30px rgba(190, 149, 33, 0.16) !important;
-}
-
-.summaryCard.kpi-neutral::before {
-  background: linear-gradient(90deg, rgba(247,198,47,0), rgba(247,198,47,0.95), rgba(247,198,47,0)) !important;
-}
-
-.summaryCard.kpi-neutral .value {
-  color: #ffd75e !important;
-}
-
-.summaryCard.kpi-neutral h3 {
-  color: #fff1bf;
-}
-
-#executiveCards .summaryCard,
-#trendsCards .summaryCard {
-  min-height: 118px;
-}
-
-#executivePtCards .summaryCard,
-#trendsPtCards .summaryCard {
-  background:
-    linear-gradient(180deg, rgba(62, 49, 112, 0.98) 0%, rgba(46, 38, 86, 0.98) 100%) !important;
-  border-color: rgba(180, 156, 255, 0.34) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.03),
-    0 12px 28px rgba(73, 56, 144, 0.24) !important;
-}
-
-#executivePtCards .summaryCard::before,
-#trendsPtCards .summaryCard::before {
-  background: linear-gradient(90deg, rgba(143,124,255,0), rgba(180,156,255,0.98), rgba(143,124,255,0)) !important;
-}
-
-#executivePtCards .summaryCard h3,
-#trendsPtCards .summaryCard h3 {
-  color: #ece7ff !important;
-}
-
-#executivePtCards .summaryCard .value,
-#trendsPtCards .summaryCard .value {
-  color: #d8cbff !important;
-}
-
-#executivePtCards .summaryCard div:not(.value):not(h3),
-#trendsPtCards .summaryCard div:not(.value):not(h3) {
-  color: #ddd5ff;
-}
-
-.regionTable {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 12px;
-  overflow: hidden;
-  border-radius: 14px;
-}
-
-.regionTable th,
-.regionTable td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 12px 10px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.regionTable th {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.regionTable tbody tr {
-  transition: background var(--transition-fast);
-}
-
-.regionTable tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-#executivePtRegions .regionTable th,
-#trendsPtTableWrap .regionTable th {
-  background: rgba(180, 156, 255, 0.1);
-  color: #e6ddff;
-}
-
-#executivePtRegions .regionTable tbody tr:hover,
-#trendsPtTableWrap .regionTable tbody tr:hover {
-  background: rgba(180, 156, 255, 0.06);
-}
-
-.good {
-  color: var(--good);
-}
-
-.warning {
-  color: var(--warning);
-}
-
-.bad {
-  color: var(--bad);
-  font-weight: 700;
-}
-
-.actionBtn {
-  margin-right: 6px;
-  margin-bottom: 4px;
-  padding: 7px 10px;
-  font-size: 12px;
-  border-radius: 10px;
-}
-
-.subtleBanner {
-  margin-top: 4px;
-  padding: 12px 14px;
-  border: 1px solid rgba(108, 182, 255, 0.14);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-soft);
-  font-size: 13px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-}
-
-.brandContextWrap {
-  margin-bottom: 18px;
-}
-
-#dashboardEntities > div {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap: 16px;
-}
-
-#dashboardEntities > div > div {
-  position: relative;
-  backdrop-filter: blur(2px);
-}
-
-#dashboardEntities img {
-  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.12));
-}
-
-/* Alert items */
-#dashboardAlerts .good,
-#dashboardAlerts .warning,
-#dashboardAlerts .bad {
-  display: block;
-  border-radius: 12px;
-}
-
-#dashboardAlerts > div {
-  background:
-    linear-gradient(180deg, rgba(11, 40, 59, 0.96) 0%, rgba(9, 31, 46, 0.96) 100%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
-}
-
-#dashboardAlerts > div:hover {
-  transform: translateY(-1px);
-  border-color: rgba(108, 182, 255, 0.16) !important;
-}
-
-/* Win items */
-.winItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 10px;
-  padding: 12px 14px;
-  border: 1px solid rgba(124, 252, 152, 0.18);
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(18, 62, 42, 0.88) 0%, rgba(13, 46, 31, 0.88) 100%);
-  box-shadow: inset 0 1px 0 rgba(124, 252, 152, 0.06);
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
-}
-
-.winItem:hover {
-  transform: translateY(-1px);
-  border-color: rgba(124, 252, 152, 0.32);
-}
-
-.winItem:last-child {
-  margin-bottom: 0;
-}
-
-.winItemIcon {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(124, 252, 152, 0.14);
-  border: 1px solid rgba(124, 252, 152, 0.24);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 13px;
-  color: #7cfc98;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.winItemText {
-  font-size: 13px;
-  color: #d4f7e0;
-  line-height: 1.45;
-  font-weight: 600;
-}
-
-.winItemEmpty {
-  padding: 12px 14px;
-  border: 1px dashed rgba(124, 252, 152, 0.14);
-  border-radius: 12px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-/* Activity log */
-.activityStatusPill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.activityStatusSaved {
-  background: rgba(108, 182, 255, 0.12);
-  color: #6cb6ff;
-}
-
-.activityStatusSubmitted {
-  background: rgba(247, 198, 47, 0.14);
-  color: #f7c62f;
-}
-
-.activityStatusApproved {
-  background: rgba(124, 252, 152, 0.12);
-  color: #7cfc98;
-}
-
-.activityMeta {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-#dashboardSnapshot {
-  overflow-x: auto;
-}
-
-.dashboardThreeUp {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1.2fr;
-  gap: 18px;
-  align-items: start;
-}
-
-.chartPanel {
-  padding-top: 10px;
-}
-
-canvas {
-  width: 100% !important;
-  max-height: 260px;
-}
-
-@media (max-width: 1300px) {
-  .dashboardThreeUp {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 1200px) {
-  #sidebar {
-    width: 220px;
-  }
-
-  #mainContent {
-    padding: 22px;
-  }
-
-  .summaryCard .value {
-    font-size: 32px;
-  }
-}
-
-@media (max-width: 980px) {
-  #appShell {
-    flex-direction: column;
-  }
-
-  #sidebar {
-    width: 100%;
-    min-height: auto;
-    position: relative;
-    padding: 18px;
-    border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  #sidebar button {
-    margin-bottom: 8px;
-  }
-
-  #mainContent {
-    padding: 18px;
-  }
-
-  #kpiForm {
-    grid-template-columns: 1fr;
-  }
-
-  #topbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .heroPanelTop {
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 640px) {
-  .panel {
-    padding: 16px;
-    border-radius: 14px;
-  }
-
-  .pageHeading h1 {
-    font-size: 28px;
-  }
-
-  .summaryCard {
-    min-height: 122px;
-  }
-
-  .summaryCard .value {
-    font-size: 28px;
-  }
-
-  .fieldRow {
-    gap: 12px;
-  }
-
-  .fieldRow > div {
-    min-width: 100%;
-    flex-basis: 100%;
-  }
-
-  .buttonRow {
-    flex-direction: column;
-  }
-
-  button {
-    width: 100%;
-  }
-
-  .topbarPill {
-    width: 100%;
-    justify-content: space-between;
-    white-space: normal;
-  }
-
-  .quickPresetBar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .quickPresetPill {
-    width: auto;
-  }
-}
-
-/* ── Help / ReadMe view ──────────────────────────────────────── */
-.helpNavBar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.helpNavPill {
-  padding: 7px 14px;
-  border-radius: 999px;
-  background: rgba(247, 198, 47, 0.1);
-  border: 1px solid rgba(247, 198, 47, 0.28);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.helpNavPill:hover {
-  background: rgba(247, 198, 47, 0.2);
-  border-color: rgba(247, 198, 47, 0.5);
-}
-
-.helpSubsection {
-  margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.helpSubsection:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.helpSubhead {
-  margin: 0 0 10px;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--accent-2);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.helpBody {
-  margin: 0 0 12px;
-  font-size: 14px;
-  color: var(--text-soft);
-  line-height: 1.6;
-}
-
-.helpList {
-  margin: 0 0 12px 0;
-  padding-left: 20px;
-  color: var(--text-soft);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.helpList li {
-  margin-bottom: 6px;
-}
-
-.helpTable td,
-.helpTable th {
-  font-size: 13px;
-  vertical-align: top;
-}
-
-.helpTable td:first-child {
-  white-space: nowrap;
-  color: var(--accent-2);
-  width: 200px;
-}
-
-/* ── PTO Forecast view ───────────────────────────────────────── */
-.ptoEntityPanel {
-  margin-bottom: 20px;
-}
-
-.ptoEntityHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.ptoMonthGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-@media (max-width: 900px) {
-  .ptoMonthGrid { grid-template-columns: 1fr; }
-}
-
-.ptoMonthCard {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 10px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ptoMonthLabel {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.ptoInputRow {
-  display: flex;
-  gap: 12px;
-}
-
-.ptoInputGroup {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.ptoInputLabel {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.ptoInput {
-  width: 100%;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 14px;
-  font-family: var(--font);
-  transition: border-color var(--transition-fast);
-  box-sizing: border-box;
-}
-
-.ptoInput:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.ptoSaveBtn {
-  padding: 8px 0;
-  background: var(--accent);
-  color: #1a1a2e;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 800;
-  font-family: var(--font);
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
-  width: 100%;
-}
-
-.ptoSaveBtn:hover { opacity: 0.85; }
-.ptoSaveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.ptoForecastResult {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  padding-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.ptoImpactRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-}
-
-.ptoImpactLabel {
-  color: var(--text-soft);
-}
-
-.ptoImpactValue {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.ptoImpactTotal {
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 14px;
-}
-
-.ptoImpactTotal .ptoImpactLabel {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.ptoImpactTotal .ptoImpactValue {
-  color: var(--accent);
-  font-size: 15px;
-}
-
-.ptoImpactBadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(247, 198, 47, 0.15);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.ptoNoData {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.ptoSavedBy {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UnityMSK Ops Dashboard</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div id="appShell">
+    <aside id="sidebar">
+      <div class="sidebarBrand">
+        <img
+          src="./assets/logos/unitymsk.png"
+          alt="UnityMSK"
+          class="sidebarBrandLogo"
+        />
+      </div>
+
+      <div class="sidebarSectionLabel">Navigation</div>
+
+      <button id="navHelpBtn" type="button" style="background:linear-gradient(180deg,rgba(247,198,47,0.18) 0%,rgba(247,198,47,0.08) 100%);border-color:rgba(247,198,47,0.3);color:#f7c62f;">Help / ReadMe</button>
+      <button id="navDashboardBtn" type="button">Dashboard</button>
+      <button id="navEntryBtn" type="button">Weekly Entry</button>
+      <button id="navExecutiveBtn" type="button">Executive Summary</button>
+      <button id="navTrendsBtn" type="button">Trends</button>
+      <button id="navPtoForecastBtn" type="button">PTO Forecast</button>
+      <button id="navActivityBtn" type="button">Activity Log</button>
+      <button id="navImportBtn" type="button">Admin Import</button>
+    </aside>
+
+    <div id="mainContent">
+      <header id="topbar">
+        <div class="pageHeading">
+          <div class="eyebrow">UnityMSK Operations</div>
+          <h1>UnityMSK Ops Dashboard</h1>
+          <p class="pageSubheading">
+            Weekly operating visibility across LAOSS, NES, SpineOne, and MRO.
+          </p>
+        </div>
+
+        <div class="topbarMeta">
+          <div class="topbarPill">
+            <span class="pillLabel">Signed in as</span>
+            <span id="userInfo">Loading...</span>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section id="dashboardView">
+          <div class="panel heroPanel dashboardHeroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Performance Command Center</div>
+                <h3>Dashboard</h3>
+                <p>Multi-entity performance view with period and comparison controls.</p>
+              </div>
+
+              <div class="heroHighlights">
+                <div class="heroHighlightCard">
+                  <span class="heroHighlightLabel">Mode</span>
+                  <strong>Actuals + Benchmarks</strong>
+                </div>
+                <div class="heroHighlightCard">
+                  <span class="heroHighlightLabel">Scope</span>
+                  <strong>Ops Leadership View</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="filterShell">
+              <div class="fieldRow dashboardControlRow">
+                <div>
+                  <label for="dashboardPeriodType">Period</label>
+                  <select id="dashboardPeriodType">
+                    <option value="lastWeek" selected>Last Week</option>
+                    <option value="mtd">Month to Date</option>
+                    <option value="lastMonth">Last Month</option>
+                    <option value="rolling4">Rolling 4 Weeks</option>
+                    <option value="custom">Custom Range</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="dashboardCompareAgainst">Compare Against</label>
+                  <select id="dashboardCompareAgainst">
+                    <option value="priorPeriod" selected>Prior Period</option>
+                    <option value="budget">Budget</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="dashboardEntityScope">Entity Scope</label>
+                  <select id="dashboardEntityScope">
+                    <option value="ALL" selected>All Entities</option>
+                    <option value="LAOSS">LAOSS</option>
+                    <option value="NES">NES</option>
+                    <option value="SpineOne">SpineOne</option>
+                    <option value="MRO">MRO</option>
+                  </select>
+                </div>
+
+                <div id="dashboardWeekWrap">
+                  <label for="dashboardWeekEnding">Anchor Week Ending</label>
+                  <input type="date" id="dashboardWeekEnding" />
+                </div>
+
+                <div id="dashboardCustomStartWrap" style="display:none;">
+                  <label for="dashboardCustomStart">Custom Start</label>
+                  <input type="date" id="dashboardCustomStart" />
+                </div>
+
+                <div id="dashboardCustomEndWrap" style="display:none;">
+                  <label for="dashboardCustomEnd">Custom End</label>
+                  <input type="date" id="dashboardCustomEnd" />
+                </div>
+
+                <div class="buttonAlignBottom dashboardButtonWrap">
+                  <button id="loadDashboardBtn" type="button">Load Dashboard</button>
+                </div>
+              </div>
+
+              <div class="quickPresetBar">
+                <span class="quickPresetLabel">Quick presets</span>
+                <div class="quickPresetPills">
+                  <button class="quickPresetPill quickPresetActive" type="button" data-preset="lastWeek">Last Week</button>
+                  <button class="quickPresetPill" type="button" data-preset="mtd">MTD</button>
+                  <button class="quickPresetPill" type="button" data-preset="rolling4">Rolling 4</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="dashboardSummaryText" class="subtleBanner"></div>
+            <div id="dashboardBenchmarkNotice"></div>
+
+            <div class="dashboardSectionTitleRow">
+              <div>
+                <div class="sectionEyebrow">Executive Snapshot</div>
+                <h4 class="sectionMiniTitle">Top-Line Metrics</h4>
+              </div>
+            </div>
+
+            <div id="dashboardCards" class="cardGrid"></div>
+
+            <div class="panel innerPanel chartPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Performance Trends</div>
+                <h3>Volume Trends</h3>
+              </div>
+              <canvas id="visitsChart" height="120"></canvas>
+            </div>
+          </div>
+
+          <div class="panel sectionPanel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Operating Units</div>
+              <h3>Entity Performance</h3>
+              <p>How each operating unit is performing in the selected period.</p>
+            </div>
+            <div id="dashboardEntities"></div>
+          </div>
+
+          <div class="dashboardThreeUp">
+            <div class="panel sectionPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Watchlist</div>
+                <h3>Alerts</h3>
+                <p>Items that need attention based on current thresholds.</p>
+              </div>
+              <div id="dashboardAlerts"></div>
+            </div>
+
+            <div class="panel sectionPanel winsPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Momentum</div>
+                <h3>Wins</h3>
+                <p>Positive performance signals worth calling out.</p>
+              </div>
+              <div id="dashboardWins"></div>
+            </div>
+
+            <div class="panel sectionPanel">
+              <div class="sectionHeader">
+                <div class="sectionEyebrow">Detail View</div>
+                <h3>Entity Snapshot</h3>
+                <p>Quick tabular view of actuals for the selected scope.</p>
+              </div>
+              <div id="dashboardSnapshot"></div>
+            </div>
+          </div>
+
+          <details class="debugPanel">
+            <summary>Dashboard Debug Output</summary>
+            <pre id="dashboardDebugOutput" class="debugOutput"></pre>
+          </details>
+        </section>
+
+        <section id="entryView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Weekly Capture</div>
+              <h3>Weekly Entry</h3>
+              <p>Enter raw operational counts. Percentages are calculated automatically.</p>
+            </div>
+
+            <div class="fieldRow">
+              <div>
+                <label for="entitySelect">Entity</label>
+                <select id="entitySelect"></select>
+              </div>
+
+              <div>
+                <label for="weekEnding">Week Ending</label>
+                <input type="date" id="weekEnding" />
+              </div>
+            </div>
+
+            <div id="entryBrandWrap" class="brandContextWrap"></div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Tracker</div>
+                <h3>Entry Audit</h3>
+              </div>
+              <div id="entryAuditSummary" class="subtleBanner">No entry loaded yet.</div>
+            </div>
+
+            <section id="kpiForm"></section>
+
+            <div class="buttonRow">
+              <button id="saveBtn" type="button">Save</button>
+              <button id="submitBtn" type="button" style="display:none;">Submit</button>
+              <button id="approveBtn" type="button" style="display:none;">Approve</button>
+            </div>
+
+            <div id="statusMessage" class="statusMessage"></div>
+
+            <details class="debugPanel">
+              <summary>Debug Output</summary>
+              <pre id="debugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="executiveView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Leadership Rollup</div>
+              <h3>Executive Summary</h3>
+              <p>Roll-up of approved regional performance for the selected week.</p>
+            </div>
+
+            <div class="fieldRow">
+              <div>
+                <label for="executiveWeekEnding">Week Ending</label>
+                <input type="date" id="executiveWeekEnding" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="loadExecutiveBtn" type="button">Load Summary</button>
+              </div>
+            </div>
+
+            <div id="executiveCards" class="cardGrid"></div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Approved Data</div>
+                <h3>Approved Regions</h3>
+              </div>
+              <div id="executiveRegions"></div>
+            </div>
+
+            <div class="panel innerPanel ptSectionPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Physical Therapy</div>
+                <h3>PT Productivity</h3>
+                <p>PT-specific operational totals and productivity signals from the approved week.</p>
+              </div>
+
+              <div id="executivePtCards" class="cardGrid"></div>
+
+              <div class="panel innerPanel ptInnerPanel">
+                <div class="sectionHeader compact">
+                  <div class="sectionEyebrow">PT Scheduling Health</div>
+                  <h3>PT Regional Performance</h3>
+                </div>
+                <div id="executivePtRegions"></div>
+              </div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Executive Debug Output</summary>
+              <pre id="executiveDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="trendsView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">History + Movement</div>
+              <h3>Trends</h3>
+              <p>Review historical movement and manage overrides when needed.</p>
+            </div>
+
+            <div class="fieldRow">
+              <div>
+                <label for="trendsEntitySelect">Entity</label>
+                <select id="trendsEntitySelect"></select>
+              </div>
+
+              <div>
+                <label for="trendsRangeMode">Range Mode</label>
+                <select id="trendsRangeMode">
+                  <option value="recent" selected>Recent Weeks</option>
+                  <option value="dateRange">Specific Date Range</option>
+                </select>
+              </div>
+
+              <div id="trendsWeeksWrap">
+                <label for="trendsLimit">Weeks</label>
+                <select id="trendsLimit">
+                  <option value="8">8</option>
+                  <option value="12" selected>12</option>
+                  <option value="16">16</option>
+                  <option value="24">24</option>
+                  <option value="52">52</option>
+                </select>
+              </div>
+
+              <div id="trendsStartWrap" style="display:none;">
+                <label for="trendsStartDate">Start Date</label>
+                <input type="date" id="trendsStartDate" />
+              </div>
+
+              <div id="trendsEndWrap" style="display:none;">
+                <label for="trendsEndDate">End Date</label>
+                <input type="date" id="trendsEndDate" />
+              </div>
+
+              <div class="buttonAlignBottom">
+                <button id="loadTrendsBtn" type="button">Load Trends</button>
+              </div>
+            </div>
+
+            <div id="trendsBrandWrap" class="brandContextWrap"></div>
+
+            <div id="trendsCards" class="cardGrid"></div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Historical Detail</div>
+                <h3>Trend History</h3>
+              </div>
+              <div id="trendsTableWrap"></div>
+            </div>
+
+            <div class="panel innerPanel ptSectionPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Physical Therapy</div>
+                <h3>PT Historical Performance</h3>
+                <p>PT productivity, utilization, and scheduling movement for the selected entity.</p>
+              </div>
+
+              <div id="trendsPtCards" class="cardGrid"></div>
+
+              <div class="panel innerPanel ptInnerPanel">
+                <div class="sectionHeader compact">
+                  <div class="sectionEyebrow">PT Activity Trend</div>
+                  <h3>PT Visits and Units</h3>
+                </div>
+                <canvas id="trendsPtChart" height="120"></canvas>
+              </div>
+
+              <div class="panel innerPanel ptInnerPanel">
+                <div class="sectionHeader compact">
+                  <div class="sectionEyebrow">PT Scheduling Health</div>
+                  <h3>PT Weekly History</h3>
+                </div>
+                <div id="trendsPtTableWrap"></div>
+              </div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Trends Debug Output</summary>
+              <pre id="trendsDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="activityView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Tracker</div>
+              <h3>Activity Log</h3>
+              <p>See who created or updated entries across all entities.</p>
+            </div>
+
+            <div class="filterShell">
+              <div class="fieldRow">
+                <div>
+                  <label for="activityEntityFilter">Entity</label>
+                  <select id="activityEntityFilter">
+                    <option value="">All Entities</option>
+                    <option value="LAOSS">LAOSS</option>
+                    <option value="NES">NES</option>
+                    <option value="SpineOne">SpineOne</option>
+                    <option value="MRO">MRO</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="activityWeekFilter">Week Ending</label>
+                  <input type="date" id="activityWeekFilter" />
+                </div>
+
+                <div>
+                  <label for="activityLimit">Rows</label>
+                  <select id="activityLimit">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                  </select>
+                </div>
+
+                <div class="buttonAlignBottom">
+                  <button id="loadActivityBtn" type="button">Load Activity</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="activitySummary" class="subtleBanner">Load recent activity to review entry history across all entities.</div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Audit Trail</div>
+                <h3>Recent Actions</h3>
+              </div>
+              <div id="activityTableWrap"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Activity Debug Output</summary>
+              <pre id="activityDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="importView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Admin Tools</div>
+              <h3>Admin Workbook Import</h3>
+              <p>Upload workbooks to backfill historical weekly data and benchmark budget data into the dashboard.</p>
+            </div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Primary Pipeline</div>
+                <h3>Historical Weekly Import</h3>
+              </div>
+
+              <div class="fieldRow">
+                <div style="min-width:320px;">
+                  <label for="importFile">Workbook File</label>
+                  <input type="file" id="importFile" accept=".xlsx,.xls" />
+                </div>
+
+                <div class="buttonAlignBottom">
+                  <button id="runImportBtn" type="button">Run Weekly Import</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel innerPanel">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Retired Path</div>
+                <h3>Budget Import</h3>
+              </div>
+
+              <div class="fieldRow">
+                <div style="min-width:320px;">
+                  <label for="budgetImportFile">Budget Workbook File</label>
+                  <input type="file" id="budgetImportFile" accept=".xlsx,.xls" />
+                </div>
+
+                <div class="buttonAlignBottom">
+                  <button id="runBudgetImportBtn" type="button">Run Budget Import</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="importStatusMessage" class="statusMessage"></div>
+
+            <details class="debugPanel">
+              <summary>Import Debug Output</summary>
+              <pre id="importDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="ptoForecastView" style="display:none;">
+          <div class="panel heroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Quarterly Planning</div>
+                <h3>PTO Forecast</h3>
+                <p>Enter projected clinical and surgical PTO days per entity. The system forecasts expected visit volume impact based on each entity&#39;s recent daily averages.</p>
+              </div>
+            </div>
+            <div class="subtleBanner" id="ptoForecastBanner">Loading forecast data...</div>
+          </div>
+
+          <div id="ptoForecastEntities"></div>
+
+          <div class="panel sectionPanel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Quarterly Summary</div>
+              <h3>3-Month Impact Forecast</h3>
+              <p>Projected total missed visits across all entities for the rolling quarter.</p>
+            </div>
+            <div id="ptoForecastSummary"></div>
+          </div>
+
+          <details class="debugPanel">
+            <summary>PTO Forecast Debug Output</summary>
+            <pre id="ptoForecastDebugOutput" class="debugOutput"></pre>
+          </details>
+        </section>
+
+        <section id="helpView" style="display:none;">
+          <div class="panel heroPanel" style="padding-bottom:32px;">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Documentation</div>
+                <h3>UnityMSK Ops Dashboard — Help &amp; ReadMe</h3>
+                <p>Full reference guide for all views, fields, and metrics. Use the section links to jump to any topic.</p>
+              </div>
+            </div>
+
+            <div class="helpNavBar">
+              <a class="helpNavPill" href="#help-dashboard">Dashboard</a>
+              <a class="helpNavPill" href="#help-entry">Weekly Entry</a>
+              <a class="helpNavPill" href="#help-executive">Executive Summary</a>
+              <a class="helpNavPill" href="#help-trends">Trends</a>
+              <a class="helpNavPill" href="#help-activity">Activity Log</a>
+              <a class="helpNavPill" href="#help-import">Admin Import</a>
+              <a class="helpNavPill" href="#help-glossary">Glossary</a>
+            </div>
+          </div>
+
+          <!-- SECTION 1: DASHBOARD -->
+          <div class="panel sectionPanel" id="help-dashboard">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 1</div>
+              <h3>Dashboard</h3>
+              <p>The command center. Cross-entity performance for any selected time window — the first thing ops leadership should check every Monday morning.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Period Controls</h4>
+              <p class="helpBody">Use these controls to define what time window you are looking at and what you are comparing against.</p>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Control</th><th>What it does</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Period</strong></td><td>Sets the time window: Last Week, MTD, Last Month, Rolling 4 Weeks, or Custom Range.</td></tr>
+                  <tr><td><strong>Compare Against</strong></td><td>Prior Period compares to the same window one period back. Budget compares actuals to prorated monthly targets.</td></tr>
+                  <tr><td><strong>Entity Scope</strong></td><td>Filter to a single operating unit (LAOSS, NES, SpineOne, MRO) or view all four together.</td></tr>
+                  <tr><td><strong>Quick Presets</strong></td><td>The Last Week / MTD / Rolling 4 pills instantly switch the period without using the dropdowns.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Top-Line Metric Cards</h4>
+              <p class="helpBody">Eight cards giving the executive snapshot. Each shows the current period value and, where applicable, a movement arrow showing change vs. the comparison period.</p>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Metric</th><th>Definition &amp; Why It Matters</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Visit Volume</strong></td><td>New Patients + Surgeries + Established visits. The primary volume indicator. Green = above comparison, red = below.</td></tr>
+                  <tr><td><strong>PT Visits</strong></td><td>Physical therapy visits seen for NES, SpineOne, and MRO. Not shown for LAOSS which has no PT program.</td></tr>
+                  <tr><td><strong>Cash Collected</strong></td><td>Total cash received across entities in the period. This is cash collected, not billed revenue.</td></tr>
+                  <tr><td><strong>PTO Days</strong></td><td>Provider PTO taken in the period. Helps explain volume dips — if visits are down and PTO is up, that is your answer.</td></tr>
+                  <tr><td><strong>Total Surgeries</strong></td><td>Surgical cases performed. Tracked separately from visit volume to give surgical throughput visibility.</td></tr>
+                  <tr><td><strong>Call Volume</strong></td><td>Total inbound calls. A leading indicator of demand and front-desk load.</td></tr>
+                  <tr><td><strong>Avg CXNS %</strong></td><td>Combined average no-show and cancellation rate across entities. No Show and Cancel shown separately in the sub-label. Flag above 14% combined.</td></tr>
+                  <tr><td><strong>Avg Abandoned %</strong></td><td>Percentage of inbound calls abandoned before being answered. Above 10% is a watchlist trigger.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Volume Trends Chart</h4>
+              <p class="helpBody">Week-by-week movement across the selected period. Lines: Visits (blue), PT Visits (purple), New Patients (green), Calls (gold — hidden by default, click the legend to enable). In Budget mode, a red dashed line shows the visit volume target.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Entity Performance Cards</h4>
+              <p class="helpBody">Each operating unit gets its own card showing: status chip, performance summary signal, visit/PT/cash for the period, variance vs. prior or budget progress bars, health metrics (No Show %, Cancel %, Abandoned %), and the Access Health bar.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Alerts &amp; Wins</h4>
+              <p class="helpBody"><strong>Alerts</strong> flag entities exceeding thresholds: no-show rate above 6%, cancellation rate above 8%, abandoned calls above 10%, or visits down more than 100 vs. prior period. <strong>Wins</strong> surface positive signals: entities above budget, PT improvement, strong call handling below 5% abandoned. <strong>Entity Snapshot</strong> is a quick data table of actuals for the selected scope.</p>
+            </div>
+          </div>
+
+          <!-- SECTION 2: WEEKLY ENTRY -->
+          <div class="panel sectionPanel" id="help-entry">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 2</div>
+              <h3>Weekly Entry</h3>
+              <p>How each operating unit submits their operational data. Staff fill this in every Friday (or Monday for the prior week). The week ending date is always a Friday.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">How it works</h4>
+              <ul class="helpList">
+                <li>Select the entity and week ending date at the top. The entry audit panel shows whether a record already exists for that week.</li>
+                <li>The form auto-detects PT vs. standard entry and shows the correct fields.</li>
+                <li>Raw counts are entered. Rates (no-show %, cancellation %, abandoned call %) are calculated automatically — staff never type percentages.</li>
+                <li>Hit <strong>Save</strong> to store the draft. The entry is immediately visible in Trends and Activity Log.</li>
+              </ul>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Team Inputs (standard entry)</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>New Patients</strong></td><td>Count of new patient appointments seen this week.</td></tr>
+                  <tr><td><strong>Surgeries</strong></td><td>Count of surgical cases performed.</td></tr>
+                  <tr><td><strong>Established</strong></td><td>Count of established (returning) patient visits.</td></tr>
+                  <tr><td><strong>No Shows</strong></td><td>Appointments where the patient did not arrive and did not cancel.</td></tr>
+                  <tr><td><strong>Cancelled</strong></td><td>Appointments cancelled by the patient or clinic before the visit.</td></tr>
+                  <tr><td><strong>Total Calls</strong></td><td>Total inbound calls received by the front desk this week.</td></tr>
+                  <tr><td><strong>Abandoned Calls</strong></td><td>Calls that rang but were hung up before being answered.</td></tr>
+                  <tr><td><strong>Cash Collected</strong></td><td>Dollar amount of cash/copay collected at point of service this week.</td></tr>
+                  <tr><td><strong>PTO Days</strong></td><td>Provider PTO days taken during the week.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Calculated Fields (auto-computed, read-only)</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Field</th><th>Formula</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Visit Volume</strong></td><td>New Patients + Surgeries + Established</td></tr>
+                  <tr><td><strong>No Show %</strong></td><td>No Shows ÷ (Visit Volume + No Shows + Cancelled) × 100</td></tr>
+                  <tr><td><strong>Cancellation %</strong></td><td>Cancelled ÷ (Visit Volume + No Shows + Cancelled) × 100</td></tr>
+                  <tr><td><strong>Abandoned Call %</strong></td><td>Abandoned Calls ÷ Total Calls × 100</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">PT Inputs (PT entity entries only — NES-PT, SpineOne-PT, MRO-PT)</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>PT Scheduled Visits</strong></td><td>Total PT appointments scheduled for the week.</td></tr>
+                  <tr><td><strong>PT Cancellations</strong></td><td>PT appointments cancelled.</td></tr>
+                  <tr><td><strong>PT No Shows</strong></td><td>PT appointments where the patient did not arrive.</td></tr>
+                  <tr><td><strong>PT Reschedules</strong></td><td>PT appointments rescheduled (not cancelled outright).</td></tr>
+                  <tr><td><strong>PT Total Units Billed</strong></td><td>Total billing units generated by PT for the week.</td></tr>
+                  <tr><td><strong>PT Visits Seen</strong></td><td>Actual PT patient visits completed.</td></tr>
+                  <tr><td><strong>PT Working Days</strong></td><td>Number of days PT operated this week (default 5).</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Operator Notes</h4>
+              <p class="helpBody">The free-text section at the bottom prompts for: what went well, what could be better, major red flags, adjustments for next week, and additional insight. These notes give leadership qualitative context behind the numbers and are stored with the weekly record.</p>
+            </div>
+          </div>
+
+          <!-- SECTION 3: EXECUTIVE SUMMARY -->
+          <div class="panel sectionPanel" id="help-executive">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 3</div>
+              <h3>Executive Summary</h3>
+              <p>Single-week deep dive across all four entities. Pick any week ending date and get a full roll-up. Designed for weekly leadership review calls.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">What is shown</h4>
+              <ul class="helpList">
+                <li><strong>10 top-line metric cards:</strong> Visit Volume, PT Visits, Cash Collected, PTO Days, Total Surgeries, Call Volume, New Patients, Avg No Show %, Avg Cancel %.</li>
+                <li><strong>Approved Regions table:</strong> one row per entity — visits, cash, PTO, calls, new patients, and all three rate metrics side by side.</li>
+                <li><strong>PT Productivity panel:</strong> PT totals and productivity metrics — units billed, units per visit, and a PT regional breakdown table for NES, SpineOne, and MRO.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- SECTION 4: TRENDS -->
+          <div class="panel sectionPanel" id="help-trends">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 4</div>
+              <h3>Trends</h3>
+              <p>Historical week-over-week movement for a single entity. Spot seasonality, catch multi-week declines early, or validate that an operational change had the intended effect.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Controls</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Control</th><th>Options</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Entity</strong></td><td>LAOSS, NES, SpineOne, MRO — one entity at a time.</td></tr>
+                  <tr><td><strong>Range Mode</strong></td><td>Recent Weeks shows the most recent N weeks of actual data. Date Range lets you specify start and end dates explicitly.</td></tr>
+                  <tr><td><strong>Weeks</strong></td><td>8, 12, 16, 24, or 52 weeks of history in Recent mode. Auto-loads when changed.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">What is shown</h4>
+              <ul class="helpList">
+                <li>Summary cards: Weeks Loaded, Latest Visit Volume (with delta vs. prior week), Latest PT Visits, Latest Cash, Latest Call Volume.</li>
+                <li>Trend History table: week-by-week breakdown of visits, PT, cash, PTO, calls, no-show %, cancel %, and abandoned %.</li>
+                <li>PT Historical Performance panel: shown for NES, SpineOne, and MRO. Hidden for LAOSS which has no PT program.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- SECTION 5: ACTIVITY LOG -->
+          <div class="panel sectionPanel" id="help-activity">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 5</div>
+              <h3>Activity Log</h3>
+              <p>The audit trail. Every weekly entry saved across all entities, with timestamps and the name of who saved it. Use this to confirm whether a location has submitted their weekly data.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Filters</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Filter</th><th>Purpose</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Entity</strong></td><td>Narrow to a single location or view all.</td></tr>
+                  <tr><td><strong>Week Ending</strong></td><td>Filter to a specific week.</td></tr>
+                  <tr><td><strong>Rows</strong></td><td>25, 50, 100, or 200 results per load.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Columns</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Entity</strong></td><td>Which operating unit submitted the entry.</td></tr>
+                  <tr><td><strong>Week Ending</strong></td><td>The Friday that closes the reporting week.</td></tr>
+                  <tr><td><strong>Status</strong></td><td>Saved (draft), Submitted, or Approved.</td></tr>
+                  <tr><td><strong>Updated By</strong></td><td>Email of the last person to modify the record.</td></tr>
+                  <tr><td><strong>Updated At</strong></td><td>Date and time of the last modification.</td></tr>
+                  <tr><td><strong>Created By / Created At</strong></td><td>Who originally created the entry and when.</td></tr>
+                  <tr><td><strong>Visits / New Pts</strong></td><td>Quick data columns to confirm the right entry was found.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SECTION 6: ADMIN IMPORT -->
+          <div class="panel sectionPanel" id="help-import">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 6</div>
+              <h3>Admin Import</h3>
+              <p>Admin-only. Bulk-loads historical weekly data and budget targets from the locked operational workbook. Not for daily use — for backfilling history and onboarding new data.</p>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">What the import reads</h4>
+              <ul class="helpList">
+                <li><strong>LA, Portland, Denver, Chicago sheets</strong> — weekly visit, call, and cash data per entity.</li>
+                <li><strong>PT sheet</strong> — per-entity PT scheduling, visits seen, and units billed.</li>
+                <li><strong>MOR sheets</strong> — monthly provider PTO totals per entity.</li>
+                <li><strong>Budget V. Monthly Results sheet</strong> — monthly visit and new patient targets for all four entities across all 12 months.</li>
+              </ul>
+            </div>
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Important notes</h4>
+              <ul class="helpList">
+                <li>The import is idempotent — running it twice with the same file produces the same result. Safe to re-run.</li>
+                <li>Budget targets are prorated daily, so a 5-week month distributes budget proportionally across each week.</li>
+                <li>PTO data comes from the MOR monthly summary tabs — these reflect whichever month the MOR tab is currently set to.</li>
+                <li>Weekly entry data submitted through the app takes precedence in the dashboard view over imported data.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- SECTION 7: GLOSSARY -->
+          <div class="panel sectionPanel" id="help-glossary">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Section 7</div>
+              <h3>Glossary — Key Terms</h3>
+              <p>Quick reference for every metric and term used across the dashboard.</p>
+            </div>
+            <div class="helpSubsection">
+              <table class="regionTable helpTable">
+                <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Visit Volume</strong></td><td>New Patients + Surgeries + Established visits. The primary volume metric.</td></tr>
+                  <tr><td><strong>No Show Rate</strong></td><td>% of scheduled appointments where the patient did not arrive and did not cancel. Flag above 6%.</td></tr>
+                  <tr><td><strong>Cancellation Rate</strong></td><td>% of scheduled appointments cancelled before the visit. Flag above 8%.</td></tr>
+                  <tr><td><strong>Abandoned Call Rate</strong></td><td>% of inbound calls hung up before being answered. Flag above 10%.</td></tr>
+                  <tr><td><strong>Access Health</strong></td><td>A composite signal (0–100%) derived from the abandoned call rate. Higher is better.</td></tr>
+                  <tr><td><strong>CXNS</strong></td><td>Cancellations and no-shows combined. CXNS % is the combined rate shown on the dashboard card.</td></tr>
+                  <tr><td><strong>PT Visits Seen</strong></td><td>Physical therapy patient visits actually completed in the week.</td></tr>
+                  <tr><td><strong>Units Billed</strong></td><td>PT billing units generated. Each visit generates multiple units depending on modalities used.</td></tr>
+                  <tr><td><strong>Units/Visit</strong></td><td>Average PT billing units per visit. A PT productivity efficiency metric.</td></tr>
+                  <tr><td><strong>Budget (prorated)</strong></td><td>Monthly budget targets divided proportionally across the working days in each week.</td></tr>
+                  <tr><td><strong>Prior Period</strong></td><td>The same-length window immediately before the current period. E.g., Last Week vs. the week before that.</td></tr>
+                  <tr><td><strong>Week Ending</strong></td><td>Always a Friday. The date that closes a Mon–Fri reporting week.</td></tr>
+                  <tr><td><strong>MTD</strong></td><td>Month to Date — accumulates all weeks with data from the 1st of the current month through today.</td></tr>
+                  <tr><td><strong>Rolling 4</strong></td><td>The four most recent completed weeks, regardless of month boundaries.</td></tr>
+                  <tr><td><strong>Approved</strong></td><td>A weekly entry that has been reviewed and marked approved by an administrator.</td></tr>
+                  <tr><td><strong>Saved / Draft</strong></td><td>An entry that has been entered and saved but not yet submitted or approved.</td></tr>
+                  <tr><td><strong>PTO Days</strong></td><td>Provider paid time off days taken in the period. Used to contextualize volume dips.</td></tr>
+                  <tr><td><strong>LAOSS</strong></td><td>Los Angeles Orthopedic Surgery Specialists.</td></tr>
+                  <tr><td><strong>NES</strong></td><td>Northwest Extremity Specialists (Portland).</td></tr>
+                  <tr><td><strong>SpineOne</strong></td><td>SpineOne (Denver).</td></tr>
+                  <tr><td><strong>MRO</strong></td><td>Midland &amp; Riverside Orthopedics (Chicago).</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
