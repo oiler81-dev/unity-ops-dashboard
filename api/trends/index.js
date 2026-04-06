@@ -20,6 +20,11 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function toText(value, fallback = "") {
+  if (value == null) return fallback;
+  return String(value).trim();
+}
+
 function normalizeWeeklyValues(values = {}, record = null) {
   return {
     newPatients: toNumber(values.newPatients ?? values.npActual ?? record?.newPatients, 0),
@@ -88,7 +93,13 @@ function mapRecord(record) {
     ptVisitsSeen: values.ptVisitsSeen,
     ptWorkingDays: values.ptWorkingDays,
     ptUnitsPerVisit: values.ptUnitsPerVisit,
-    ptVisitsPerDay: values.ptVisitsPerDay
+    ptVisitsPerDay: values.ptVisitsPerDay,
+
+    createdBy: toText(record.createdBy),
+    createdAt: toText(record.createdAt),
+    updatedBy: toText(record.updatedBy),
+    updatedAt: toText(record.updatedAt),
+    source: toText(record.source)
   };
 }
 
