@@ -2381,9 +2381,7 @@ async function loadTrends() {
   if (mode === "dateRange" && startDate && endDate) {
     url = `/api/trends?entity=${encodeURIComponent(entity)}&mode=dateRange&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
   } else {
-    // Fetch more than requested so we have headroom to filter empties
-    const fetchWeeks = Math.min(52, parseInt(weeks, 10) * 3);
-    url = `/api/trends?entity=${encodeURIComponent(entity)}&mode=recent&weeks=${fetchWeeks}`;
+    url = `/api/trends?entity=${encodeURIComponent(entity)}&mode=recent&weeks=52`;
   }
 
   const raw = await apiGet(url);
