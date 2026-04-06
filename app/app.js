@@ -130,6 +130,12 @@ function setTrendsDebug(data) {
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
+function setActivityDebug(data) {
+  const el = byId("activityDebugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
 function setImportStatus(message, isError = false) {
   const el = firstExistingId([
     "importStatusMessage",
@@ -855,9 +861,29 @@ function renderMetricCards(containerId, items) {
     <div class="summaryCard ${item.className || ""}">
       <h3>${item.label}</h3>
       <div class="value">${item.value}</div>
-      ${item.meta ? `<div style="margin-top:6px; font-size:12px; opacity:0.85; white-space:pre-line;">${item.meta}</div>` : ""}
+      ${item.movement ? item.movement : ""}
+      ${item.meta ? `<div class="kpiMeta" style="white-space:pre-line;">${item.meta}</div>` : ""}
     </div>
   `).join("");
+}
+
+function buildKpiMovement(current, comparison, formatFn) {
+  const c = normalizeNumber(current);
+  const p = normalizeNumber(comparison);
+  if (!p && !c) return "";
+
+  const diff = c - p;
+
+  if (diff === 0) {
+    return `<div class="kpiMovement kpiMovementFlat"><span class="kpiArrow">—</span> No change</div>`;
+  }
+
+  const isPositive = diff > 0;
+  const arrow = diff > 0 ? "▲" : "▼";
+  const cls = isPositive ? "kpiMovementUp" : "kpiMovementDown";
+  const label = formatFn ? formatFn(Math.abs(diff)) : `${Math.abs(((diff / (p || 1)) * 100)).toFixed(1)}%`;
+
+  return `<div class="kpiMovement ${cls}"><span class="kpiArrow">${arrow}</span> ${label}</div>`;
 }
 
 function buildVariancePct(current, comparison) {
@@ -909,30 +935,37 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
   const avgCancel = averageMetric(current.regions, "cancellationRate");
   const avgCxnsCombined = avgNoShow + avgCancel;
 
-  const visitVariance = normalizeNumber(current.totals?.visitVolume) - normalizeNumber(comparison.totals?.visitVolume);
+  const visitCurrent = normalizeNumber(current.totals?.visitVolume);
+  const visitComparison = normalizeNumber(comparison.totals?.visitVolume);
+  const visitVariance = visitCurrent - visitComparison;
+
+  const isVsBudget = compareAgainst === "budget";
 
   const cards = [
     {
       label: "Visit Volume",
-      value: formatWhole(current.totals?.visitVolume || 0),
-      meta: compareAgainst === "budget"
+      value: formatWhole(visitCurrent),
+      movement: isVsBudget
+        ? buildKpiMovement(visitCurrent, normalizeNumber(current.budgetTotals?.visitVolumeBudget), formatWhole)
+        : buildKpiMovement(visitCurrent, visitComparison, formatWhole),
+      meta: isVsBudget
         ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)}`
         : `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)} vs prior`,
-      className:
-        compareAgainst === "budget"
-          ? getTrendClass(current.totals?.visitVolume, current.budgetTotals?.visitVolumeBudget)
-          : getTrendClass(current.totals?.visitVolume, comparison.totals?.visitVolume)
+      className: isVsBudget
+        ? getTrendClass(visitCurrent, current.budgetTotals?.visitVolumeBudget)
+        : getTrendClass(visitCurrent, visitComparison)
     },
     {
       label: "PT Visits",
       value: formatWhole(ptVisitsCurrent),
+      movement: buildKpiMovement(ptVisitsCurrent, ptVisitsComparison, formatWhole),
       meta: `${ptVisitsCurrent - ptVisitsComparison >= 0 ? "+" : ""}${formatWhole(ptVisitsCurrent - ptVisitsComparison)} vs prior`,
       className: getTrendClass(ptVisitsCurrent, ptVisitsComparison)
     },
     {
       label: "Cash Collected",
       value: formatCurrency(current.totals?.cashCollected || 0),
-      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
+      meta: isVsBudget ? "Actual only" : "Across selected period",
       className: "kpi-neutral"
     },
     {
@@ -944,13 +977,13 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
     {
       label: "Total Surgeries",
       value: formatWhole(current.totals?.surgeries || 0),
-      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
+      meta: isVsBudget ? "Actual only" : "Across selected period",
       className: "kpi-neutral"
     },
     {
       label: "Call Volume",
       value: formatWhole(current.totals?.callVolume || 0),
-      meta: compareAgainst === "budget" ? "Actual only" : "Across selected period",
+      meta: isVsBudget ? "Actual only" : "Across selected period",
       className: "kpi-neutral"
     },
     {
@@ -1265,33 +1298,35 @@ function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
     if (compareAgainst === "budget") {
       const visitGap = normalizeNumber(row.visitVolume) - normalizeNumber(row.visitVolumeBudget);
       if (normalizeNumber(row.visitVolumeBudget) > 0 && visitGap > 0) {
-        wins.push({ severity: "good", text: `${entity} is ${Math.round(visitGap)} visits above budget.` });
+        wins.push({ text: `${entity} is ${Math.round(visitGap)} visits above budget.` });
       }
     } else {
       const visitDiff = normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume);
       const ptDiff = normalizeNumber(row.pt?.visitsSeen) - normalizeNumber(prior.pt?.visitsSeen);
 
       if (visitDiff > 100) {
-        wins.push({ severity: "good", text: `${entity} visits improved by ${Math.round(visitDiff)} vs prior period.` });
+        wins.push({ text: `${entity} visits improved by ${Math.round(visitDiff)} vs prior period.` });
       }
 
       if (ptDiff > 20) {
-        wins.push({ severity: "good", text: `${entity} PT visits improved by ${Math.round(ptDiff)} vs prior period.` });
+        wins.push({ text: `${entity} PT visits improved by ${Math.round(ptDiff)} vs prior period.` });
       }
     }
 
     if (normalizeNumber(row.abandonedCallRate) > 0 && normalizeNumber(row.abandonedCallRate) < 5) {
-      wins.push({ severity: "good", text: `${entity} has strong call handling with only ${normalizeNumber(row.abandonedCallRate).toFixed(1)}% abandoned calls.` });
+      wins.push({ text: `${entity} has strong call handling with only ${normalizeNumber(row.abandonedCallRate).toFixed(1)}% abandoned calls.` });
     }
   });
 
   if (!wins.length) {
-    wins.push({ severity: "warning", text: "No standout wins for the selected period yet." });
+    container.innerHTML = `<div class="winItemEmpty">No standout wins for the selected period yet.</div>`;
+    return;
   }
 
   container.innerHTML = wins.map((win) => `
-    <div class="${win.severity}" style="margin-bottom:8px; padding:12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
-      ${win.text}
+    <div class="winItem">
+      <div class="winItemIcon">&#10003;</div>
+      <div class="winItemText">${win.text}</div>
     </div>
   `).join("");
 }
@@ -1367,6 +1402,98 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
       </tbody>
     </table>
   `;
+}
+
+function renderActivityTable(rows) {
+  const wrap = byId("activityTableWrap");
+  if (!wrap) return;
+
+  if (!rows.length) {
+    wrap.innerHTML = "<p>No activity found for the selected filters.</p>";
+    return;
+  }
+
+  const statusPillClass = (status) => {
+    if (status === "approved") return "activityStatusPill activityStatusApproved";
+    if (status === "submitted") return "activityStatusPill activityStatusSubmitted";
+    return "activityStatusPill activityStatusSaved";
+  };
+
+  wrap.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Week Ending</th>
+          <th>Status</th>
+          <th>Updated By</th>
+          <th>Updated At</th>
+          <th>Created By</th>
+          <th>Created At</th>
+          <th>Visits</th>
+          <th>New Pts</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((item) => `
+          <tr>
+            <td><strong>${item.entity}</strong></td>
+            <td>${item.weekEnding || "—"}</td>
+            <td><span class="${statusPillClass(item.status)}">${item.status || "saved"}</span></td>
+            <td>${item.updatedBy || <span style="color:#8eb2c9">—</span>}</td>
+            <td>
+              <div>${item.updatedAt ? formatDateTime(item.updatedAt) : "—"}</div>
+            </td>
+            <td>${item.createdBy || "—"}</td>
+            <td>${item.createdAt ? formatDateTime(item.createdAt) : "—"}</td>
+            <td>${formatWhole(item.visitVolume)}</td>
+            <td>${formatWhole(item.newPatients)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadActivity() {
+  const entityFilter = byId("activityEntityFilter")?.value || "";
+  const weekFilter = byId("activityWeekFilter")?.value || "";
+  const limit = parseInt(byId("activityLimit")?.value || "50", 10);
+
+  const summaryEl = byId("activitySummary");
+  if (summaryEl) summaryEl.textContent = "Loading activity...";
+
+  const entitiesToFetch = entityFilter ? [entityFilter] : ENTITIES;
+
+  const results = await Promise.all(
+    entitiesToFetch.map((entity) =>
+      apiGet(`/api/trends?entity=${encodeURIComponent(entity)}&mode=recent&weeks=52`)
+        .then((r) => r.items || [])
+        .catch(() => [])
+    )
+  );
+
+  let allRows = results.flat();
+
+  if (weekFilter) {
+    allRows = allRows.filter((item) => item.weekEnding === weekFilter);
+  }
+
+  allRows.sort((a, b) => {
+    const ta = a.updatedAt || a.createdAt || "";
+    const tb = b.updatedAt || b.createdAt || "";
+    return tb.localeCompare(ta);
+  });
+
+  const limited = allRows.slice(0, limit);
+
+  if (summaryEl) {
+    const scopeLabel = entityFilter || "All Entities";
+    summaryEl.textContent = `Showing ${limited.length} of ${allRows.length} entries — ${scopeLabel}${weekFilter ? ` — Week ending ${weekFilter}` : ""}`;
+  }
+
+  renderActivityTable(limited);
+  setActivityDebug({ fetched: allRows.length, showing: limited.length, entitiesToFetch });
 }
 
 function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
@@ -1695,7 +1822,7 @@ function renderTrendsTable(result) {
 }
 
 function hideAllViews() {
-  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "importView"];
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "activityView", "importView"];
   ids.forEach((id) => {
     const el = byId(id);
     if (el) el.style.display = "none";
@@ -1708,6 +1835,7 @@ function setActiveNav(buttonId) {
     "navEntryBtn",
     "navExecutiveBtn",
     "navTrendsBtn",
+    "navActivityBtn",
     "navImportBtn"
   ].forEach((id) => {
     const btn = byId(id);
@@ -1745,6 +1873,13 @@ function showTrendsView() {
   if (el) el.style.display = "";
   setActiveNav("navTrendsBtn");
   renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+}
+
+function showActivityView() {
+  hideAllViews();
+  const el = byId("activityView");
+  if (el) el.style.display = "";
+  setActiveNav("navActivityBtn");
 }
 
 function showImportView() {
@@ -1874,6 +2009,13 @@ function syncDashboardPeriodUi() {
   if (weekWrap) weekWrap.style.display = custom || hideAnchor ? "none" : "";
   if (startWrap) startWrap.style.display = custom ? "" : "none";
   if (endWrap) endWrap.style.display = custom ? "" : "none";
+}
+
+function syncQuickPresetPills(activePreset) {
+  document.querySelectorAll(".quickPresetPill").forEach((pill) => {
+    const preset = pill.getAttribute("data-preset");
+    pill.classList.toggle("quickPresetActive", preset === activePreset);
+  });
 }
 
 async function fetchExecutiveSummaryByWeek(weekEnding) {
@@ -2273,9 +2415,7 @@ function injectUiPolishStyles() {
       line-height: 1.5;
     }
 
-    .narrativeFieldBlock {
-      margin-top: 10px;
-    }
+    .narrativeFieldBlock { margin-top: 10px; }
 
     .notesShell {
       padding: 18px;
@@ -2285,9 +2425,7 @@ function injectUiPolishStyles() {
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
     }
 
-    .notesHeader {
-      margin-bottom: 14px;
-    }
+    .notesHeader { margin-bottom: 14px; }
 
     .notesEyebrow {
       font-size: 11px;
@@ -2346,10 +2484,7 @@ function injectUiPolishStyles() {
       font-weight: 700;
     }
 
-    .summaryCard {
-      min-width: 0;
-      overflow: hidden;
-    }
+    .summaryCard { min-width: 0; overflow: hidden; }
 
     .summaryCard .value {
       font-size: clamp(1.55rem, 2.2vw, 2.5rem) !important;
@@ -2404,10 +2539,7 @@ function injectUiPolishStyles() {
       margin-bottom:14px;
     }
 
-    .entityHeaderLeft {
-      min-width:0;
-      flex:1;
-    }
+    .entityHeaderLeft { min-width:0; flex:1; }
 
     .entityStatusRow {
       display:flex;
@@ -2445,36 +2577,15 @@ function injectUiPolishStyles() {
     .metricChipWarning { background:rgba(247,198,47,0.14); color:#f7c62f; }
     .metricChipBad { background:rgba(255,125,125,0.14); color:#ff9a9a; }
 
-    .entityTitle {
-      font-size:22px;
-      font-weight:900;
-      line-height:1;
-      margin-bottom:6px;
-    }
-
-    .entitySubtitle {
-      font-size:12px;
-      color:#b8d3e6;
-      line-height:1.45;
-    }
+    .entityTitle { font-size:22px; font-weight:900; line-height:1; margin-bottom:6px; }
+    .entitySubtitle { font-size:12px; color:#b8d3e6; line-height:1.45; }
 
     .entityLogoWrap {
-      width:88px;
-      height:46px;
-      background:#fff;
-      border-radius:10px;
-      padding:6px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      flex-shrink:0;
+      width:88px; height:46px; background:#fff; border-radius:10px; padding:6px;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
     }
 
-    .entityLogo {
-      max-width:100%;
-      max-height:100%;
-      object-fit:contain;
-    }
+    .entityLogo { max-width:100%; max-height:100%; object-fit:contain; }
 
     .entityTopMetrics {
       display:grid;
@@ -2512,31 +2623,18 @@ function injectUiPolishStyles() {
       word-break:break-word;
     }
 
-    .entityBudgetGrid,
-    .entityCompareGrid {
-      display:grid;
-      gap:10px;
-      margin-bottom:14px;
-    }
+    .entityBudgetGrid, .entityCompareGrid { display:grid; gap:10px; margin-bottom:14px; }
+    .entityBudgetGrid { grid-template-columns:repeat(2,1fr); }
+    .entityCompareGrid { grid-template-columns:repeat(3,1fr); }
 
-    .entityBudgetGrid {
-      grid-template-columns:repeat(2,1fr);
-    }
-
-    .entityCompareGrid {
-      grid-template-columns:repeat(3,1fr);
-    }
-
-    .entityBudgetTile,
-    .entityMiniStat {
+    .entityBudgetTile, .entityMiniStat {
       background:linear-gradient(180deg, rgba(20,67,97,0.96) 0%, rgba(17,54,79,0.96) 100%);
       border:1px solid rgba(108,182,255,0.12);
       border-radius:14px;
       padding:12px;
     }
 
-    .entityBudgetLabel,
-    .entityMiniLabel {
+    .entityBudgetLabel, .entityMiniLabel {
       display:block;
       font-size:11px;
       text-transform:uppercase;
@@ -2546,53 +2644,27 @@ function injectUiPolishStyles() {
       font-weight:800;
     }
 
-    .entityBudgetValue,
-    .entityMiniStat strong {
-      font-size:22px;
-      font-weight:900;
-      line-height:1;
-      margin-bottom:8px;
-      display:block;
+    .entityBudgetValue, .entityMiniStat strong {
+      font-size:22px; font-weight:900; line-height:1; margin-bottom:8px; display:block;
     }
 
-    .entityBudgetMeta {
-      margin-top:6px;
-      font-size:12px;
-      color:#b8d3e6;
-    }
-
-    .entityProgressWrap {
-      margin-top:10px;
-    }
+    .entityBudgetMeta { margin-top:6px; font-size:12px; color:#b8d3e6; }
+    .entityProgressWrap { margin-top:10px; }
 
     .entityProgressLabelRow {
-      display:flex;
-      justify-content:space-between;
-      gap:10px;
-      align-items:center;
-      font-size:12px;
-      color:#b8d3e6;
-      margin-bottom:6px;
+      display:flex; justify-content:space-between; gap:10px; align-items:center;
+      font-size:12px; color:#b8d3e6; margin-bottom:6px;
     }
 
-    .entityProgressLabelRow strong {
-      color:#fff;
-      font-size:12px;
-    }
+    .entityProgressLabelRow strong { color:#fff; font-size:12px; }
 
     .entityProgressTrack {
-      width:100%;
-      height:10px;
-      border-radius:999px;
-      background:rgba(255,255,255,0.08);
-      overflow:hidden;
-      position:relative;
+      width:100%; height:10px; border-radius:999px;
+      background:rgba(255,255,255,0.08); overflow:hidden; position:relative;
     }
 
     .entityProgressBar {
-      height:100%;
-      border-radius:999px;
-      transition:width .28s ease;
+      height:100%; border-radius:999px; transition:width .28s ease;
       background:linear-gradient(90deg, #6cb6ff, #74f0ff);
     }
 
@@ -2601,105 +2673,59 @@ function injectUiPolishStyles() {
     .entityProgressBad { background:linear-gradient(90deg, #ff7d7d, #ff4f73); }
 
     .entityHealthRow {
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:10px;
-      margin-bottom:12px;
+      display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px;
     }
 
     .entityHealthItem {
-      display:flex;
-      justify-content:space-between;
-      gap:10px;
-      align-items:center;
-      padding:10px 12px;
-      border-radius:12px;
-      background:rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.05);
-      color:#b8d3e6;
-      font-size:13px;
+      display:flex; justify-content:space-between; gap:10px; align-items:center;
+      padding:10px 12px; border-radius:12px;
+      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+      color:#b8d3e6; font-size:13px;
     }
 
-    .entityHealthItem strong {
-      color:#fff;
-      font-size:14px;
-    }
+    .entityHealthItem strong { color:#fff; font-size:14px; }
 
     .entityAccessPanel {
-      margin-bottom:12px;
-      padding:12px;
-      border-radius:14px;
-      background:rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.05);
+      margin-bottom:12px; padding:12px; border-radius:14px;
+      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
     }
 
     .entityDetailDrawer {
-      border:1px solid rgba(255,255,255,0.06);
-      border-radius:12px;
-      background:rgba(7,31,51,0.34);
-      overflow:hidden;
+      border:1px solid rgba(255,255,255,0.06); border-radius:12px;
+      background:rgba(7,31,51,0.34); overflow:hidden;
     }
 
     .entityDetailDrawer summary {
-      cursor:pointer;
-      list-style:none;
-      padding:12px 14px;
-      font-weight:800;
-      font-size:13px;
-      color:#dcebf8;
+      cursor:pointer; list-style:none; padding:12px 14px;
+      font-weight:800; font-size:13px; color:#dcebf8;
     }
 
     .entityDetailDrawer summary::-webkit-details-marker { display:none; }
 
     .entityDetailGrid {
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:10px;
-      padding:0 14px 14px;
+      display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:0 14px 14px;
     }
 
     .entityDetailTile {
-      padding:12px;
-      border-radius:12px;
-      background:rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.05);
+      padding:12px; border-radius:12px;
+      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
     }
 
     .entityDetailLabel {
-      font-size:11px;
-      text-transform:uppercase;
-      letter-spacing:.06em;
-      color:#8eb2c9;
-      margin-bottom:6px;
-      font-weight:800;
+      font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+      color:#8eb2c9; margin-bottom:6px; font-weight:800;
     }
 
-    .entityDetailValue {
-      font-size:18px;
-      font-weight:900;
-      line-height:1.1;
-    }
+    .entityDetailValue { font-size:18px; font-weight:900; line-height:1.1; }
 
     @media (max-width: 820px) {
-      .entityTopMetrics,
-      .entityCompareGrid,
-      .entityHealthRow,
-      .entityDetailGrid {
-        grid-template-columns:1fr;
-      }
-      .entityBudgetGrid {
-        grid-template-columns:1fr;
-      }
+      .entityTopMetrics, .entityCompareGrid, .entityHealthRow, .entityDetailGrid { grid-template-columns:1fr; }
+      .entityBudgetGrid { grid-template-columns:1fr; }
     }
 
     @media (max-width: 768px) {
-      .notesTitle {
-        font-size: 18px;
-      }
-
-      .notesPromptGrid {
-        grid-template-columns: 1fr;
-      }
+      .notesTitle { font-size: 18px; }
+      .notesPromptGrid { grid-template-columns: 1fr; }
     }
   `;
   document.head.appendChild(style);
@@ -2724,13 +2750,27 @@ function injectUiPolishStyles() {
     if (byId("executiveWeekEnding")) byId("executiveWeekEnding").value = defaultWeek;
 
     const dashboardPeriodType = byId("dashboardPeriodType");
-    if (dashboardPeriodType) {
-      const currentWeekOption = dashboardPeriodType.querySelector('option[value="currentWeek"]');
-      if (currentWeekOption) currentWeekOption.remove();
-      dashboardPeriodType.value = "lastWeek";
-    }
+    if (dashboardPeriodType) dashboardPeriodType.value = "lastWeek";
+    syncQuickPresetPills("lastWeek");
 
     renderEntityBrand("entryBrandWrap", getSelectedEntity());
+
+    // Quick preset pills
+    document.querySelectorAll(".quickPresetPill").forEach((pill) => {
+      pill.addEventListener("click", async () => {
+        const preset = pill.getAttribute("data-preset");
+        if (!preset) return;
+        const periodSelect = byId("dashboardPeriodType");
+        if (periodSelect) periodSelect.value = preset;
+        syncDashboardPeriodUi();
+        syncQuickPresetPills(preset);
+        try {
+          await loadDashboardLanding();
+        } catch (e) {
+          setDashboardDebug(String(e));
+        }
+      });
+    });
 
     if (byId("entitySelect")) {
       byId("entitySelect").addEventListener("change", async () => {
@@ -2805,12 +2845,25 @@ function injectUiPolishStyles() {
       });
     }
 
+    if (byId("navActivityBtn")) {
+      byId("navActivityBtn").addEventListener("click", async () => {
+        showActivityView();
+        try {
+          await loadActivity();
+        } catch (e) {
+          setActivityDebug(String(e));
+        }
+      });
+    }
+
     if (byId("navImportBtn")) {
       byId("navImportBtn").addEventListener("click", showImportView);
     }
 
     if (byId("loadDashboardBtn")) {
       byId("loadDashboardBtn").addEventListener("click", async () => {
+        const preset = byId("dashboardPeriodType")?.value;
+        syncQuickPresetPills(preset || "lastWeek");
         try {
           await loadDashboardLanding();
         } catch (e) {
@@ -2821,7 +2874,9 @@ function injectUiPolishStyles() {
 
     if (byId("dashboardPeriodType")) {
       byId("dashboardPeriodType").addEventListener("change", async () => {
+        const preset = byId("dashboardPeriodType").value;
         syncDashboardPeriodUi();
+        syncQuickPresetPills(preset);
         try {
           await loadDashboardLanding();
         } catch (e) {
@@ -2867,6 +2922,16 @@ function injectUiPolishStyles() {
           await loadTrends();
         } catch (e) {
           setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("loadActivityBtn")) {
+      byId("loadActivityBtn").addEventListener("click", async () => {
+        try {
+          await loadActivity();
+        } catch (e) {
+          setActivityDebug(String(e));
         }
       });
     }
