@@ -102,12 +102,8 @@ module.exports = async function (context, req) {
     const sharedTable = getTableClient(SHARED_TABLE);
     const budgetTable = getTableClient(BUDGET_TABLE);
 
-    const ptRecord = await getSharedRecord(sharedTable, "PT", weekEnding);
     const cxnsRecord = await getSharedRecord(sharedTable, "CXNS", weekEnding);
-
-    const ptValues = safeParseJson(ptRecord?.valuesJson, {});
     const cxnsValues = safeParseJson(cxnsRecord?.valuesJson, {});
-    const ptByEntity = ptValues?.byEntity || {};
 
     const regions = [];
 
@@ -128,11 +124,24 @@ module.exports = async function (context, req) {
       const visitBudgetMonthly = toNumber(budgetRecord?.visitBudgetMonthly, 0);
       const newPatientsBudgetMonthly = toNumber(budgetRecord?.newPatientsBudgetMonthly, 0);
 
-      const ptEntity = ptByEntity?.[entity] || {};
-      const ptVisitsSeen =
-        toNumber(ptEntity.scheduledVisits, 0) -
-        toNumber(ptEntity.cancellations, 0) -
-        toNumber(ptEntity.noShows, 0);
+      // PT data is now stored directly on the WeeklyRegionData record
+      const ptScheduledVisits = toNumber(record?.ptScheduledVisits ?? values.ptScheduledVisits, 0);
+      const ptCancellations = toNumber(record?.ptCancellations ?? values.ptCancellations, 0);
+      const ptNoShows = toNumber(record?.ptNoShows ?? values.ptNoShows, 0);
+      const ptReschedules = toNumber(record?.ptReschedules ?? values.ptReschedules, 0);
+      const ptTotalUnitsBilled = toNumber(record?.ptTotalUnitsBilled ?? values.ptTotalUnitsBilled, 0);
+      const ptVisitsSeen = toNumber(record?.ptVisitsSeen ?? values.ptVisitsSeen, 0);
+      const ptWorkingDays = toNumber(record?.ptWorkingDays ?? values.ptWorkingDays, 5);
+
+      const ptUnitsPerVisit =
+        ptVisitsSeen > 0
+          ? Number((ptTotalUnitsBilled / ptVisitsSeen).toFixed(2))
+          : 0;
+
+      const ptVisitsPerDay =
+        ptWorkingDays > 0 && ptVisitsSeen > 0
+          ? Number((ptVisitsSeen / ptWorkingDays).toFixed(2))
+          : 0;
 
       const region = {
         entity,
@@ -150,13 +159,11 @@ module.exports = async function (context, req) {
         abandonedCalls: toNumber(values.abandonedCalls ?? record?.abandonedCalls, 0),
 
         noShowRate: toNumber(
-          record?.noShowRate ??
-          values.noShowRate,
+          record?.noShowRate ?? values.noShowRate,
           0
         ),
         cancellationRate: toNumber(
-          record?.cancellationRate ??
-          values.cancellationRate,
+          record?.cancellationRate ?? values.cancellationRate,
           0
         ),
         abandonedCallRate: toNumber(
@@ -200,20 +207,14 @@ module.exports = async function (context, req) {
         },
 
         pt: {
-          scheduledVisits: toNumber(ptEntity.scheduledVisits, 0),
-          cancellations: toNumber(ptEntity.cancellations, 0),
-          noShows: toNumber(ptEntity.noShows, 0),
-          reschedules: toNumber(ptEntity.reschedules, 0),
-          totalUnitsBilled: toNumber(ptEntity.totalUnitsBilled, 0),
-          visitsSeen: ptVisitsSeen > 0 ? ptVisitsSeen : 0,
-          unitsPerVisit:
-            ptVisitsSeen > 0
-              ? Number((toNumber(ptEntity.totalUnitsBilled, 0) / ptVisitsSeen).toFixed(2))
-              : 0,
-          visitsPerDay:
-            daysInPeriod > 0 && ptVisitsSeen > 0
-              ? Number((ptVisitsSeen / daysInPeriod).toFixed(2))
-              : 0
+          scheduledVisits: ptScheduledVisits,
+          cancellations: ptCancellations,
+          noShows: ptNoShows,
+          reschedules: ptReschedules,
+          totalUnitsBilled: ptTotalUnitsBilled,
+          visitsSeen: ptVisitsSeen,
+          unitsPerVisit: ptUnitsPerVisit,
+          visitsPerDay: ptVisitsPerDay
         }
       };
 
@@ -250,12 +251,12 @@ module.exports = async function (context, req) {
         ? regions.reduce((sum, r) => sum + toNumber(r[key], 0), 0) / regions.length
         : 0;
 
-    const ptUnitsPerVisit =
+    const ptUnitsPerVisitOverall =
       ptTotals.visitsSeen > 0
         ? Number((ptTotals.totalUnitsBilled / ptTotals.visitsSeen).toFixed(2))
         : 0;
 
-    const ptVisitsPerDay =
+    const ptVisitsPerDayOverall =
       regions.length
         ? Number(
             (
@@ -277,8 +278,8 @@ module.exports = async function (context, req) {
           noShowRate: Number(avg("noShowRate").toFixed(2)),
           cancellationRate: Number(avg("cancellationRate").toFixed(2)),
           abandonedCallRate: Number(avg("abandonedCallRate").toFixed(2)),
-          ptUnitsPerVisit,
-          ptVisitsPerDay
+          ptUnitsPerVisit: ptUnitsPerVisitOverall,
+          ptVisitsPerDay: ptVisitsPerDayOverall
         },
         ptTotals,
         cxns: {
