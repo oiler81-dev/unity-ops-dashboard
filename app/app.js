@@ -1823,7 +1823,7 @@ function renderTrendsTable(result) {
 }
 
 function hideAllViews() {
-  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "activityView", "importView", "helpView"];
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "helpView"];
   ids.forEach((id) => {
     const el = byId(id);
     if (el) el.style.display = "none";
@@ -1836,6 +1836,7 @@ function setActiveNav(buttonId) {
     "navEntryBtn",
     "navExecutiveBtn",
     "navTrendsBtn",
+    "navPtoForecastBtn",
     "navActivityBtn",
     "navImportBtn",
     "navHelpBtn"
@@ -1891,6 +1892,264 @@ function showImportView() {
   const el = byId("importView");
   if (el) el.style.display = "";
   setActiveNav("navImportBtn");
+}
+
+function showPtoForecastView() {
+  hideAllViews();
+  const el = byId("ptoForecastView");
+  if (el) el.style.display = "";
+  setActiveNav("navPtoForecastBtn");
+}
+
+function setPtoForecastDebug(data) {
+  const el = byId("ptoForecastDebugOutput");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function renderPtoForecastEntities(data) {
+  const container = byId("ptoForecastEntities");
+  if (!container) return;
+
+  const { entities, monthLabels, monthKeys } = data;
+
+  container.innerHTML = entities.map((entityData) => {
+    const { entity, rates, months } = entityData;
+    const brand = getBranding(entity);
+
+    return `
+      <div class="panel sectionPanel ptoEntityPanel" style="border-top:4px solid ${brand.accent};">
+        <div class="ptoEntityHeader">
+          <div>
+            <div class="sectionEyebrow">${brand.fullName}</div>
+            <h3 style="margin:4px 0 2px;">${entity}</h3>
+            <div style="font-size:12px;color:var(--text-muted);">
+              Rates based on last ${rates.weeksUsed} weeks &nbsp;·&nbsp;
+              ${rates.clinicalVisitsPerDay} clinical visits/day &nbsp;·&nbsp;
+              ${rates.surgeriesPerDay} surgeries/day
+            </div>
+          </div>
+          <div class="entityLogoWrap" style="width:80px;height:40px;">
+            <img src="${brand.logo}" alt="${entity}" class="entityLogo" />
+          </div>
+        </div>
+
+        <div class="ptoMonthGrid">
+          ${months.map((month, i) => `
+            <div class="ptoMonthCard">
+              <div class="ptoMonthLabel">${month.monthLabel}</div>
+
+              <div class="ptoInputRow">
+                <div class="ptoInputGroup">
+                  <label class="ptoInputLabel" for="pto_clinical_${entity}_${i}">Clinical PTO Days</label>
+                  <input
+                    type="number"
+                    id="pto_clinical_${entity}_${i}"
+                    class="ptoInput"
+                    data-entity="${entity}"
+                    data-monthkey="${month.monthKey}"
+                    data-type="clinical"
+                    step="0.5"
+                    min="0"
+                    value="${month.clinicalPtoDays || ""}"
+                    placeholder="0"
+                  />
+                </div>
+                <div class="ptoInputGroup">
+                  <label class="ptoInputLabel" for="pto_surgical_${entity}_${i}">Surgical PTO Days</label>
+                  <input
+                    type="number"
+                    id="pto_surgical_${entity}_${i}"
+                    class="ptoInput"
+                    data-entity="${entity}"
+                    data-monthkey="${month.monthKey}"
+                    data-type="surgical"
+                    step="0.5"
+                    min="0"
+                    value="${month.surgicalPtoDays || ""}"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <button
+                class="ptoSaveBtn"
+                data-entity="${entity}"
+                data-monthkey="${month.monthKey}"
+                data-idx="${i}"
+                type="button"
+              >Save</button>
+
+              <div class="ptoForecastResult" id="ptoResult_${entity}_${i}">
+                ${month.totalMissedVisits > 0 ? `
+                  <div class="ptoImpactRow">
+                    <span class="ptoImpactLabel">Missed Clinical Visits</span>
+                    <strong class="ptoImpactValue">${formatWhole(month.missedClinicalVisits)}</strong>
+                  </div>
+                  <div class="ptoImpactRow">
+                    <span class="ptoImpactLabel">Missed Surgeries</span>
+                    <strong class="ptoImpactValue">${formatWhole(month.missedSurgeries)}</strong>
+                  </div>
+                  <div class="ptoImpactRow ptoImpactTotal">
+                    <span class="ptoImpactLabel">Total Forecasted Impact</span>
+                    <strong class="ptoImpactValue">${formatWhole(month.totalMissedVisits)} visits</strong>
+                  </div>
+                  ${month.savedBy ? `<div class="ptoSavedBy">Saved by ${month.savedBy}</div>` : ""}
+                ` : `<div class="ptoNoData">Enter PTO days above to see forecast</div>`}
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // Wire up save buttons
+  document.querySelectorAll(".ptoSaveBtn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const entity = btn.getAttribute("data-entity");
+      const monthKey = btn.getAttribute("data-monthkey");
+      const idx = btn.getAttribute("data-idx");
+
+      const clinicalInput = document.querySelector(
+        `.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="clinical"]`
+      );
+      const surgicalInput = document.querySelector(
+        `.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="surgical"]`
+      );
+
+      const clinicalPtoDays = parseFloat(clinicalInput?.value || "0") || 0;
+      const surgicalPtoDays = parseFloat(surgicalInput?.value || "0") || 0;
+
+      btn.textContent = "Saving...";
+      btn.disabled = true;
+
+      try {
+        const result = await apiPost("/api/pto-forecast", {
+          entity,
+          monthKey,
+          clinicalPtoDays,
+          surgicalPtoDays
+        });
+
+        const resultEl = byId(`ptoResult_${entity}_${idx}`);
+        if (resultEl && result.forecast) {
+          const f = result.forecast;
+          resultEl.innerHTML = `
+            <div class="ptoImpactRow">
+              <span class="ptoImpactLabel">Missed Clinical Visits</span>
+              <strong class="ptoImpactValue">${formatWhole(f.missedClinicalVisits)}</strong>
+            </div>
+            <div class="ptoImpactRow">
+              <span class="ptoImpactLabel">Missed Surgeries</span>
+              <strong class="ptoImpactValue">${formatWhole(f.missedSurgeries)}</strong>
+            </div>
+            <div class="ptoImpactRow ptoImpactTotal">
+              <span class="ptoImpactLabel">Total Forecasted Impact</span>
+              <strong class="ptoImpactValue">${formatWhole(f.totalMissedVisits)} visits</strong>
+            </div>
+            <div class="ptoSavedBy">Saved successfully</div>
+          `;
+        }
+
+        // Refresh summary
+        await refreshPtoSummary();
+
+        btn.textContent = "Saved ✓";
+        setTimeout(() => {
+          btn.textContent = "Save";
+          btn.disabled = false;
+        }, 2000);
+      } catch (e) {
+        btn.textContent = "Error — retry";
+        btn.disabled = false;
+        setPtoForecastDebug(String(e));
+      }
+    });
+  });
+}
+
+function renderPtoForecastSummary(data) {
+  const container = byId("ptoForecastSummary");
+  if (!container) return;
+
+  const { entities, monthLabels } = data;
+
+  const totalByMonth = monthLabels.map((label, mi) => {
+    const total = entities.reduce((sum, e) => {
+      return sum + normalizeNumber(e.months[mi]?.totalMissedVisits);
+    }, 0);
+    return { label, total };
+  });
+
+  const quarterlyTotal = totalByMonth.reduce((sum, m) => sum + m.total, 0);
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          ${monthLabels.map((l) => `<th>${l}</th>`).join("")}
+          <th>Q Total</th>
+          <th>Daily Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${entities.map((e) => `
+          <tr>
+            <td><strong>${e.entity}</strong></td>
+            ${e.months.map((m) => `
+              <td>${m.totalMissedVisits > 0
+                ? `<span class="ptoImpactBadge">${formatWhole(m.totalMissedVisits)}</span>`
+                : "—"
+              }</td>
+            `).join("")}
+            <td><strong>${formatWhole(e.quarterlyTotalMissed)}</strong></td>
+            <td style="font-size:12px;color:var(--text-muted);">${e.rates.visitsPerDay}/day</td>
+          </tr>
+        `).join("")}
+        <tr style="border-top:2px solid rgba(255,255,255,0.14);">
+          <td><strong>All Entities</strong></td>
+          ${totalByMonth.map((m) => `<td><strong>${m.total > 0 ? formatWhole(m.total) : "—"}</strong></td>`).join("")}
+          <td><strong>${formatWhole(quarterlyTotal)}</strong></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">
+      Forecasted missed visits = (Clinical PTO Days × clinical visits/day) + (Surgical PTO Days × surgeries/day).
+      Rates computed from last ${entities[0]?.rates?.weeksUsed || 12} weeks of actual data per entity.
+    </div>
+  `;
+}
+
+let _lastPtoData = null;
+
+async function loadPtoForecast() {
+  const bannerEl = byId("ptoForecastBanner");
+  if (bannerEl) bannerEl.textContent = "Loading forecast data...";
+
+  const data = await apiGet("/api/pto-forecast");
+  _lastPtoData = data;
+
+  if (bannerEl) {
+    const labels = (data.monthLabels || []).join(", ");
+    bannerEl.textContent = `Rolling quarter: ${labels} · Enter projected PTO days per entity and month, then save.`;
+  }
+
+  renderPtoForecastEntities(data);
+  renderPtoForecastSummary(data);
+  setPtoForecastDebug(data);
+}
+
+async function refreshPtoSummary() {
+  try {
+    const data = await apiGet("/api/pto-forecast");
+    _lastPtoData = data;
+    renderPtoForecastSummary(data);
+  } catch {
+    // non-fatal
+  }
 }
 
 function showHelpView() {
@@ -2913,6 +3172,17 @@ function injectUiPolishStyles() {
           await loadActivity();
         } catch (e) {
           setActivityDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navPtoForecastBtn")) {
+      byId("navPtoForecastBtn").addEventListener("click", async () => {
+        showPtoForecastView();
+        try {
+          await loadPtoForecast();
+        } catch (e) {
+          setPtoForecastDebug(String(e));
         }
       });
     }
