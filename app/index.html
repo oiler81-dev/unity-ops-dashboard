@@ -73,8 +73,7 @@
                 <div>
                   <label for="dashboardPeriodType">Period</label>
                   <select id="dashboardPeriodType">
-                    <option value="currentWeek" selected>Current Week</option>
-                    <option value="lastWeek">Last Week</option>
+                    <option value="lastWeek" selected>Last Week</option>
                     <option value="mtd">Month to Date</option>
                     <option value="lastMonth">Last Month</option>
                     <option value="rolling4">Rolling 4 Weeks</option>
@@ -124,8 +123,7 @@
               <div class="quickPresetBar">
                 <span class="quickPresetLabel">Quick presets</span>
                 <div class="quickPresetPills">
-                  <button class="quickPresetPill" type="button" data-preset="currentWeek">Current Week</button>
-                  <button class="quickPresetPill" type="button" data-preset="lastWeek">Last Week</button>
+                  <button class="quickPresetPill quickPresetActive" type="button" data-preset="lastWeek">Last Week</button>
                   <button class="quickPresetPill" type="button" data-preset="mtd">MTD</button>
                   <button class="quickPresetPill" type="button" data-preset="rolling4">Rolling 4</button>
                 </div>
@@ -172,7 +170,7 @@
               <div id="dashboardAlerts"></div>
             </div>
 
-            <div class="panel sectionPanel">
+            <div class="panel sectionPanel winsPanel">
               <div class="sectionHeader">
                 <div class="sectionEyebrow">Momentum</div>
                 <h3>Wins</h3>
@@ -396,42 +394,44 @@
             <div class="sectionHeader">
               <div class="sectionEyebrow">Tracker</div>
               <h3>Activity Log</h3>
-              <p>See who created, updated, or deleted entries across the dashboard.</p>
+              <p>See who created or updated entries across all entities.</p>
             </div>
 
-            <div class="fieldRow">
-              <div>
-                <label for="activityEntityFilter">Entity</label>
-                <select id="activityEntityFilter">
-                  <option value="">All Entities</option>
-                  <option value="LAOSS">LAOSS</option>
-                  <option value="NES">NES</option>
-                  <option value="SpineOne">SpineOne</option>
-                  <option value="MRO">MRO</option>
-                </select>
-              </div>
+            <div class="filterShell">
+              <div class="fieldRow">
+                <div>
+                  <label for="activityEntityFilter">Entity</label>
+                  <select id="activityEntityFilter">
+                    <option value="">All Entities</option>
+                    <option value="LAOSS">LAOSS</option>
+                    <option value="NES">NES</option>
+                    <option value="SpineOne">SpineOne</option>
+                    <option value="MRO">MRO</option>
+                  </select>
+                </div>
 
-              <div>
-                <label for="activityWeekFilter">Week Ending</label>
-                <input type="date" id="activityWeekFilter" />
-              </div>
+                <div>
+                  <label for="activityWeekFilter">Week Ending</label>
+                  <input type="date" id="activityWeekFilter" />
+                </div>
 
-              <div>
-                <label for="activityLimit">Rows</label>
-                <select id="activityLimit">
-                  <option value="25">25</option>
-                  <option value="50" selected>50</option>
-                  <option value="100">100</option>
-                  <option value="200">200</option>
-                </select>
-              </div>
+                <div>
+                  <label for="activityLimit">Rows</label>
+                  <select id="activityLimit">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                  </select>
+                </div>
 
-              <div class="buttonAlignBottom">
-                <button id="loadActivityBtn" type="button">Load Activity</button>
+                <div class="buttonAlignBottom">
+                  <button id="loadActivityBtn" type="button">Load Activity</button>
+                </div>
               </div>
             </div>
 
-            <div id="activitySummary" class="subtleBanner">Load recent activity to review creates, updates, and deletes.</div>
+            <div id="activitySummary" class="subtleBanner">Load recent activity to review entry history across all entities.</div>
 
             <div class="panel innerPanel">
               <div class="sectionHeader compact">
