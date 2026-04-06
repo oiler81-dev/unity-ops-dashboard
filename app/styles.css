@@ -1240,3 +1240,161 @@ canvas {
   color: var(--accent-2);
   width: 200px;
 }
+
+/* ── PTO Forecast view ───────────────────────────────────────── */
+.ptoEntityPanel {
+  margin-bottom: 20px;
+}
+
+.ptoEntityHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.ptoMonthGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .ptoMonthGrid { grid-template-columns: 1fr; }
+}
+
+.ptoMonthCard {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ptoMonthLabel {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ptoInputRow {
+  display: flex;
+  gap: 12px;
+}
+
+.ptoInputGroup {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ptoInputLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ptoInput {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font);
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.ptoInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ptoSaveBtn {
+  padding: 8px 0;
+  background: var(--accent);
+  color: #1a1a2e;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+  width: 100%;
+}
+
+.ptoSaveBtn:hover { opacity: 0.85; }
+.ptoSaveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ptoForecastResult {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ptoImpactRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.ptoImpactLabel {
+  color: var(--text-soft);
+}
+
+.ptoImpactValue {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.ptoImpactTotal {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+}
+
+.ptoImpactTotal .ptoImpactLabel {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.ptoImpactTotal .ptoImpactValue {
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.ptoImpactBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(247, 198, 47, 0.15);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ptoNoData {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.ptoSavedBy {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
