@@ -1874,6 +1874,7 @@ function showTrendsView() {
   setActiveNav("navTrendsBtn");
   renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
   syncTrendsRangeUi();
+  syncTrendsPtVisibility();
 }
 
 function showActivityView() {
@@ -2350,6 +2351,18 @@ function syncTrendsRangeUi() {
   if (endWrap) endWrap.style.display = isDateRange ? "" : "none";
 }
 
+const PT_ENTITIES = ["NES", "SpineOne", "MRO"];
+
+function entityHasPtData(entity) {
+  return PT_ENTITIES.includes(entity);
+}
+
+function syncTrendsPtVisibility() {
+  const entity = getSelectedTrendsEntity();
+  const ptSection = byId("trendsView")?.querySelector(".ptSectionPanel");
+  if (ptSection) ptSection.style.display = entityHasPtData(entity) ? "" : "none";
+}
+
 function isMeaningfulTrendsRow(item) {
   // Filter out rows that are all zeros (placeholder imports) or dated in the future
   const today = new Date().toISOString().slice(0, 10);
@@ -2392,6 +2405,7 @@ async function loadTrends() {
 
   renderTrendsCards(result);
   renderTrendsTable(result);
+  syncTrendsPtVisibility();
   setTrendsDebug(result);
 }
 
@@ -2967,6 +2981,7 @@ function injectUiPolishStyles() {
     if (byId("trendsEntitySelect")) {
       byId("trendsEntitySelect").addEventListener("change", async () => {
         renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+        syncTrendsPtVisibility();
         try {
           await loadTrends();
         } catch (e) {
