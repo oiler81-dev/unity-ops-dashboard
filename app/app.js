@@ -1873,6 +1873,7 @@ function showTrendsView() {
   if (el) el.style.display = "";
   setActiveNav("navTrendsBtn");
   renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+  syncTrendsRangeUi();
 }
 
 function showActivityView() {
@@ -2336,11 +2337,59 @@ async function saveWeek() {
   await loadWeek();
 }
 
+function syncTrendsRangeUi() {
+  const mode = byId("trendsRangeMode")?.value || "recent";
+  const isDateRange = mode === "dateRange";
+
+  const weeksWrap = byId("trendsWeeksWrap");
+  const startWrap = byId("trendsStartWrap");
+  const endWrap = byId("trendsEndWrap");
+
+  if (weeksWrap) weeksWrap.style.display = isDateRange ? "none" : "";
+  if (startWrap) startWrap.style.display = isDateRange ? "" : "none";
+  if (endWrap) endWrap.style.display = isDateRange ? "" : "none";
+}
+
+function isMeaningfulTrendsRow(item) {
+  // Filter out rows that are all zeros (placeholder imports) or dated in the future
+  const today = new Date().toISOString().slice(0, 10);
+  if (item.weekEnding > today) return false;
+  const hasData = (
+    normalizeNumber(item.visitVolume) > 0 ||
+    normalizeNumber(item.callVolume) > 0 ||
+    normalizeNumber(item.newPatients) > 0 ||
+    normalizeNumber(item.ptVisitsSeen) > 0 ||
+    normalizeNumber(item.cashCollected) > 0
+  );
+  return hasData;
+}
+
 async function loadTrends() {
   const entity = getSelectedTrendsEntity();
   renderEntityBrand("trendsBrandWrap", entity);
 
-  const result = await apiGet(`/api/trends?entity=${encodeURIComponent(entity)}&mode=recent&weeks=12`);
+  const mode = byId("trendsRangeMode")?.value || "recent";
+  const weeks = byId("trendsLimit")?.value || "12";
+  const startDate = byId("trendsStartDate")?.value || "";
+  const endDate = byId("trendsEndDate")?.value || "";
+
+  let url;
+  if (mode === "dateRange" && startDate && endDate) {
+    url = `/api/trends?entity=${encodeURIComponent(entity)}&mode=dateRange&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`;
+  } else {
+    // Fetch more than requested so we have headroom to filter empties
+    const fetchWeeks = Math.min(52, parseInt(weeks, 10) * 3);
+    url = `/api/trends?entity=${encodeURIComponent(entity)}&mode=recent&weeks=${fetchWeeks}`;
+  }
+
+  const raw = await apiGet(url);
+
+  // Filter out future placeholder rows, then take the requested count
+  const filtered = (raw.items || []).filter(isMeaningfulTrendsRow);
+  const limited = mode === "dateRange" ? filtered : filtered.slice(0, parseInt(weeks, 10));
+
+  const result = { ...raw, items: limited, count: limited.length };
+
   renderTrendsCards(result);
   renderTrendsTable(result);
   setTrendsDebug(result);
@@ -2918,6 +2967,64 @@ function injectUiPolishStyles() {
     if (byId("trendsEntitySelect")) {
       byId("trendsEntitySelect").addEventListener("change", async () => {
         renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsRangeMode")) {
+      byId("trendsRangeMode").addEventListener("change", async () => {
+        syncTrendsRangeUi();
+        // Only auto-load on switch back to recent; date range waits for both dates
+        if (byId("trendsRangeMode").value === "recent") {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsLimit")) {
+      byId("trendsLimit").addEventListener("change", async () => {
+        try {
+          await loadTrends();
+        } catch (e) {
+          setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("trendsStartDate")) {
+      byId("trendsStartDate").addEventListener("change", async () => {
+        if (byId("trendsEndDate")?.value) {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("trendsEndDate")) {
+      byId("trendsEndDate").addEventListener("change", async () => {
+        if (byId("trendsStartDate")?.value) {
+          try {
+            await loadTrends();
+          } catch (e) {
+            setTrendsDebug(String(e));
+          }
+        }
+      });
+    }
+
+    if (byId("loadTrendsBtn")) {
+      byId("loadTrendsBtn").addEventListener("click", async () => {
         try {
           await loadTrends();
         } catch (e) {
