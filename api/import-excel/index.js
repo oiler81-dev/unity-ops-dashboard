@@ -490,7 +490,7 @@ function buildRegionValues(sheetName, rowIndex, row, ptoMap = {}) {
   };
 }
 
-async function importRegionSheet(regionTable, ws, sheetName, ptoMap) {
+async function importRegionSheet(regionTable, ws, sheetName, ptoMap, perEntityPtMap = {}) {
   const entity = REGION_SHEET_TO_ENTITY[sheetName];
   const rows = sheetRows(ws);
 
@@ -514,7 +514,11 @@ async function importRegionSheet(regionTable, ws, sheetName, ptoMap) {
       continue;
     }
 
-    await upsertRegionRecord(regionTable, entity, parsed.weekEnding, parsed.values, {
+    // Embed PT data directly if available for this entity + weekEnding
+    const ptData = (perEntityPtMap[entity] || {})[parsed.weekEnding] || {};
+    const valuesWithPt = Object.assign({}, parsed.values, ptData);
+
+    await upsertRegionRecord(regionTable, entity, parsed.weekEnding, valuesWithPt, {
       importSourceSheet: sheetName,
       importWeekNumber: parsed.weekNumber,
       importMonthTag: parsed.values.monthTag
@@ -528,7 +532,8 @@ async function importRegionSheet(regionTable, ws, sheetName, ptoMap) {
       weekEnding: parsed.weekEnding,
       monthTag: parsed.values.monthTag,
       daysInPeriod: parsed.values.daysInPeriod,
-      ptoDays: parsed.values.ptoDays
+      ptoDays: parsed.values.ptoDays,
+      ptVisitsSeen: ptData.ptVisitsSeen || 0
     });
   }
 
@@ -1171,12 +1176,17 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, bu
     ptMerge: {}
   };
 
-  // Step 1 — import region sheets
+  // Step 1 — build per-entity PT map before region import so we can embed it in same upsert
+  const perEntityPtMap = workbook.Sheets.PT
+    ? buildPerEntityPtMap(workbook.Sheets.PT)
+    : { NES: {}, SpineOne: {}, MRO: {} };
+
+  // Step 2 — import region sheets with PT data embedded
   for (const sheetName of ["LA", "Portland", "Denver", "Chicago"]) {
     const ws = workbook.Sheets[sheetName];
     if (!ws) continue;
 
-    const result = await importRegionSheet(regionTable, ws, sheetName, ptoMap);
+    const result = await importRegionSheet(regionTable, ws, sheetName, ptoMap, perEntityPtMap);
     results.regions.push({
       sheet: sheetName,
       entity: result.entity,
@@ -1200,10 +1210,8 @@ async function importWeeklyWorkbook(regionTable, sharedTable, referenceTable, bu
       rejectedRows: ptResult.rejectedRows.slice(0, 15)
     });
 
-    // Step 3 — also merge per-entity PT data into WeeklyRegionData
-    const perEntityPtMap = buildPerEntityPtMap(workbook.Sheets.PT);
-    const mergeResult = await mergePtDataIntoRegionRecords(regionTable, perEntityPtMap);
-    results.ptMerge = mergeResult;
+    // PT data is now embedded directly during region import above
+    results.ptMerge = { embedded: true };
   }
 
   if (workbook.Sheets.CXNS) {
