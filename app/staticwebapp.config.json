@@ -3,6 +3,10 @@
     {
       "route": "/api/*",
       "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/*",
+      "allowedRoles": ["authenticated"]
     }
   ],
   "navigationFallback": {
@@ -25,5 +29,10 @@
       "redirect": "/.auth/login/aad",
       "statusCode": 302
     }
+  },
+  "globalHeaders": {
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
   }
 }
