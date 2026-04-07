@@ -1028,7 +1028,11 @@ async function importCxnsSheet(sharedTable, ws, workingDaysMap) {
       rowIndex: parsed.rowIndex,
       weekNumber: parsed.weekNumber,
       weekEnding: parsed.weekEnding,
-      monthTag: parsed.values.monthTag
+      monthTag: parsed.values.monthTag,
+      scheduledAppts: parsed.values.scheduledAppts,
+      cancellations: parsed.values.cancellations,
+      noShows: parsed.values.noShows,
+      reschedules: parsed.values.reschedules
     });
   }
 
