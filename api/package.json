@@ -1,9 +1,16 @@
 {
-  "name": "unity-ops-dashboard-api",
-  "version": "2.0.0",
+  "name": "unitymsk-dashboard-api",
+  "version": "1.0.0",
   "private": true,
+  "description": "API for the UnityMSK Dashboard",
+  "main": "index.js",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests yet\""
+  },
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
-    "@azure/data-tables": "^13.3.1",
-    "xlsx": "^0.18.5"
   }
 }
