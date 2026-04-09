@@ -142,12 +142,20 @@ async function ensureForecastTable(forecastTable) {
 }
 
 module.exports = async function (context, req) {
+  const respond = (status, body) => {
+    context.res = {
+      status,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    };
+  };
+
   try {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
     if (!access?.authenticated) {
-      return { status: 401, body: { ok: false, error: "Unauthorized" } };
+      return respond(401, { ok: false, error: "Unauthorized" });
     }
 
     const regionTable = getTableClient(REGION_TABLE);
@@ -165,12 +173,12 @@ module.exports = async function (context, req) {
       const surgicalPtoDays = toNumber(body.surgicalPtoDays, 0);
 
       if (!entity || !monthKey) {
-        return { status: 400, body: { ok: false, error: "Missing entity or monthKey" } };
+        return respond(400, { ok: false, error: "Missing entity or monthKey" });
       }
 
       // Operators can only save for their own entity; admins can save any
       if (!access.isAdmin && access.entity !== entity) {
-        return { status: 403, body: { ok: false, error: "Forbidden" } };
+        return respond(403, { ok: false, error: "Forbidden" });
       }
 
       const rates = await computeEntityRates(regionTable, entity);
@@ -195,19 +203,16 @@ module.exports = async function (context, req) {
         updatedAt: new Date().toISOString()
       });
 
-      return {
-        status: 200,
-        body: {
-          ok: true,
-          message: "Forecast saved",
-          entity,
-          monthKey,
-          clinicalPtoDays,
-          surgicalPtoDays,
-          forecast,
-          rates
-        }
-      };
+      return respond(200, {
+        ok: true,
+        message: "Forecast saved",
+        entity,
+        monthKey,
+        clinicalPtoDays,
+        surgicalPtoDays,
+        forecast,
+        rates
+      });
     }
 
     // ── GET: load forecasts + rates for all entities, rolling 3 months ───────
@@ -285,20 +290,14 @@ module.exports = async function (context, req) {
       })
     );
 
-    return {
-      status: 200,
-      body: {
-        ok: true,
-        monthKeys,
-        monthLabels: monthKeys.map(monthKeyToLabel),
-        entities: results
-      }
-    };
+    return respond(200, {
+      ok: true,
+      monthKeys,
+      monthLabels: monthKeys.map(monthKeyToLabel),
+      entities: results
+    });
   } catch (error) {
     context.log.error("pto-forecast failed", error);
-    return {
-      status: 500,
-      body: { ok: false, error: "Failed to process PTO forecast", details: error.message }
-    };
+    return respond(500, { ok: false, error: "Failed to process PTO forecast", details: error.message });
   }
 };
