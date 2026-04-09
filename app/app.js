@@ -2032,25 +2032,20 @@ function renderPtoForecastEntities(data) {
       const monthKey = btn.getAttribute("data-monthkey");
       const idx = btn.getAttribute("data-idx");
 
-      const clinicalInput = document.querySelector(
-        `.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="clinical"]`
-      );
-      const surgicalInput = document.querySelector(
-        `.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="surgical"]`
-      );
+      const mdInput  = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="md"]`);
+      const paInput  = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pa"]`);
+      const ptInput  = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pt"]`);
 
-      const clinicalPtoDays = parseFloat(clinicalInput?.value || "0") || 0;
-      const surgicalPtoDays = parseFloat(surgicalInput?.value || "0") || 0;
+      const mdPtoDays = parseFloat(mdInput?.value || "0") || 0;
+      const paPtoDays = parseFloat(paInput?.value || "0") || 0;
+      const ptPtoDays = parseFloat(ptInput?.value || "0") || 0;
 
       btn.textContent = "Saving...";
       btn.disabled = true;
 
       try {
         const result = await apiPost("/api/pto-forecast", {
-          entity,
-          monthKey,
-          clinicalPtoDays,
-          surgicalPtoDays
+          entity, monthKey, mdPtoDays, paPtoDays, ptPtoDays
         });
 
         const resultEl = byId(`ptoResult_${entity}_${idx}`);
@@ -2058,18 +2053,23 @@ function renderPtoForecastEntities(data) {
           const f = result.forecast;
           resultEl.innerHTML = `
             <div class="ptoImpactRow">
-              <span class="ptoImpactLabel">Missed Clinical Visits</span>
-              <strong class="ptoImpactValue">${formatWhole(f.missedClinicalVisits)}</strong>
+              <span class="ptoImpactLabel">MD Impact</span>
+              <strong class="ptoImpactValue">${formatWhole(f.missedMdVisits)} visits</strong>
             </div>
             <div class="ptoImpactRow">
-              <span class="ptoImpactLabel">Missed Surgeries</span>
-              <strong class="ptoImpactValue">${formatWhole(f.missedSurgeries)}</strong>
+              <span class="ptoImpactLabel">PA Impact</span>
+              <strong class="ptoImpactValue">${formatWhole(f.missedPaVisits)} visits</strong>
             </div>
+            ${f.missedPtVisits > 0 ? `
+            <div class="ptoImpactRow">
+              <span class="ptoImpactLabel">PT Impact</span>
+              <strong class="ptoImpactValue">${formatWhole(f.missedPtVisits)} visits</strong>
+            </div>` : ""}
             <div class="ptoImpactRow ptoImpactTotal">
               <span class="ptoImpactLabel">Total Forecasted Impact</span>
               <strong class="ptoImpactValue">${formatWhole(f.totalMissedVisits)} visits</strong>
             </div>
-            <div class="ptoSavedBy">Saved successfully</div>
+            <div class="ptoSavedBy">Saved · ${f.perProviderClinicalRate}/day per provider</div>
           `;
         }
 
@@ -2144,7 +2144,7 @@ function renderPtoForecastSummary(data) {
       </tbody>
     </table>
     <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">
-      Forecasted missed visits = (Clinical PTO Days × clinical visits/day) + (Surgical PTO Days × surgeries/day).
+      Forecasted missed visits = (MD PTO Days + PA PTO Days) × per-provider clinical rate + (PT PTO Days × per-PT rate). Rates computed from last 12 weeks of actuals. Update provider counts in Provider Settings.
       Rates computed from last ${entities[0]?.rates?.weeksUsed || 12} weeks of actual data per entity.
     </div>
   `;
