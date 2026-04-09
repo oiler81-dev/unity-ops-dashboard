@@ -30,6 +30,7 @@
       <button id="navPtoForecastBtn" type="button">PTO Forecast</button>
       <button id="navActivityBtn" type="button">Activity Log</button>
       <button id="navImportBtn" type="button">Admin Import</button>
+      <button id="navProviderSettingsBtn" type="button">Provider Settings</button>
     </aside>
 
     <div id="mainContent">
@@ -61,13 +62,17 @@
               </div>
 
               <div class="heroHighlights">
-                <div class="heroHighlightCard">
-                  <span class="heroHighlightLabel">Mode</span>
-                  <strong>Actuals + Benchmarks</strong>
+                <div class="segmentGroup">
+                  <div class="segmentLabel">Mode</div>
+                  <div class="segmentTabs">
+                    <button class="segmentTab segmentTabActive" type="button">Actuals + Benchmarks</button>
+                  </div>
                 </div>
-                <div class="heroHighlightCard">
-                  <span class="heroHighlightLabel">Scope</span>
-                  <strong>Ops Leadership View</strong>
+                <div class="segmentGroup">
+                  <div class="segmentLabel">Scope</div>
+                  <div class="segmentTabs">
+                    <button class="segmentTab segmentTabActive" type="button">Ops Leadership View</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -503,6 +508,33 @@
               <pre id="importDebugOutput" class="debugOutput"></pre>
             </details>
           </div>
+        </section>
+
+        <section id="providerSettingsView" style="display:none;">
+          <div class="panel heroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Admin</div>
+                <h3>Provider Settings</h3>
+                <p>Configure the number of providers by type for each entity. Used by the PTO Forecast to calculate per-provider daily visit rates.</p>
+              </div>
+            </div>
+            <div class="subtleBanner" id="providerSettingsBanner">Loading provider settings...</div>
+          </div>
+
+          <div class="panel sectionPanel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Configuration</div>
+              <h3>Providers by Entity</h3>
+              <p>Podiatrists are counted as MDs. PRN staff should not be included. Changes take effect immediately on the next PTO forecast calculation.</p>
+            </div>
+            <div id="providerSettingsTable"></div>
+          </div>
+
+          <details class="debugPanel">
+            <summary>Provider Settings Debug Output</summary>
+            <pre id="providerSettingsDebug" class="debugOutput"></pre>
+          </details>
         </section>
 
         <section id="ptoForecastView" style="display:none;">
