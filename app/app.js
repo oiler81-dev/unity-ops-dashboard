@@ -2184,8 +2184,9 @@ async function loadPtoForecast() {
     renderPtoForecastSummary(data);
     setPtoForecastDebug(data);
   } catch (e) {
-    if (bannerEl) bannerEl.textContent = "Failed to load forecast data. See debug output below.";
-    setPtoForecastDebug(String(e));
+    const msg = e?.message || String(e);
+    if (bannerEl) bannerEl.textContent = `API Error: ${msg}`;
+    setPtoForecastDebug({ error: msg, hint: "Check that /api/pto-forecast is deployed and the PTOForecastData table can be created in Azure." });
   }
 }
 
