@@ -1840,7 +1840,7 @@ function renderTrendsTable(result) {
 }
 
 function hideAllViews() {
-  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "helpView"];
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "providerSettingsView", "helpView"];
   ids.forEach((id) => {
     const el = byId(id);
     if (el) el.style.display = "none";
@@ -1856,6 +1856,7 @@ function setActiveNav(buttonId) {
     "navPtoForecastBtn",
     "navActivityBtn",
     "navImportBtn",
+    "navProviderSettingsBtn",
     "navHelpBtn"
   ].forEach((id) => {
     const btn = byId(id);
@@ -1948,9 +1949,11 @@ function renderPtoForecastEntities(data) {
             <div class="sectionEyebrow">${brand.fullName}</div>
             <h3 style="margin:4px 0 2px;">${entity}</h3>
             <div style="font-size:12px;color:var(--text-muted);">
-              Rates based on last ${rates.weeksUsed} weeks &nbsp;·&nbsp;
-              ${rates.clinicalVisitsPerDay} clinical visits/day &nbsp;·&nbsp;
-              ${rates.surgeriesPerDay} surgeries/day
+              Rates based on last ${entityData.rates.weeksUsed} weeks &nbsp;·&nbsp;
+              ${entityData.rates.clinicalVisitsPerDay} clinical visits/day &nbsp;·&nbsp;
+              ${entityData.providerSettings?.mdCount || 0} MDs &nbsp;·&nbsp;
+              ${entityData.providerSettings?.paCount || 0} PAs &nbsp;·&nbsp;
+              ${entityData.providerSettings?.ptCount || 0} PTs
             </div>
           </div>
           <div class="entityLogoWrap" style="width:80px;height:40px;">
@@ -1965,35 +1968,24 @@ function renderPtoForecastEntities(data) {
 
               <div class="ptoInputRow">
                 <div class="ptoInputGroup">
-                  <label class="ptoInputLabel" for="pto_clinical_${entity}_${i}">Clinical PTO Days</label>
-                  <input
-                    type="number"
-                    id="pto_clinical_${entity}_${i}"
-                    class="ptoInput"
-                    data-entity="${entity}"
-                    data-monthkey="${month.monthKey}"
-                    data-type="clinical"
-                    step="0.5"
-                    min="0"
-                    value="${month.clinicalPtoDays || ""}"
-                    placeholder="0"
-                  />
+                  <label class="ptoInputLabel" for="pto_md_${entity}_${i}">MD PTO Days</label>
+                  <input type="number" id="pto_md_${entity}_${i}" class="ptoInput"
+                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="md"
+                    step="0.5" min="0" value="${month.mdPtoDays || ""}" placeholder="0" />
                 </div>
                 <div class="ptoInputGroup">
-                  <label class="ptoInputLabel" for="pto_surgical_${entity}_${i}">Surgical PTO Days</label>
-                  <input
-                    type="number"
-                    id="pto_surgical_${entity}_${i}"
-                    class="ptoInput"
-                    data-entity="${entity}"
-                    data-monthkey="${month.monthKey}"
-                    data-type="surgical"
-                    step="0.5"
-                    min="0"
-                    value="${month.surgicalPtoDays || ""}"
-                    placeholder="0"
-                  />
+                  <label class="ptoInputLabel" for="pto_pa_${entity}_${i}">PA PTO Days</label>
+                  <input type="number" id="pto_pa_${entity}_${i}" class="ptoInput"
+                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="pa"
+                    step="0.5" min="0" value="${month.paPtoDays || ""}" placeholder="0" />
                 </div>
+                ${(entityData.providerSettings?.ptCount > 0) ? `
+                <div class="ptoInputGroup">
+                  <label class="ptoInputLabel" for="pto_pt_${entity}_${i}">PT PTO Days</label>
+                  <input type="number" id="pto_pt_${entity}_${i}" class="ptoInput"
+                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="pt"
+                    step="0.5" min="0" value="${month.ptPtoDays || ""}" placeholder="0" />
+                </div>` : ""}
               </div>
 
               <button
@@ -2007,13 +1999,18 @@ function renderPtoForecastEntities(data) {
               <div class="ptoForecastResult" id="ptoResult_${entity}_${i}">
                 ${month.totalMissedVisits > 0 ? `
                   <div class="ptoImpactRow">
-                    <span class="ptoImpactLabel">Missed Clinical Visits</span>
-                    <strong class="ptoImpactValue">${formatWhole(month.missedClinicalVisits)}</strong>
+                    <span class="ptoImpactLabel">MD Impact</span>
+                    <strong class="ptoImpactValue">${formatWhole(month.missedMdVisits)} visits</strong>
                   </div>
                   <div class="ptoImpactRow">
-                    <span class="ptoImpactLabel">Missed Surgeries</span>
-                    <strong class="ptoImpactValue">${formatWhole(month.missedSurgeries)}</strong>
+                    <span class="ptoImpactLabel">PA Impact</span>
+                    <strong class="ptoImpactValue">${formatWhole(month.missedPaVisits)} visits</strong>
                   </div>
+                  ${month.missedPtVisits > 0 ? `
+                  <div class="ptoImpactRow">
+                    <span class="ptoImpactLabel">PT Impact</span>
+                    <strong class="ptoImpactValue">${formatWhole(month.missedPtVisits)} visits</strong>
+                  </div>` : ""}
                   <div class="ptoImpactRow ptoImpactTotal">
                     <span class="ptoImpactLabel">Total Forecasted Impact</span>
                     <strong class="ptoImpactValue">${formatWhole(month.totalMissedVisits)} visits</strong>
@@ -2197,6 +2194,140 @@ async function refreshPtoSummary() {
     renderPtoForecastSummary(data);
   } catch {
     // non-fatal
+  }
+}
+
+function showProviderSettingsView() {
+  hideAllViews();
+  const el = byId("providerSettingsView");
+  if (el) el.style.display = "";
+  setActiveNav("navProviderSettingsBtn");
+}
+
+function setProviderSettingsDebug(data) {
+  const el = byId("providerSettingsDebug");
+  if (!el) return;
+  el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+async function loadProviderSettings() {
+  const bannerEl = byId("providerSettingsBanner");
+  if (bannerEl) bannerEl.textContent = "Loading provider settings...";
+
+  try {
+    const data = await apiGet("/api/provider-settings");
+    if (!data?.ok || !Array.isArray(data.entities)) {
+      if (bannerEl) bannerEl.textContent = `Error: ${data?.error || "Failed to load settings."}`;
+      setProviderSettingsDebug(data);
+      return;
+    }
+
+    if (bannerEl) bannerEl.textContent = "Provider counts are used by the PTO Forecast to calculate per-provider daily visit rates. Podiatrists count as MDs. PRN staff should not be included.";
+
+    renderProviderSettingsTable(data.entities);
+    setProviderSettingsDebug(data);
+  } catch (e) {
+    if (bannerEl) bannerEl.textContent = `Error: ${e?.message || String(e)}`;
+    setProviderSettingsDebug(String(e));
+  }
+}
+
+function renderProviderSettingsTable(entities) {
+  const container = byId("providerSettingsTable");
+  if (!container) return;
+
+  container.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>MDs (incl. Pods)</th>
+          <th>PAs</th>
+          <th>PTs</th>
+          <th>Total Clinical</th>
+          <th>Last Updated</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${entities.map((e) => `
+          <tr id="provRow_${e.entity}">
+            <td><strong>${e.entity}</strong></td>
+            <td>
+              <input type="number" min="0" step="1"
+                id="prov_md_${e.entity}"
+                value="${e.mdCount}"
+                style="width:70px;padding:6px 8px;font-family:var(--font-mono);font-size:13px;"
+              />
+            </td>
+            <td>
+              <input type="number" min="0" step="1"
+                id="prov_pa_${e.entity}"
+                value="${e.paCount}"
+                style="width:70px;padding:6px 8px;font-family:var(--font-mono);font-size:13px;"
+              />
+            </td>
+            <td>
+              <input type="number" min="0" step="1"
+                id="prov_pt_${e.entity}"
+                value="${e.ptCount}"
+                style="width:70px;padding:6px 8px;font-family:var(--font-mono);font-size:13px;"
+              />
+            </td>
+            <td style="font-family:var(--font-mono);" id="prov_total_${e.entity}">
+              ${e.mdCount + e.paCount + e.ptCount}
+            </td>
+            <td style="font-size:11.5px;color:var(--text-muted);">
+              ${e.updatedAt ? new Date(e.updatedAt).toLocaleDateString() + (e.updatedBy ? ` · ${e.updatedBy}` : "") : "Default"}
+            </td>
+            <td>
+              <button type="button"
+                onclick="saveProviderSettings('${e.entity}')"
+                style="padding:6px 12px;font-size:12px;box-shadow:none;"
+              >Save</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+
+  // Live-update total column on input change
+  entities.forEach((e) => {
+    ["md", "pa", "pt"].forEach((type) => {
+      const input = byId(`prov_${type}_${e.entity}`);
+      if (input) {
+        input.addEventListener("input", () => {
+          const md = parseInt(byId(`prov_md_${e.entity}`)?.value || "0", 10) || 0;
+          const pa = parseInt(byId(`prov_pa_${e.entity}`)?.value || "0", 10) || 0;
+          const pt = parseInt(byId(`prov_pt_${e.entity}`)?.value || "0", 10) || 0;
+          const totalEl = byId(`prov_total_${e.entity}`);
+          if (totalEl) totalEl.textContent = md + pa + pt;
+        });
+      }
+    });
+  });
+}
+
+async function saveProviderSettings(entity) {
+  const mdCount = parseInt(byId(`prov_md_${entity}`)?.value || "0", 10) || 0;
+  const paCount = parseInt(byId(`prov_pa_${entity}`)?.value || "0", 10) || 0;
+  const ptCount = parseInt(byId(`prov_pt_${entity}`)?.value || "0", 10) || 0;
+
+  try {
+    const result = await apiPost("/api/provider-settings", { entity, mdCount, paCount, ptCount });
+    if (result?.ok) {
+      const bannerEl = byId("providerSettingsBanner");
+      if (bannerEl) {
+        bannerEl.textContent = `✓ ${entity} settings saved — ${mdCount} MDs, ${paCount} PAs, ${ptCount} PTs`;
+        setTimeout(() => {
+          bannerEl.textContent = "Provider counts are used by the PTO Forecast to calculate per-provider daily visit rates.";
+        }, 3000);
+      }
+    }
+    setProviderSettingsDebug(result);
+  } catch (e) {
+    setProviderSettingsDebug(String(e));
   }
 }
 
@@ -2885,26 +3016,26 @@ function injectUiPolishStyles() {
     }
 
     .entityCard {
-      background:linear-gradient(160deg, rgba(11,26,42,0.98) 0%, rgba(8,20,32,0.98) 100%);
-      border:1px solid rgba(255,255,255,0.08);
-      border-radius:16px;
-      padding:16px;
-      box-shadow:0 8px 24px rgba(0,0,0,0.2);
-      transition:transform .18s ease, box-shadow .22s ease, border-color .18s ease;
+      background:rgba(10,22,36,0.98);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:10px;
+      padding:13px 14px;
+      box-shadow:0 4px 16px rgba(0,0,0,0.18);
+      transition:transform .15s ease, box-shadow .2s ease, border-color .15s ease;
     }
 
     .entityCard:hover {
-      transform:translateY(-2px);
-      box-shadow:0 16px 36px rgba(0,0,0,0.28);
-      border-color:rgba(91,168,255,0.2);
+      transform:translateY(-1px);
+      box-shadow:0 10px 28px rgba(0,0,0,0.26);
+      border-color:rgba(91,168,255,0.18);
     }
 
     .entityCardHeader {
       display:flex;
       justify-content:space-between;
-      gap:10px;
+      gap:8px;
       align-items:flex-start;
-      margin-bottom:12px;
+      margin-bottom:10px;
     }
 
     .entityHeaderLeft { min-width:0; flex:1; }
@@ -2948,11 +3079,11 @@ function injectUiPolishStyles() {
     .metricChipWarning { background:rgba(247,198,47,0.12);  color:#f7c62f; }
     .metricChipBad     { background:rgba(240,100,112,0.12); color:#f06470; }
 
-    .entityTitle    { font-size:20px; font-weight:800; line-height:1.05; margin-bottom:4px; letter-spacing:-0.02em; }
-    .entitySubtitle { font-size:11.5px; color:#506a7e; line-height:1.4; }
+    .entityTitle    { font-size:17px; font-weight:700; line-height:1.05; margin-bottom:3px; letter-spacing:-0.02em; }
+    .entitySubtitle { font-size:11px; color:#506a7e; line-height:1.35; }
 
     .entityLogoWrap {
-      width:76px; height:40px; background:#fff; border-radius:8px; padding:5px;
+      width:64px; height:34px; background:#fff; border-radius:6px; padding:4px;
       display:flex; align-items:center; justify-content:center; flex-shrink:0;
     }
 
@@ -2961,29 +3092,35 @@ function injectUiPolishStyles() {
     .entityTopMetrics {
       display:grid;
       grid-template-columns:repeat(3,1fr);
-      gap:8px;
-      margin-bottom:12px;
+      gap:0;
+      margin-bottom:10px;
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:8px;
+      overflow:hidden;
     }
 
     .entityMetricHero {
-      padding:10px 11px;
-      border-bottom:1px solid rgba(255,255,255,0.06);
+      padding:9px 10px;
+      border-right:1px solid rgba(255,255,255,0.06);
       min-width:0;
+      background:rgba(255,255,255,0.02);
     }
+
+    .entityMetricHero:last-child { border-right:none; }
 
     .entityMetricLabel {
       display:block;
-      font-size:9.5px;
+      font-size:9px;
       text-transform:uppercase;
       letter-spacing:.1em;
       color:#506a7e;
-      margin-bottom:4px;
+      margin-bottom:3px;
       font-weight:700;
     }
 
     .entityMetricHero strong {
       font-family:'DM Mono','Fira Mono',monospace;
-      font-size:21px;
+      font-size:18px;
       font-weight:500;
       line-height:1;
       letter-spacing:-.02em;
@@ -3046,9 +3183,11 @@ function injectUiPolishStyles() {
     /* Health stats — three inline pills in a row */
     .entityHealthRow {
       display:flex;
-      gap:6px;
-      margin-bottom:10px;
-      flex-wrap:wrap;
+      gap:0;
+      margin-bottom:8px;
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:8px;
+      overflow:hidden;
     }
 
     .entityHealthItem {
@@ -3056,17 +3195,18 @@ function injectUiPolishStyles() {
       display:flex;
       flex-direction:column;
       gap:2px;
-      padding:8px 10px;
-      border-radius:8px;
-      background:rgba(255,255,255,0.03);
-      border:1px solid rgba(255,255,255,0.06);
+      padding:7px 9px;
+      border-right:1px solid rgba(255,255,255,0.06);
+      background:rgba(255,255,255,0.015);
       min-width:0;
     }
 
+    .entityHealthItem:last-child { border-right:none; }
+
     .entityHealthLabel {
-      font-size:9.5px;
+      font-size:9px;
       text-transform:uppercase;
-      letter-spacing:.08em;
+      letter-spacing:.1em;
       color:#506a7e;
       font-weight:700;
       white-space:nowrap;
@@ -3074,7 +3214,7 @@ function injectUiPolishStyles() {
 
     .entityHealthItem strong {
       font-family:'DM Mono','Fira Mono',monospace;
-      font-size:15px;
+      font-size:14px;
       font-weight:500;
       line-height:1;
       color:#eaf1f8;
@@ -3082,10 +3222,10 @@ function injectUiPolishStyles() {
 
     /* Access health bar */
     .entityAccessPanel {
-      margin-bottom:10px;
-      padding:10px 12px;
-      border-radius:10px;
-      background:rgba(255,255,255,0.025);
+      margin-bottom:8px;
+      padding:7px 10px;
+      border-radius:7px;
+      background:rgba(255,255,255,0.02);
       border:1px solid rgba(255,255,255,0.05);
     }
 
@@ -3303,6 +3443,13 @@ function injectUiPolishStyles() {
 
     if (byId("navImportBtn")) {
       byId("navImportBtn").addEventListener("click", showImportView);
+    }
+
+    if (byId("navProviderSettingsBtn")) {
+      byId("navProviderSettingsBtn").addEventListener("click", async () => {
+        showProviderSettingsView();
+        try { await loadProviderSettings(); } catch (e) { setProviderSettingsDebug(String(e)); }
+      });
     }
 
     if (byId("navHelpBtn")) {
