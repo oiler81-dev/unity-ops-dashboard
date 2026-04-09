@@ -197,7 +197,16 @@ function formatWhole(value) {
 }
 
 function formatCurrency(value, decimals = 0) {
-  return normalizeNumber(value).toLocaleString(undefined, {
+  const n = normalizeNumber(value);
+  if (Math.abs(n) >= 1_000_000) {
+    const m = n / 1_000_000;
+    return "$" + (m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)) + "M";
+  }
+  if (Math.abs(n) >= 10_000) {
+    const k = n / 1_000;
+    return "$" + (k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)) + "K";
+  }
+  return n.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: decimals,
@@ -1178,23 +1187,23 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
 
             <div class="entityHealthRow">
               <div class="entityHealthItem">
-                <span>No Show</span>
-                <strong>${formatPercent(row.noShowRate)}</strong>
+                <span class="entityHealthLabel">No Show</span>
+                <strong class="${noShowStatus === "good" ? "good" : noShowStatus === "warning" ? "warning" : "bad"}">${formatPercent(row.noShowRate)}</strong>
               </div>
               <div class="entityHealthItem">
-                <span>Cancel</span>
-                <strong>${formatPercent(row.cancellationRate)}</strong>
+                <span class="entityHealthLabel">Cancel</span>
+                <strong class="${cancelStatus === "good" ? "good" : cancelStatus === "warning" ? "warning" : "bad"}">${formatPercent(row.cancellationRate)}</strong>
               </div>
               <div class="entityHealthItem">
-                <span>Abandoned</span>
-                <strong>${formatPercent(row.abandonedCallRate)}</strong>
+                <span class="entityHealthLabel">Abandoned</span>
+                <strong class="${callStatus === "good" ? "good" : callStatus === "warning" ? "warning" : "bad"}">${formatPercent(row.abandonedCallRate)}</strong>
               </div>
             </div>
 
             <div class="entityAccessPanel">
-              <div class="entityProgressLabelRow">
-                <span>Access Health</span>
-                <strong>${Math.round(accessPct)}%</strong>
+              <div class="entityAccessLabelRow">
+                <span class="entityAccessLabel">Access Health</span>
+                <span class="entityAccessValue">${Math.round(accessPct)}%</span>
               </div>
               <div class="entityProgressTrack">
                 <div class="entityProgressBar ${callStatus === "good" ? "entityProgressGood" : callStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${accessPct}%"></div>
@@ -1274,11 +1283,17 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
     alerts.push({ severity: "good", text: "No major operational alerts for the selected period." });
   }
 
-  container.innerHTML = alerts.map((alert) => `
-    <div class="${alert.severity}" style="margin-bottom:8px; padding:12px; border:1px solid #1d435b; border-radius:8px; background:#0a2233;">
-      ${alert.text}
-    </div>
-  `).join("");
+  container.innerHTML = alerts.map((alert) => {
+    const isBad     = alert.severity === "bad";
+    const isWarning = alert.severity === "warning";
+    const isGood    = alert.severity === "good";
+    const icon      = isBad ? "▲" : isWarning ? "◆" : "✓";
+    const cls       = isBad ? "" : isWarning ? "alertWarning" : "";
+    if (isGood) {
+      return `<div class="winItem"><div class="winItemIcon">✓</div><div class="winItemText">${alert.text}</div></div>`;
+    }
+    return `<div class="alertItem ${cls}"><span class="alertIcon">${icon}</span><span>${alert.text}</span></div>`;
+  }).join("");
 }
 
 function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
@@ -2832,76 +2847,79 @@ function injectUiPolishStyles() {
 
     .entityCardGrid {
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
-      gap:18px;
+      grid-template-columns:repeat(auto-fit,minmax(290px,1fr));
+      gap:14px;
     }
 
     .entityCard {
-      background:linear-gradient(180deg, rgba(18,56,81,0.98) 0%, rgba(13,43,63,0.98) 100%);
-      border:1px solid rgba(108,182,255,0.12);
-      border-radius:18px;
-      padding:18px;
-      box-shadow:0 12px 24px rgba(0,0,0,0.14);
-      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      background:linear-gradient(160deg, rgba(11,26,42,0.98) 0%, rgba(8,20,32,0.98) 100%);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:16px;
+      padding:16px;
+      box-shadow:0 8px 24px rgba(0,0,0,0.2);
+      transition:transform .18s ease, box-shadow .22s ease, border-color .18s ease;
     }
 
     .entityCard:hover {
-      transform:translateY(-3px);
-      box-shadow:0 18px 34px rgba(0,0,0,0.2);
-      border-color:rgba(108,182,255,0.24);
+      transform:translateY(-2px);
+      box-shadow:0 16px 36px rgba(0,0,0,0.28);
+      border-color:rgba(91,168,255,0.2);
     }
 
     .entityCardHeader {
       display:flex;
       justify-content:space-between;
-      gap:12px;
+      gap:10px;
       align-items:flex-start;
-      margin-bottom:14px;
+      margin-bottom:12px;
     }
 
     .entityHeaderLeft { min-width:0; flex:1; }
 
     .entityStatusRow {
       display:flex;
-      gap:8px;
+      gap:6px;
       flex-wrap:wrap;
-      margin-bottom:10px;
+      align-items:center;
+      margin-bottom:8px;
     }
 
     .entityStatusPill {
       display:inline-flex;
       align-items:center;
-      padding:4px 9px;
-      border-radius:999px;
-      background:rgba(124,252,152,0.14);
-      color:#7CFC98;
-      font-size:11px;
-      font-weight:800;
+      padding:3px 8px;
+      border-radius:4px;
+      background:rgba(77,217,138,0.12);
+      color:#4dd98a;
+      font-family:'DM Mono','Fira Mono',monospace;
+      font-size:10px;
+      font-weight:500;
       text-transform:uppercase;
-      letter-spacing:.05em;
+      letter-spacing:.08em;
     }
 
     .metricChip {
       display:inline-flex;
       align-items:center;
-      padding:4px 9px;
-      border-radius:999px;
-      background:rgba(255,255,255,0.07);
-      color:#dcebf8;
-      font-size:11px;
-      font-weight:800;
-      letter-spacing:.03em;
+      padding:3px 8px;
+      border-radius:4px;
+      background:rgba(255,255,255,0.06);
+      color:#93b4cc;
+      font-family:'DM Mono','Fira Mono',monospace;
+      font-size:10px;
+      font-weight:500;
+      letter-spacing:.04em;
     }
 
-    .metricChipGood { background:rgba(124,252,152,0.12); color:#7CFC98; }
-    .metricChipWarning { background:rgba(247,198,47,0.14); color:#f7c62f; }
-    .metricChipBad { background:rgba(255,125,125,0.14); color:#ff9a9a; }
+    .metricChipGood    { background:rgba(77,217,138,0.1);   color:#4dd98a; }
+    .metricChipWarning { background:rgba(247,198,47,0.12);  color:#f7c62f; }
+    .metricChipBad     { background:rgba(240,100,112,0.12); color:#f06470; }
 
-    .entityTitle { font-size:22px; font-weight:900; line-height:1; margin-bottom:6px; }
-    .entitySubtitle { font-size:12px; color:#b8d3e6; line-height:1.45; }
+    .entityTitle    { font-size:20px; font-weight:800; line-height:1.05; margin-bottom:4px; letter-spacing:-0.02em; }
+    .entitySubtitle { font-size:11.5px; color:#506a7e; line-height:1.4; }
 
     .entityLogoWrap {
-      width:88px; height:46px; background:#fff; border-radius:10px; padding:6px;
+      width:76px; height:40px; background:#fff; border-radius:8px; padding:5px;
       display:flex; align-items:center; justify-content:center; flex-shrink:0;
     }
 
@@ -2910,136 +2928,199 @@ function injectUiPolishStyles() {
     .entityTopMetrics {
       display:grid;
       grid-template-columns:repeat(3,1fr);
-      gap:10px;
-      margin-bottom:14px;
+      gap:8px;
+      margin-bottom:12px;
     }
 
     .entityMetricHero {
-      background:rgba(255,255,255,0.04);
-      border:1px solid rgba(255,255,255,0.06);
-      border-radius:14px;
-      padding:12px;
+      padding:10px 11px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
       min-width:0;
     }
 
     .entityMetricLabel {
       display:block;
-      font-size:11px;
+      font-size:9.5px;
       text-transform:uppercase;
-      letter-spacing:.06em;
-      color:#8eb2c9;
-      margin-bottom:6px;
-      font-weight:800;
+      letter-spacing:.1em;
+      color:#506a7e;
+      margin-bottom:4px;
+      font-weight:700;
     }
 
     .entityMetricHero strong {
-      font-size:24px;
-      font-weight:900;
+      font-family:'DM Mono','Fira Mono',monospace;
+      font-size:21px;
+      font-weight:500;
       line-height:1;
-      letter-spacing:-.03em;
+      letter-spacing:-.02em;
       display:block;
       min-width:0;
-      overflow-wrap:anywhere;
-      word-break:break-word;
+      color:#eaf1f8;
     }
 
-    .entityBudgetGrid, .entityCompareGrid { display:grid; gap:10px; margin-bottom:14px; }
-    .entityBudgetGrid { grid-template-columns:repeat(2,1fr); }
+    .entityBudgetGrid, .entityCompareGrid { display:grid; gap:8px; margin-bottom:12px; }
+    .entityBudgetGrid  { grid-template-columns:repeat(2,1fr); }
     .entityCompareGrid { grid-template-columns:repeat(3,1fr); }
 
     .entityBudgetTile, .entityMiniStat {
-      background:linear-gradient(180deg, rgba(20,67,97,0.96) 0%, rgba(17,54,79,0.96) 100%);
-      border:1px solid rgba(108,182,255,0.12);
-      border-radius:14px;
-      padding:12px;
+      background:rgba(91,168,255,0.06);
+      border:1px solid rgba(91,168,255,0.1);
+      border-radius:10px;
+      padding:10px 11px;
     }
 
     .entityBudgetLabel, .entityMiniLabel {
       display:block;
-      font-size:11px;
+      font-size:9.5px;
       text-transform:uppercase;
-      letter-spacing:.06em;
-      color:#8eb2c9;
-      margin-bottom:6px;
-      font-weight:800;
+      letter-spacing:.1em;
+      color:#506a7e;
+      margin-bottom:5px;
+      font-weight:700;
     }
 
     .entityBudgetValue, .entityMiniStat strong {
-      font-size:22px; font-weight:900; line-height:1; margin-bottom:8px; display:block;
+      font-family:'DM Mono','Fira Mono',monospace;
+      font-size:20px; font-weight:500; line-height:1; margin-bottom:6px; display:block;
+      letter-spacing:-.02em;
     }
 
-    .entityBudgetMeta { margin-top:6px; font-size:12px; color:#b8d3e6; }
-    .entityProgressWrap { margin-top:10px; }
+    .entityBudgetMeta { margin-top:5px; font-size:11.5px; color:#506a7e; }
+    .entityProgressWrap { margin-top:8px; }
 
     .entityProgressLabelRow {
-      display:flex; justify-content:space-between; gap:10px; align-items:center;
-      font-size:12px; color:#b8d3e6; margin-bottom:6px;
+      display:flex; justify-content:space-between; gap:8px; align-items:center;
+      font-size:11.5px; color:#506a7e; margin-bottom:5px;
     }
 
-    .entityProgressLabelRow strong { color:#fff; font-size:12px; }
+    .entityProgressLabelRow strong { color:#93b4cc; font-size:11.5px; font-family:'DM Mono','Fira Mono',monospace; }
 
     .entityProgressTrack {
-      width:100%; height:10px; border-radius:999px;
-      background:rgba(255,255,255,0.08); overflow:hidden; position:relative;
+      width:100%; height:5px; border-radius:999px;
+      background:rgba(255,255,255,0.07); overflow:hidden; position:relative;
     }
 
     .entityProgressBar {
-      height:100%; border-radius:999px; transition:width .28s ease;
-      background:linear-gradient(90deg, #6cb6ff, #74f0ff);
+      height:100%; border-radius:999px; transition:width .32s ease;
+      background:rgba(91,168,255,0.6);
     }
 
-    .entityProgressGood { background:linear-gradient(90deg, #33d17a, #7CFC98); }
-    .entityProgressWarning { background:linear-gradient(90deg, #f1b718, #f7c62f); }
-    .entityProgressBad { background:linear-gradient(90deg, #ff7d7d, #ff4f73); }
+    .entityProgressGood    { background:#4dd98a; }
+    .entityProgressWarning { background:#f7c62f; }
+    .entityProgressBad     { background:#f06470; }
 
+    /* Health stats — three inline pills in a row */
     .entityHealthRow {
-      display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px;
+      display:flex;
+      gap:6px;
+      margin-bottom:10px;
+      flex-wrap:wrap;
     }
 
     .entityHealthItem {
-      display:flex; justify-content:space-between; gap:10px; align-items:center;
-      padding:10px 12px; border-radius:12px;
-      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
-      color:#b8d3e6; font-size:13px;
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      padding:8px 10px;
+      border-radius:8px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.06);
+      min-width:0;
     }
 
-    .entityHealthItem strong { color:#fff; font-size:14px; }
+    .entityHealthLabel {
+      font-size:9.5px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:#506a7e;
+      font-weight:700;
+      white-space:nowrap;
+    }
 
+    .entityHealthItem strong {
+      font-family:'DM Mono','Fira Mono',monospace;
+      font-size:15px;
+      font-weight:500;
+      line-height:1;
+      color:#eaf1f8;
+    }
+
+    /* Access health bar */
     .entityAccessPanel {
-      margin-bottom:12px; padding:12px; border-radius:14px;
-      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+      margin-bottom:10px;
+      padding:10px 12px;
+      border-radius:10px;
+      background:rgba(255,255,255,0.025);
+      border:1px solid rgba(255,255,255,0.05);
+    }
+
+    .entityAccessLabelRow {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:6px;
+    }
+
+    .entityAccessLabel {
+      font-size:9.5px;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:#506a7e;
+      font-weight:700;
+    }
+
+    .entityAccessValue {
+      font-family:'DM Mono','Fira Mono',monospace;
+      font-size:13px;
+      font-weight:500;
+      color:#eaf1f8;
     }
 
     .entityDetailDrawer {
-      border:1px solid rgba(255,255,255,0.06); border-radius:12px;
-      background:rgba(7,31,51,0.34); overflow:hidden;
+      border:1px solid rgba(255,255,255,0.05); border-radius:10px;
+      background:rgba(4,9,15,0.4); overflow:hidden;
     }
 
     .entityDetailDrawer summary {
-      cursor:pointer; list-style:none; padding:12px 14px;
-      font-weight:800; font-size:13px; color:#dcebf8;
+      cursor:pointer; list-style:none; padding:10px 13px;
+      font-weight:600; font-size:12.5px; color:#93b4cc;
+      display:flex; align-items:center; gap:6px;
     }
 
+    .entityDetailDrawer summary::before {
+      content:"›";
+      font-size:14px;
+      transition:transform .15s ease;
+      display:inline-block;
+    }
+
+    details[open] .entityDetailDrawer summary::before { transform:rotate(90deg); }
     .entityDetailDrawer summary::-webkit-details-marker { display:none; }
 
     .entityDetailGrid {
-      display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:0 14px 14px;
+      display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 13px 13px;
     }
 
     .entityDetailTile {
-      padding:12px; border-radius:12px;
-      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+      padding:10px; border-radius:9px;
+      background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.05);
     }
 
     .entityDetailLabel {
-      font-size:11px; text-transform:uppercase; letter-spacing:.06em;
-      color:#8eb2c9; margin-bottom:6px; font-weight:800;
+      font-size:9.5px; text-transform:uppercase; letter-spacing:.08em;
+      color:#506a7e; margin-bottom:4px; font-weight:700;
     }
 
-    .entityDetailValue { font-size:18px; font-weight:900; line-height:1.1; }
+    .entityDetailValue {
+      font-family:'DM Mono','Fira Mono',monospace;
+      font-size:17px; font-weight:500; line-height:1.1;
+      letter-spacing:-.01em;
+    }
 
     @media (max-width: 820px) {
-      .entityTopMetrics, .entityCompareGrid, .entityHealthRow, .entityDetailGrid { grid-template-columns:1fr; }
+      .entityTopMetrics, .entityCompareGrid, .entityDetailGrid { grid-template-columns:1fr; }
       .entityBudgetGrid { grid-template-columns:1fr; }
     }
 
