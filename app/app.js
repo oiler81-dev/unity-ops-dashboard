@@ -1928,7 +1928,14 @@ function renderPtoForecastEntities(data) {
   const container = byId("ptoForecastEntities");
   if (!container) return;
 
-  const { entities, monthLabels, monthKeys } = data;
+  const entities = data?.entities || [];
+  const monthLabels = data?.monthLabels || [];
+  const monthKeys = data?.monthKeys || [];
+
+  if (!entities.length) {
+    container.innerHTML = `<div class="subtleBanner" style="margin:0;">No entity data available. Run a weekly import first.</div>`;
+    return;
+  }
 
   container.innerHTML = entities.map((entityData) => {
     const { entity, rates, months } = entityData;
@@ -2090,7 +2097,13 @@ function renderPtoForecastSummary(data) {
   const container = byId("ptoForecastSummary");
   if (!container) return;
 
-  const { entities, monthLabels } = data;
+  const entities = data?.entities || [];
+  const monthLabels = data?.monthLabels || [];
+
+  if (!entities.length) {
+    container.innerHTML = "";
+    return;
+  }
 
   const totalByMonth = monthLabels.map((label, mi) => {
     const total = entities.reduce((sum, e) => {
@@ -2146,17 +2159,34 @@ async function loadPtoForecast() {
   const bannerEl = byId("ptoForecastBanner");
   if (bannerEl) bannerEl.textContent = "Loading forecast data...";
 
-  const data = await apiGet("/api/pto-forecast");
-  _lastPtoData = data;
+  try {
+    const data = await apiGet("/api/pto-forecast");
+    _lastPtoData = data;
 
-  if (bannerEl) {
-    const labels = (data.monthLabels || []).join(", ");
-    bannerEl.textContent = `Rolling quarter: ${labels} · Enter projected PTO days per entity and month, then save.`;
+    if (!data || !data.ok) {
+      if (bannerEl) bannerEl.textContent = `Error: ${data?.error || "Failed to load forecast data."}`;
+      setPtoForecastDebug(data);
+      return;
+    }
+
+    if (!Array.isArray(data.entities) || data.entities.length === 0) {
+      if (bannerEl) bannerEl.textContent = "No entity data returned. Check that weekly data has been imported.";
+      setPtoForecastDebug(data);
+      return;
+    }
+
+    if (bannerEl) {
+      const labels = (data.monthLabels || []).join(", ");
+      bannerEl.textContent = `Rolling quarter: ${labels} · Enter projected PTO days per entity and month, then save.`;
+    }
+
+    renderPtoForecastEntities(data);
+    renderPtoForecastSummary(data);
+    setPtoForecastDebug(data);
+  } catch (e) {
+    if (bannerEl) bannerEl.textContent = "Failed to load forecast data. See debug output below.";
+    setPtoForecastDebug(String(e));
   }
-
-  renderPtoForecastEntities(data);
-  renderPtoForecastSummary(data);
-  setPtoForecastDebug(data);
 }
 
 async function refreshPtoSummary() {
