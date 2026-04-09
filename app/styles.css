@@ -109,62 +109,88 @@ body {
   padding: 12px 8px 6px;
 }
 
+/* Sidebar group structure */
+.sidebarGroup {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.sidebarGroup:last-of-type { border-bottom: none; }
+
+.sidebarGroupLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+  padding: 10px 10px 5px;
+}
+
+.sidebarGroupBottom {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
 #sidebar button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  margin-bottom: 2px;
-  padding: 10px 12px;
+  margin-bottom: 1px;
+  padding: 8px 10px;
   background: transparent;
   color: var(--text-soft);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: 7px;
   cursor: pointer;
   text-align: left;
   font-family: var(--font);
-  font-weight: 600;
-  font-size: 13.5px;
+  font-weight: 500;
+  font-size: 13px;
   letter-spacing: 0.01em;
   transition: all var(--transition-fast);
   position: relative;
-  overflow: hidden;
 }
 
-#sidebar button::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 20%; bottom: 20%;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent);
-  opacity: 0;
+.sidebarIcon {
+  font-size: 12px;
+  width: 16px;
+  text-align: center;
+  opacity: 0.55;
+  flex-shrink: 0;
   transition: opacity var(--transition-fast);
 }
 
 #sidebar button:hover {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.05);
   color: var(--text);
-  border-color: var(--border-soft);
 }
+
+#sidebar button:hover .sidebarIcon { opacity: 0.85; }
 
 #sidebar button.activeNav {
-  background: rgba(91,168,255,0.08);
+  background: rgba(91,168,255,0.1);
   color: var(--text);
-  border-color: rgba(91,168,255,0.18);
   font-weight: 700;
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
-#sidebar button.activeNav::before { opacity: 1; }
+#sidebar button.activeNav .sidebarIcon { opacity: 1; }
 
 #navHelpBtn {
-  background: rgba(247,198,47,0.06) !important;
-  border-color: rgba(247,198,47,0.18) !important;
   color: var(--accent) !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
 }
 
 #navHelpBtn:hover {
+  background: rgba(247,198,47,0.07) !important;
+}
+
+#navHelpBtn.activeNav {
   background: rgba(247,198,47,0.1) !important;
-  border-color: rgba(247,198,47,0.3) !important;
+  box-shadow: inset 2px 0 0 var(--accent) !important;
 }
 
 /* ── Main ── */
@@ -732,3 +758,87 @@ canvas { width:100% !important; max-height:252px; }
 /* Colored values in snapshot */
 #dashboardSnapshot .regionTable td { color: var(--text-soft); }
 #dashboardSnapshot .regionTable td:first-child { color: var(--text); font-weight: 600; }
+
+/* ── Segmented tab controls (Mode / Scope) ───────────────────── */
+.segmentGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.segmentLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+.segmentTabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.segmentTab {
+  padding: 5px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.segmentTab:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-soft);
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.segmentTabActive {
+  background: rgba(91,168,255,0.14) !important;
+  color: var(--text) !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* ── Tighter table rows ──────────────────────────────────────── */
+.regionTable th,
+.regionTable td {
+  padding: 9px 10px;
+}
+
+.regionTable th {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 7px 10px;
+}
+
+.regionTable tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.018);
+}
+
+/* ── Sidebar layout fix for bottom pinning ───────────────────── */
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 16px;
+}
+
+.sidebarGroupBottom {
+  margin-top: auto;
+}
