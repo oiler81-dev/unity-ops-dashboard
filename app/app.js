@@ -1082,7 +1082,9 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
 
         const visitBudgetStatus = getGoalStatus(row.visitVolume, row.visitVolumeBudget);
         const npBudgetStatus = getGoalStatus(row.newPatients, row.newPatientsBudget);
-        const callStatus = getGoalStatus(row.abandonedCallRate, 10, true);
+        const callStatus    = getGoalStatus(row.abandonedCallRate, 10, true);
+        const noShowStatus  = getGoalStatus(row.noShowRate, 6, true);
+        const cancelStatus  = getGoalStatus(row.cancellationRate, 8, true);
         const summary = getPerformanceSummary(row, compareAgainst);
 
         const visitGoalPct = progressPercent(row.visitVolume, row.visitVolumeBudget);
