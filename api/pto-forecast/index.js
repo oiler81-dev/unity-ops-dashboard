@@ -4,8 +4,17 @@ const { getTableClient } = require("../shared/table");
 
 const REGION_TABLE = "WeeklyRegionData";
 const FORECAST_TABLE = "PTOForecastData";
+const SETTINGS_TABLE = "ProviderSettingsData";
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 const RATE_WEEKS = 12; // weeks of history used to compute daily rates
+
+// Fallback defaults if provider settings haven't been configured yet
+const PROVIDER_DEFAULTS = {
+  LAOSS:    { mdCount: 21, paCount: 14, ptCount: 0 },
+  NES:      { mdCount: 12, paCount: 1,  ptCount: 4 },
+  SpineOne: { mdCount: 2,  paCount: 3,  ptCount: 2 },
+  MRO:      { mdCount: 8,  paCount: 4,  ptCount: 3 }
+};
 
 function toNumber(value, fallback = 0) {
   if (value == null || value === "") return fallback;
@@ -110,16 +119,56 @@ async function computeEntityRates(regionTable, entity) {
   }
 }
 
-// Compute forecasted impact for one entity+month given rates and PTO inputs
-function computeForecast(clinicalPtoDays, surgicalPtoDays, rates) {
-  const missedClinical = Number((toNumber(clinicalPtoDays) * rates.clinicalVisitsPerDay).toFixed(1));
-  const missedSurgical = Number((toNumber(surgicalPtoDays) * rates.surgeriesPerDay).toFixed(1));
-  const totalMissed = Number((missedClinical + missedSurgical).toFixed(1));
+// Fetch provider settings for an entity, falling back to defaults
+async function getProviderSettings(settingsTable, entity) {
+  try {
+    const saved = await settingsTable.getEntity(entity, "settings");
+    const defaults = PROVIDER_DEFAULTS[entity] || { mdCount: 1, paCount: 0, ptCount: 0 };
+    return {
+      mdCount: toNumber(saved?.mdCount, defaults.mdCount),
+      paCount: toNumber(saved?.paCount, defaults.paCount),
+      ptCount: toNumber(saved?.ptCount, defaults.ptCount)
+    };
+  } catch {
+    return PROVIDER_DEFAULTS[entity] || { mdCount: 1, paCount: 0, ptCount: 0 };
+  }
+}
+
+// Compute per-provider daily rates from aggregate entity rates + provider counts
+function computeProviderRates(rates, providerSettings) {
+  const { mdCount, paCount, ptCount } = providerSettings;
+  const totalClinical = Math.max(1, mdCount + paCount);
+  const totalPt = Math.max(1, ptCount || 1);
 
   return {
-    missedClinicalVisits: missedClinical,
-    missedSurgeries: missedSurgical,
-    totalMissedVisits: totalMissed
+    mdVisitsPerDay:  mdCount > 0 ? Number((rates.clinicalVisitsPerDay / totalClinical * (mdCount / totalClinical * totalClinical)).toFixed(2)) : 0,
+    paVisitsPerDay:  paCount > 0 ? Number((rates.clinicalVisitsPerDay / totalClinical).toFixed(2)) : 0,
+    ptVisitsPerDay:  ptCount > 0 ? Number((rates.visitsPerDay / totalPt).toFixed(2)) : 0,
+    // Simplified: divide aggregate rate equally across all clinical providers
+    perProviderClinical: Number((rates.clinicalVisitsPerDay / Math.max(1, totalClinical)).toFixed(2)),
+    perProviderPt:       Number(((rates.visitsPerDay - rates.clinicalVisitsPerDay) / Math.max(1, totalPt)).toFixed(2))
+  };
+}
+
+// Compute forecasted impact for one entity+month given provider PTO inputs
+function computeForecast(mdPtoDays, paPtoDays, ptPtoDays, rates, providerSettings) {
+  const perClinical = Number((rates.clinicalVisitsPerDay / Math.max(1, providerSettings.mdCount + providerSettings.paCount)).toFixed(2));
+  const ptRate = providerSettings.ptCount > 0
+    ? Number(((rates.visitsPerDay - rates.clinicalVisitsPerDay) / providerSettings.ptCount).toFixed(2))
+    : 0;
+
+  const missedMd = Number((toNumber(mdPtoDays) * perClinical).toFixed(1));
+  const missedPa = Number((toNumber(paPtoDays) * perClinical).toFixed(1));
+  const missedPt = Number((toNumber(ptPtoDays) * ptRate).toFixed(1));
+  const totalMissed = Number((missedMd + missedPa + missedPt).toFixed(1));
+
+  return {
+    missedMdVisits:   missedMd,
+    missedPaVisits:   missedPa,
+    missedPtVisits:   missedPt,
+    totalMissedVisits: totalMissed,
+    perProviderClinicalRate: perClinical,
+    perProviderPtRate: ptRate
   };
 }
 
@@ -160,6 +209,7 @@ module.exports = async function (context, req) {
 
     const regionTable = getTableClient(REGION_TABLE);
     const forecastTable = getTableClient(FORECAST_TABLE);
+    const settingsTable = getTableClient(SETTINGS_TABLE);
 
     // Ensure the forecast table exists (creates it silently if not)
     await ensureForecastTable(forecastTable);
@@ -169,8 +219,9 @@ module.exports = async function (context, req) {
       const body = req.body || {};
       const entity = String(body.entity || "").trim();
       const monthKey = String(body.monthKey || "").trim();
-      const clinicalPtoDays = toNumber(body.clinicalPtoDays, 0);
-      const surgicalPtoDays = toNumber(body.surgicalPtoDays, 0);
+      const mdPtoDays = toNumber(body.mdPtoDays, 0);
+      const paPtoDays = toNumber(body.paPtoDays, 0);
+      const ptPtoDays = toNumber(body.ptPtoDays, 0);
 
       if (!entity || !monthKey) {
         return respond(400, { ok: false, error: "Missing entity or monthKey" });
@@ -182,7 +233,8 @@ module.exports = async function (context, req) {
       }
 
       const rates = await computeEntityRates(regionTable, entity);
-      const forecast = computeForecast(clinicalPtoDays, surgicalPtoDays, rates);
+      const providerSettings = await getProviderSettings(settingsTable, entity);
+      const forecast = computeForecast(mdPtoDays, paPtoDays, ptPtoDays, rates, providerSettings);
 
       await forecastTable.upsertEntity({
         partitionKey: entity,
@@ -190,13 +242,16 @@ module.exports = async function (context, req) {
         entity,
         monthKey,
         monthLabel: monthKeyToLabel(monthKey),
-        clinicalPtoDays,
-        surgicalPtoDays,
-        missedClinicalVisits: forecast.missedClinicalVisits,
-        missedSurgeries: forecast.missedSurgeries,
+        mdPtoDays,
+        paPtoDays,
+        ptPtoDays,
+        missedMdVisits:    forecast.missedMdVisits,
+        missedPaVisits:    forecast.missedPaVisits,
+        missedPtVisits:    forecast.missedPtVisits,
         totalMissedVisits: forecast.totalMissedVisits,
         clinicalVisitsPerDay: rates.clinicalVisitsPerDay,
-        surgeriesPerDay: rates.surgeriesPerDay,
+        perProviderClinicalRate: forecast.perProviderClinicalRate,
+        perProviderPtRate: forecast.perProviderPtRate,
         weeksUsed: rates.weeksUsed,
         savedBy: access.email || user?.userDetails || null,
         savedAt: new Date().toISOString(),
@@ -208,10 +263,12 @@ module.exports = async function (context, req) {
         message: "Forecast saved",
         entity,
         monthKey,
-        clinicalPtoDays,
-        surgicalPtoDays,
+        mdPtoDays,
+        paPtoDays,
+        ptPtoDays,
         forecast,
-        rates
+        rates,
+        providerSettings
       });
     }
 
@@ -227,23 +284,27 @@ module.exports = async function (context, req) {
       scopeEntities.map(async (entity) => {
         try {
           const rates = await computeEntityRates(regionTable, entity);
+          const providerSettings = await getProviderSettings(settingsTable, entity);
 
           const months = await Promise.all(
             monthKeys.map(async (monthKey) => {
               try {
                 const saved = await getForecastRecord(forecastTable, entity, monthKey);
 
-                const clinicalPtoDays = toNumber(saved?.clinicalPtoDays, 0);
-                const surgicalPtoDays = toNumber(saved?.surgicalPtoDays, 0);
-                const forecast = computeForecast(clinicalPtoDays, surgicalPtoDays, rates);
+                const mdPtoDays = toNumber(saved?.mdPtoDays, 0);
+                const paPtoDays = toNumber(saved?.paPtoDays, 0);
+                const ptPtoDays = toNumber(saved?.ptPtoDays, 0);
+                const forecast = computeForecast(mdPtoDays, paPtoDays, ptPtoDays, rates, providerSettings);
 
                 return {
                   monthKey,
                   monthLabel: monthKeyToLabel(monthKey),
-                  clinicalPtoDays,
-                  surgicalPtoDays,
-                  missedClinicalVisits: saved ? toNumber(saved.missedClinicalVisits) : forecast.missedClinicalVisits,
-                  missedSurgeries: saved ? toNumber(saved.missedSurgeries) : forecast.missedSurgeries,
+                  mdPtoDays,
+                  paPtoDays,
+                  ptPtoDays,
+                  missedMdVisits:    saved ? toNumber(saved.missedMdVisits)    : forecast.missedMdVisits,
+                  missedPaVisits:    saved ? toNumber(saved.missedPaVisits)    : forecast.missedPaVisits,
+                  missedPtVisits:    saved ? toNumber(saved.missedPtVisits)    : forecast.missedPtVisits,
                   totalMissedVisits: saved ? toNumber(saved.totalMissedVisits) : forecast.totalMissedVisits,
                   savedBy: saved?.savedBy || null,
                   savedAt: saved?.savedAt || null,
@@ -253,14 +314,10 @@ module.exports = async function (context, req) {
                 return {
                   monthKey,
                   monthLabel: monthKeyToLabel(monthKey),
-                  clinicalPtoDays: 0,
-                  surgicalPtoDays: 0,
-                  missedClinicalVisits: 0,
-                  missedSurgeries: 0,
+                  mdPtoDays: 0, paPtoDays: 0, ptPtoDays: 0,
+                  missedMdVisits: 0, missedPaVisits: 0, missedPtVisits: 0,
                   totalMissedVisits: 0,
-                  savedBy: null,
-                  savedAt: null,
-                  hasSavedEntry: false
+                  savedBy: null, savedAt: null, hasSavedEntry: false
                 };
               }
             })
@@ -269,20 +326,21 @@ module.exports = async function (context, req) {
           return {
             entity,
             rates,
+            providerSettings,
             months,
             quarterlyTotalMissed: months.reduce((sum, m) => sum + toNumber(m.totalMissedVisits), 0)
           };
         } catch {
           const emptyMonth = (mk) => ({
-            monthKey: mk,
-            monthLabel: monthKeyToLabel(mk),
-            clinicalPtoDays: 0, surgicalPtoDays: 0,
-            missedClinicalVisits: 0, missedSurgeries: 0, totalMissedVisits: 0,
-            savedBy: null, savedAt: null, hasSavedEntry: false
+            monthKey: mk, monthLabel: monthKeyToLabel(mk),
+            mdPtoDays: 0, paPtoDays: 0, ptPtoDays: 0,
+            missedMdVisits: 0, missedPaVisits: 0, missedPtVisits: 0,
+            totalMissedVisits: 0, savedBy: null, savedAt: null, hasSavedEntry: false
           });
           return {
             entity,
             rates: { visitsPerDay: 0, clinicalVisitsPerDay: 0, surgeriesPerDay: 0, weeksUsed: 0 },
+            providerSettings: PROVIDER_DEFAULTS[entity] || { mdCount: 1, paCount: 0, ptCount: 0 },
             months: monthKeys.map(emptyMonth),
             quarterlyTotalMissed: 0
           };
