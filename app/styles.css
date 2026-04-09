@@ -689,3 +689,46 @@ canvas { width:100% !important; max-height:252px; }
   .quickPresetBar{align-items:flex-start;flex-direction:column;}
   .ptoMonthGrid{grid-template-columns:1fr;}
 }
+
+/* ── Alert items — severity-left-bar style ────────────────────── */
+#dashboardAlerts .alertItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 13px;
+  border-radius: 9px;
+  border: 1px solid rgba(240,100,112,0.18);
+  background: rgba(240,100,112,0.05);
+  margin-bottom: 7px;
+  font-size: 13px;
+  color: #f5c0c4;
+  position: relative;
+  border-left: 3px solid rgba(240,100,112,0.55);
+}
+
+#dashboardAlerts .alertItem:last-child { margin-bottom: 0; }
+
+#dashboardAlerts .alertItem.alertWarning {
+  border-color: rgba(247,198,47,0.18);
+  border-left-color: rgba(247,198,47,0.55);
+  background: rgba(247,198,47,0.04);
+  color: #f5e4b0;
+}
+
+#dashboardAlerts .alertIcon {
+  font-size: 12px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+/* Snapshot table tighter for inline view */
+#dashboardSnapshot .regionTable td,
+#dashboardSnapshot .regionTable th {
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+
+/* Colored values in snapshot */
+#dashboardSnapshot .regionTable td { color: var(--text-soft); }
+#dashboardSnapshot .regionTable td:first-child { color: var(--text); font-weight: 600; }
