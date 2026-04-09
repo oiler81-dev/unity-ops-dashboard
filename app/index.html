@@ -20,17 +20,29 @@
         />
       </div>
 
-      <div class="sidebarSectionLabel">Navigation</div>
+      <div class="sidebarGroup">
+        <div class="sidebarGroupLabel">Views</div>
+        <button id="navDashboardBtn" type="button"><span class="sidebarIcon">▦</span>Dashboard</button>
+        <button id="navEntryBtn" type="button"><span class="sidebarIcon">✎</span>Weekly Entry</button>
+        <button id="navExecutiveBtn" type="button"><span class="sidebarIcon">◈</span>Executive Summary</button>
+        <button id="navTrendsBtn" type="button"><span class="sidebarIcon">↗</span>Trends</button>
+        <button id="navActivityBtn" type="button"><span class="sidebarIcon">≡</span>Activity Log</button>
+      </div>
 
-      <button id="navHelpBtn" type="button" style="background:linear-gradient(180deg,rgba(247,198,47,0.18) 0%,rgba(247,198,47,0.08) 100%);border-color:rgba(247,198,47,0.3);color:#f7c62f;">Help / ReadMe</button>
-      <button id="navDashboardBtn" type="button">Dashboard</button>
-      <button id="navEntryBtn" type="button">Weekly Entry</button>
-      <button id="navExecutiveBtn" type="button">Executive Summary</button>
-      <button id="navTrendsBtn" type="button">Trends</button>
-      <button id="navPtoForecastBtn" type="button">PTO Forecast</button>
-      <button id="navActivityBtn" type="button">Activity Log</button>
-      <button id="navImportBtn" type="button">Admin Import</button>
-      <button id="navProviderSettingsBtn" type="button">Provider Settings</button>
+      <div class="sidebarGroup">
+        <div class="sidebarGroupLabel">Planning</div>
+        <button id="navPtoForecastBtn" type="button"><span class="sidebarIcon">◷</span>PTO Forecast</button>
+      </div>
+
+      <div class="sidebarGroup">
+        <div class="sidebarGroupLabel">Admin</div>
+        <button id="navImportBtn" type="button"><span class="sidebarIcon">⇪</span>Import Data</button>
+        <button id="navProviderSettingsBtn" type="button"><span class="sidebarIcon">⊞</span>Provider Settings</button>
+      </div>
+
+      <div class="sidebarGroupBottom">
+        <button id="navHelpBtn" type="button"><span class="sidebarIcon">?</span>Help / ReadMe</button>
+      </div>
     </aside>
 
     <div id="mainContent">
