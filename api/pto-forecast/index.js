@@ -46,19 +46,28 @@ function monthKeyToLabel(monthKey) {
 // Compute average visits/day and surgeries/day from recent weekly records
 async function computeEntityRates(regionTable, entity) {
   try {
-    const rows = await regionTable.listByPartitionKey(entity);
-
     const today = new Date().toISOString().slice(0, 10);
 
-    // Sort desc, take past weeks only, limit to RATE_WEEKS
-    const recent = rows
+    // Query region records for this entity, past weeks only
+    const iter = regionTable.listEntities({
+      queryOptions: {
+        filter: `PartitionKey eq '${entity}'`
+      }
+    });
+
+    const allRows = [];
+    for await (const row of iter) {
+      allRows.push(row);
+    }
+
+    const recent = allRows
       .filter((r) => {
-        const we = r.rowKey || r.weekEnding || "";
+        const we = r.rowKey || "";
         return we <= today && toNumber(r.visitVolume, 0) > 0;
       })
       .sort((a, b) => {
-        const wa = a.rowKey || a.weekEnding || "";
-        const wb = b.rowKey || b.weekEnding || "";
+        const wa = a.rowKey || "";
+        const wb = b.rowKey || "";
         return wb.localeCompare(wa);
       })
       .slice(0, RATE_WEEKS);
@@ -118,8 +127,17 @@ async function getForecastRecord(forecastTable, entity, monthKey) {
   try {
     return await forecastTable.getEntity(entity, monthKey);
   } catch (err) {
-    if (err?.statusCode === 404) return null;
+    // 404 = record not found, also swallow table-not-found gracefully
+    if (err?.statusCode === 404 || err?.code === "ResourceNotFound" || err?.code === "TableNotFound") return null;
     throw err;
+  }
+}
+
+async function ensureForecastTable(forecastTable) {
+  try {
+    await forecastTable.createTable();
+  } catch {
+    // Swallow all errors — table likely already exists
   }
 }
 
@@ -134,6 +152,9 @@ module.exports = async function (context, req) {
 
     const regionTable = getTableClient(REGION_TABLE);
     const forecastTable = getTableClient(FORECAST_TABLE);
+
+    // Ensure the forecast table exists (creates it silently if not)
+    await ensureForecastTable(forecastTable);
 
     // ── POST: save operator PTO forecast inputs ──────────────────────────────
     if (req.method === "POST") {
@@ -199,37 +220,68 @@ module.exports = async function (context, req) {
 
     const results = await Promise.all(
       scopeEntities.map(async (entity) => {
-        const rates = await computeEntityRates(regionTable, entity);
+        try {
+          const rates = await computeEntityRates(regionTable, entity);
 
-        const months = await Promise.all(
-          monthKeys.map(async (monthKey) => {
-            const saved = await getForecastRecord(forecastTable, entity, monthKey);
+          const months = await Promise.all(
+            monthKeys.map(async (monthKey) => {
+              try {
+                const saved = await getForecastRecord(forecastTable, entity, monthKey);
 
-            const clinicalPtoDays = toNumber(saved?.clinicalPtoDays, 0);
-            const surgicalPtoDays = toNumber(saved?.surgicalPtoDays, 0);
-            const forecast = computeForecast(clinicalPtoDays, surgicalPtoDays, rates);
+                const clinicalPtoDays = toNumber(saved?.clinicalPtoDays, 0);
+                const surgicalPtoDays = toNumber(saved?.surgicalPtoDays, 0);
+                const forecast = computeForecast(clinicalPtoDays, surgicalPtoDays, rates);
 
-            return {
-              monthKey,
-              monthLabel: monthKeyToLabel(monthKey),
-              clinicalPtoDays,
-              surgicalPtoDays,
-              missedClinicalVisits: saved ? toNumber(saved.missedClinicalVisits) : forecast.missedClinicalVisits,
-              missedSurgeries: saved ? toNumber(saved.missedSurgeries) : forecast.missedSurgeries,
-              totalMissedVisits: saved ? toNumber(saved.totalMissedVisits) : forecast.totalMissedVisits,
-              savedBy: saved?.savedBy || null,
-              savedAt: saved?.savedAt || null,
-              hasSavedEntry: !!saved
-            };
-          })
-        );
+                return {
+                  monthKey,
+                  monthLabel: monthKeyToLabel(monthKey),
+                  clinicalPtoDays,
+                  surgicalPtoDays,
+                  missedClinicalVisits: saved ? toNumber(saved.missedClinicalVisits) : forecast.missedClinicalVisits,
+                  missedSurgeries: saved ? toNumber(saved.missedSurgeries) : forecast.missedSurgeries,
+                  totalMissedVisits: saved ? toNumber(saved.totalMissedVisits) : forecast.totalMissedVisits,
+                  savedBy: saved?.savedBy || null,
+                  savedAt: saved?.savedAt || null,
+                  hasSavedEntry: !!saved
+                };
+              } catch {
+                return {
+                  monthKey,
+                  monthLabel: monthKeyToLabel(monthKey),
+                  clinicalPtoDays: 0,
+                  surgicalPtoDays: 0,
+                  missedClinicalVisits: 0,
+                  missedSurgeries: 0,
+                  totalMissedVisits: 0,
+                  savedBy: null,
+                  savedAt: null,
+                  hasSavedEntry: false
+                };
+              }
+            })
+          );
 
-        return {
-          entity,
-          rates,
-          months,
-          quarterlyTotalMissed: months.reduce((sum, m) => sum + toNumber(m.totalMissedVisits), 0)
-        };
+          return {
+            entity,
+            rates,
+            months,
+            quarterlyTotalMissed: months.reduce((sum, m) => sum + toNumber(m.totalMissedVisits), 0)
+          };
+        } catch {
+          const emptyMonth = (mk) => ({
+            monthKey: mk,
+            monthLabel: monthKeyToLabel(mk),
+            clinicalPtoDays: 0, surgicalPtoDays: 0,
+            missedClinicalVisits: 0, missedSurgeries: 0, totalMissedVisits: 0,
+            savedBy: null, savedAt: null, hasSavedEntry: false
+          });
+          return {
+            entity,
+            rates: { visitsPerDay: 0, clinicalVisitsPerDay: 0, surgeriesPerDay: 0, weeksUsed: 0 },
+            months: monthKeys.map(emptyMonth),
+            quarterlyTotalMissed: 0
+          };
+        }
       })
     );
 
