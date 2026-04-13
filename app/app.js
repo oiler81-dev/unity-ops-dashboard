@@ -97,6 +97,23 @@ function byId(id) {
   return document.getElementById(id);
 }
 
+// ── Command View toggle ────────────────────────────────────────
+function toggleCommandView() {
+  const isActive = document.body.classList.toggle("commandView");
+  localStorage.setItem("commandView", isActive ? "1" : "0");
+  const btn = byId("commandViewToggle");
+  if (btn) btn.classList.toggle("active", isActive);
+}
+
+function initCommandView() {
+  const saved = localStorage.getItem("commandView");
+  if (saved === "1") {
+    document.body.classList.add("commandView");
+    const btn = byId("commandViewToggle");
+    if (btn) btn.classList.add("active");
+  }
+}
+
 function firstExistingId(ids) {
   for (const id of ids) {
     const el = byId(id);
@@ -3351,6 +3368,7 @@ function injectUiPolishStyles() {
     renderForm();
     syncEntryModeVisibility();
     injectUiPolishStyles();
+    initCommandView();
 
     const defaultWeek = getDefaultWeekEnding();
 
