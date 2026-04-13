@@ -43,6 +43,7 @@
       </div>
 
       <div class="sidebarGroupBottom">
+        <button id="navChangelogBtn" type="button"><span class="sidebarIcon">◑</span>What's New<span id="changelogBadge" class="changelogNavBadge" style="display:none;"></span></button>
         <button id="navHelpBtn" type="button"><span class="sidebarIcon">?</span>Help / ReadMe</button>
       </div>
     </aside>
@@ -648,6 +649,19 @@
           </details>
         </section>
 
+        <section id="changelogView" style="display:none;">
+          <div class="panel heroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Release History</div>
+                <h3>What's New</h3>
+                <p>A running log of every update, enhancement, bug fix, and improvement to the UnityMSK Ops Dashboard.</p>
+              </div>
+            </div>
+          </div>
+          <div id="changelogViewEntries"></div>
+        </section>
+
         <section id="helpView" style="display:none;">
           <div class="panel heroPanel" style="padding-bottom:32px;">
             <div class="heroPanelTop">
@@ -947,5 +961,23 @@
   </div>
 
   <script src="./app.js"></script>
+  <!-- WHATS NEW MODAL -->
+  <div id="changelogModal" class="changelogModalOverlay" style="display:none;" role="dialog" aria-modal="true" aria-label="What's New">
+    <div class="changelogModalBox">
+      <div class="changelogModalHeader">
+        <div class="changelogModalMeta">
+          <span class="changelogModalTag">Release Notes</span>
+          <span id="changelogModalVersion" class="changelogModalVersion"></span>
+        </div>
+        <h2 class="changelogModalTitle">What's New in UnityMSK Ops</h2>
+        <p class="changelogModalSub">Here's everything that changed since you last logged in.</p>
+      </div>
+      <div id="changelogModalBody" class="changelogModalBody"></div>
+      <div class="changelogModalFooter">
+        <button id="changelogViewAllBtn" type="button" class="changelogViewAllBtn">View Full History</button>
+        <button id="changelogDismissBtn" type="button" class="changelogDismissBtn">Got it</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
