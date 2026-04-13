@@ -362,6 +362,7 @@ function calculateDerivedMetrics(values = {}) {
     ptCancellations,
     ptNoShows,
     ptReschedules,
+    reschedules: normalizeNumber(values.reschedules),
     ptTotalUnitsBilled,
     ptVisitsSeen,
     ptWorkingDays,
@@ -390,6 +391,7 @@ function updateDerivedDisplays() {
     ptCancellations: byId("ptCancellations")?.value || "",
     ptNoShows: byId("ptNoShows")?.value || "",
     ptReschedules: byId("ptReschedules")?.value || "",
+    reschedules: byId("reschedules")?.value || "",
     ptTotalUnitsBilled: byId("ptTotalUnitsBilled")?.value || "",
     ptVisitsSeen: byId("ptVisitsSeen")?.value || "",
     ptWorkingDays: byId("ptWorkingDays")?.value || "5"
@@ -502,6 +504,11 @@ function renderForm() {
     <div class="nonPtField">
       <label for="cancelled">Cancelled</label>
       <input type="number" id="cancelled" step="1" min="0" />
+    </div>
+
+    <div class="nonPtField nonLaossField" style="display:none;">
+      <label for="reschedules">Rescheduled</label>
+      <input type="number" id="reschedules" step="1" min="0" />
     </div>
 
     <div class="nonPtField">
@@ -642,6 +649,7 @@ function renderForm() {
     "ptCancellations",
     "ptNoShows",
     "ptReschedules",
+    "reschedules",
     "ptTotalUnitsBilled",
     "ptVisitsSeen",
     "ptWorkingDays"
@@ -673,6 +681,13 @@ function syncEntryModeVisibility() {
   document.querySelectorAll(".allEntryField").forEach((el) => {
     el.style.display = "";
   });
+
+  // Reschedules: show for NES, SpineOne, MRO — not LAOSS
+  const baseEntity = getCurrentEntityOption().baseEntity;
+  const hasReschedules = !ptMode && baseEntity !== "LAOSS";
+  document.querySelectorAll(".nonLaossField").forEach((el) => {
+    el.style.display = hasReschedules ? "" : "none";
+  });
 }
 
 function mapWeeklyValuesToFormData(values) {
@@ -693,6 +708,7 @@ function mapWeeklyValuesToFormData(values) {
     piNp: values?.piNp ?? "",
     piCashCollection: values?.piCashCollection ?? "",
     operationsNarrative: values?.operationsNarrative ?? "",
+    reschedules: values?.reschedules ?? "",
     ptScheduledVisits: values?.ptScheduledVisits ?? "",
     ptCancellations: values?.ptCancellations ?? "",
     ptNoShows: values?.ptNoShows ?? "",
@@ -759,6 +775,7 @@ function getFormValues() {
 
   const raw = {
     // Ortho fields: use form value if in ortho mode, otherwise preserve existing saved value
+    reschedules:       ptMode ? (existing.reschedules       ?? 0) : (byId("reschedules")?.value || ""),
     newPatients:       ptMode ? (existing.newPatients       ?? 0) : (byId("newPatients")?.value || ""),
     surgeries:         ptMode ? (existing.surgeries         ?? 0) : (byId("surgeries")?.value || ""),
     established:       ptMode ? (existing.established       ?? 0) : (byId("established")?.value || ""),
@@ -804,6 +821,7 @@ function getFormValues() {
     ptScheduledVisits: derived.ptScheduledVisits,
     ptCancellations: derived.ptCancellations,
     ptNoShows: derived.ptNoShows,
+    reschedules: derived.reschedules ?? 0,
     ptReschedules: derived.ptReschedules,
     ptTotalUnitsBilled: derived.ptTotalUnitsBilled,
     ptVisitsSeen: derived.ptVisitsSeen,
