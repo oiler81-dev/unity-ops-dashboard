@@ -1921,7 +1921,7 @@ function renderTrendsTable(result) {
 }
 
 function hideAllViews() {
-  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "providerSettingsView", "helpView"];
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "providerSettingsView", "changelogView", "helpView"];
   ids.forEach((id) => {
     const el = byId(id);
     if (el) el.style.display = "none";
@@ -3686,6 +3686,238 @@ function injectUiPolishStyles() {
       });
     }
 
+
+// ══════════════════════════════════════════════════════════════
+// CHANGELOG DATA & LOGIC
+// ══════════════════════════════════════════════════════════════
+
+const CHANGELOG = [
+  {
+    version: "1.6.0",
+    date: "2026-04-13",
+    label: "Latest",
+    sections: [
+      {
+        type: "feature",
+        title: "New Features",
+        items: [
+          "Command View — dark terminal-style alternate theme with Syne + JetBrains Mono typography and scan-line overlay",
+          "Light View — warm minimalist theme with Inter + IBM Plex Mono and shadow-depth cards",
+          "New Patients KPI card added to top-line dashboard metrics with budget and prior period support",
+          "Rescheduled field added to weekly entry for NES, SpineOne, and MRO",
+          "PTO Forecast inline documentation panel covering formula, provider counts, and limitations",
+          "What's New modal — version-aware popup on login showing recent changes",
+          "Changelog view — full release history accessible from sidebar"
+        ]
+      },
+      {
+        type: "fix",
+        title: "Bug Fixes",
+        items: [
+          "PT entry wiping ortho data — saving in PT mode no longer zeros ortho fields and vice versa",
+          "Anchor week off-by-one — selecting 4/10 now loads the 4/10 record as expected",
+          "Budget comparison always showing zero — daysInPeriod now defaults to 5 for manual entries",
+          "Reschedules field not visible on initial load — syncEntryModeVisibility now called on first render"
+        ]
+      },
+      {
+        type: "improvement",
+        title: "Improvements",
+        items: [
+          "All 48 budget records seeded to Azure BudgetData table from 2026 spreadsheet",
+          "Budget debug fields added — hasBudgetRecord, daysInPeriod, visitBudgetMonthly visible in debug panel",
+          "View mode toggles are mutually exclusive and persist across sessions via localStorage"
+        ]
+      }
+    ]
+  },
+  {
+    version: "1.5.0",
+    date: "2026-04-10",
+    sections: [
+      {
+        type: "feature",
+        title: "New Features",
+        items: [
+          "PTO Forecast — MD, PA, and PT PTO entry per entity and month with missed visit impact calculation",
+          "Provider Settings admin panel — configure provider counts without code changes",
+          "Budget vs Actual comparison mode — dashboard compares actuals against prorated monthly targets",
+          "New Patients card in executive summary view"
+        ]
+      },
+      {
+        type: "improvement",
+        title: "Improvements",
+        items: [
+          "Smart currency abbreviation — values display as $4.5M or $914K",
+          "Sidebar reorganized into Views, Planning, Admin, and Help sections",
+          "Entity card layout refresh — tighter padding, unified metric rows, dividers",
+          "Health stats now stacked with color-coded thresholds",
+          "Alert items use left-border severity pattern with red and gold bars",
+          "Status pills updated to rectangular monospace chips"
+        ]
+      }
+    ]
+  },
+  {
+    version: "1.4.0",
+    date: "2026-03-28",
+    sections: [
+      {
+        type: "feature",
+        title: "New Features",
+        items: [
+          "Executive Summary view with entity-level KPI cards and region drill-down",
+          "Trends view with rolling visit volume and PT charts",
+          "Activity Log — historical week-over-week entry audit trail",
+          "Excel import for bulk weekly data entry via XLSX upload"
+        ]
+      },
+      {
+        type: "fix",
+        title: "Bug Fixes",
+        items: [
+          "Dashboard entity bar chart rendering on Safari",
+          "Rolling 4-week period including incorrect week boundaries",
+          "Cash collected displaying as revenue in executive summary"
+        ]
+      }
+    ]
+  },
+  {
+    version: "1.3.0",
+    date: "2026-03-14",
+    sections: [
+      {
+        type: "feature",
+        title: "New Features",
+        items: [
+          "Multi-entity dashboard with LAOSS, NES, SpineOne, and MRO",
+          "Prior period comparison across all dashboard metrics",
+          "No-show and cancellation rate thresholds with color-coded health indicators",
+          "Weekly entry form with ortho and PT sub-entity modes"
+        ]
+      }
+    ]
+  }
+];
+
+const CHANGELOG_VERSION_KEY = "changelogLastSeen";
+
+function getLatestVersion() {
+  return CHANGELOG[0]?.version || "1.0.0";
+}
+
+function hasUnseenChangelog() {
+  const lastSeen = localStorage.getItem(CHANGELOG_VERSION_KEY);
+  return lastSeen !== getLatestVersion();
+}
+
+function markChangelogSeen() {
+  localStorage.setItem(CHANGELOG_VERSION_KEY, getLatestVersion());
+  const badge = byId("changelogBadge");
+  if (badge) badge.style.display = "none";
+}
+
+function formatChangelogDate(dateStr) {
+  const d = new Date(dateStr + "T12:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function renderChangelogEntries(entries, container) {
+  const typeConfig = {
+    feature:     { label: "New",      cls: "clTagFeature"  },
+    fix:         { label: "Fixed",    cls: "clTagFix"      },
+    improvement: { label: "Improved", cls: "clTagImprove"  }
+  };
+
+  container.innerHTML = entries.map((release, idx) => `
+    <div class="clRelease${idx === 0 ? " clReleaseCurrent" : ""}">
+      <div class="clReleaseHeader">
+        <div class="clReleaseLeft">
+          <span class="clVersion">v${release.version}</span>
+          ${release.label ? `<span class="clLatestBadge">${release.label}</span>` : ""}
+        </div>
+        <span class="clDate">${formatChangelogDate(release.date)}</span>
+      </div>
+      ${release.sections.map(sec => `
+        <div class="clSection">
+          <div class="clSectionHeader">
+            <span class="clTag ${typeConfig[sec.type]?.cls || ""}">${typeConfig[sec.type]?.label || sec.title}</span>
+            <span class="clSectionTitle">${sec.title}</span>
+          </div>
+          <ul class="clItems">
+            ${sec.items.map(item => `<li class="clItem">${item}</li>`).join("")}
+          </ul>
+        </div>
+      `).join("")}
+    </div>
+  `).join("");
+}
+
+function showChangelogModal() {
+  const modal = byId("changelogModal");
+  if (!modal) return;
+  const latest = CHANGELOG[0];
+  if (!latest) return;
+
+  const vEl = byId("changelogModalVersion");
+  if (vEl) vEl.textContent = "v" + latest.version;
+
+  const body = byId("changelogModalBody");
+  if (body) renderChangelogEntries([latest], body);
+
+  modal.style.display = "flex";
+  document.body.style.overflow = "hidden";
+
+  const dismissBtn = byId("changelogDismissBtn");
+  if (dismissBtn) dismissBtn.onclick = dismissChangelogModal;
+
+  const viewAllBtn = byId("changelogViewAllBtn");
+  if (viewAllBtn) viewAllBtn.onclick = () => {
+    dismissChangelogModal();
+    showChangelogView();
+  };
+
+  modal.onclick = (e) => { if (e.target === modal) dismissChangelogModal(); };
+}
+
+function dismissChangelogModal() {
+  const modal = byId("changelogModal");
+  if (modal) {
+    modal.style.opacity = "0";
+    setTimeout(() => {
+      modal.style.display = "none";
+      modal.style.opacity = "";
+      document.body.style.overflow = "";
+    }, 200);
+  }
+  markChangelogSeen();
+}
+
+function showChangelogView() {
+  hideAllViews();
+  const el = byId("changelogView");
+  if (el) el.style.display = "";
+  setActiveNav("navChangelogBtn");
+  markChangelogSeen();
+  const container = byId("changelogViewEntries");
+  if (container) renderChangelogEntries(CHANGELOG, container);
+}
+
+function initChangelog() {
+  if (hasUnseenChangelog()) {
+    const badge = byId("changelogBadge");
+    if (badge) { badge.textContent = "New"; badge.style.display = ""; }
+  }
+  const navBtn = byId("navChangelogBtn");
+  if (navBtn) navBtn.addEventListener("click", showChangelogView);
+  if (hasUnseenChangelog()) {
+    setTimeout(showChangelogModal, 900);
+  }
+}
+
+    initChangelog();
     showDashboardView();
     await loadDashboardLanding();
   } catch (error) {
