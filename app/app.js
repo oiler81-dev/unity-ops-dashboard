@@ -754,26 +754,31 @@ function setFormValues(data) {
 function getFormValues() {
   const ptMode = entityHasPtEntry();
 
+  // Preserve the OTHER mode's existing saved values so saving PT doesn't wipe ortho and vice versa
+  const existing = currentWeekData?.values || currentWeekData?.data || {};
+
   const raw = {
-    newPatients: ptMode ? 0 : (byId("newPatients")?.value || ""),
-    surgeries: ptMode ? 0 : (byId("surgeries")?.value || ""),
-    established: ptMode ? 0 : (byId("established")?.value || ""),
-    noShows: ptMode ? 0 : (byId("noShows")?.value || ""),
-    cancelled: ptMode ? 0 : (byId("cancelled")?.value || ""),
-    totalCalls: ptMode ? 0 : (byId("totalCalls")?.value || ""),
-    abandonedCalls: ptMode ? 0 : (byId("abandonedCalls")?.value || ""),
-    cashCollected: ptMode ? 0 : (byId("cashCollected")?.value || ""),
+    // Ortho fields: use form value if in ortho mode, otherwise preserve existing saved value
+    newPatients:       ptMode ? (existing.newPatients       ?? 0) : (byId("newPatients")?.value || ""),
+    surgeries:         ptMode ? (existing.surgeries         ?? 0) : (byId("surgeries")?.value || ""),
+    established:       ptMode ? (existing.established       ?? 0) : (byId("established")?.value || ""),
+    noShows:           ptMode ? (existing.noShows           ?? 0) : (byId("noShows")?.value || ""),
+    cancelled:         ptMode ? (existing.cancelled         ?? 0) : (byId("cancelled")?.value || ""),
+    totalCalls:        ptMode ? (existing.totalCalls        ?? 0) : (byId("totalCalls")?.value || ""),
+    abandonedCalls:    ptMode ? (existing.abandonedCalls    ?? 0) : (byId("abandonedCalls")?.value || ""),
+    cashCollected:     ptMode ? (existing.cashCollected     ?? 0) : (byId("cashCollected")?.value || ""),
     ptoDays: byId("ptoDays")?.value || "",
-    piNp: ptMode ? 0 : (byId("piNp")?.value || ""),
-    piCashCollection: ptMode ? 0 : (byId("piCashCollection")?.value || ""),
+    piNp:              ptMode ? (existing.piNp              ?? 0) : (byId("piNp")?.value || ""),
+    piCashCollection:  ptMode ? (existing.piCashCollection  ?? 0) : (byId("piCashCollection")?.value || ""),
     operationsNarrative: byId("operationsNarrative")?.value || "",
-    ptScheduledVisits: ptMode ? (byId("ptScheduledVisits")?.value || "") : 0,
-    ptCancellations: ptMode ? (byId("ptCancellations")?.value || "") : 0,
-    ptNoShows: ptMode ? (byId("ptNoShows")?.value || "") : 0,
-    ptReschedules: ptMode ? (byId("ptReschedules")?.value || "") : 0,
-    ptTotalUnitsBilled: ptMode ? (byId("ptTotalUnitsBilled")?.value || "") : 0,
-    ptVisitsSeen: ptMode ? (byId("ptVisitsSeen")?.value || "") : 0,
-    ptWorkingDays: ptMode ? (byId("ptWorkingDays")?.value || "5") : 5
+    // PT fields: use form value if in PT mode, otherwise preserve existing saved value
+    ptScheduledVisits:  ptMode ? (byId("ptScheduledVisits")?.value  || "") : (existing.ptScheduledVisits  ?? 0),
+    ptCancellations:    ptMode ? (byId("ptCancellations")?.value    || "") : (existing.ptCancellations    ?? 0),
+    ptNoShows:          ptMode ? (byId("ptNoShows")?.value          || "") : (existing.ptNoShows          ?? 0),
+    ptReschedules:      ptMode ? (byId("ptReschedules")?.value      || "") : (existing.ptReschedules      ?? 0),
+    ptTotalUnitsBilled: ptMode ? (byId("ptTotalUnitsBilled")?.value || "") : (existing.ptTotalUnitsBilled ?? 0),
+    ptVisitsSeen:       ptMode ? (byId("ptVisitsSeen")?.value       || "") : (existing.ptVisitsSeen       ?? 0),
+    ptWorkingDays:      ptMode ? (byId("ptWorkingDays")?.value      || "5") : (existing.ptWorkingDays     ?? 5)
   };
 
   const derived = calculateDerivedMetrics(raw);
@@ -2345,11 +2350,11 @@ function buildWeekSets() {
   const customEnd = byId("dashboardCustomEnd")?.value || "";
 
   if (periodType === "lastWeek") {
-    const primary = getPreviousWeekEnding(anchorWeek);
+    // The anchor week IS the selected data week; prior period is the week before it
     return {
-      primaryWeeks: [primary],
-      comparisonWeeks: [getPreviousWeekEnding(primary)],
-      summary: `Viewing Last Week anchored from ${anchorWeek}`
+      primaryWeeks: [anchorWeek],
+      comparisonWeeks: [getPreviousWeekEnding(anchorWeek)],
+      summary: `Viewing week ending ${anchorWeek}`
     };
   }
 
