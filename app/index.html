@@ -6,10 +6,12 @@
   <title>UnityMSK Ops Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap">
   <link rel="stylesheet" href="./styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+  <div class="scanlines" aria-hidden="true"></div>
   <div id="appShell">
     <aside id="sidebar">
       <div class="sidebarBrand">
@@ -56,6 +58,10 @@
         </div>
 
         <div class="topbarMeta">
+          <button id="commandViewToggle" type="button" class="commandViewBtn" onclick="toggleCommandView()" title="Switch view mode">
+            <span class="commandViewIcon">⚡</span>
+            <span class="commandViewLabel">Command View</span>
+          </button>
           <div class="topbarPill">
             <span class="pillLabel">Signed in as</span>
             <span id="userInfo">Loading...</span>
@@ -555,11 +561,71 @@
               <div class="sectionHeader compact">
                 <div class="sectionEyebrow">Quarterly Planning</div>
                 <h3>PTO Forecast</h3>
-                <p>Enter projected clinical and surgical PTO days per entity. The system forecasts expected visit volume impact based on each entity&#39;s recent daily averages.</p>
+                <p>Enter projected MD, PA, and PT PTO days per entity and month. The system calculates the expected visit volume impact using each location&#39;s recent daily averages and provider counts.</p>
               </div>
             </div>
             <div class="subtleBanner" id="ptoForecastBanner">Loading forecast data...</div>
           </div>
+
+          <!-- PTO FORECAST HOW IT WORKS -->
+          <details class="panel sectionPanel ptoHelpPanel">
+            <summary class="ptoHelpSummary">
+              <span class="ptoHelpIcon">&#9432;</span>
+              How This Works &mdash; Read Before Entering Data
+            </summary>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">What This Page Does</h4>
+              <p class="helpBody">The PTO Forecast estimates how many patient visits will be missed across each operating unit during the next three months based on how many provider PTO days are planned. It gives Ted and operations leadership a forward-looking view of expected volume impact &mdash; so staffing adjustments, coverage decisions, or patient scheduling changes can be made before the gap happens, not after.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">How the Forecast is Calculated</h4>
+              <p class="helpBody">The system pulls each entity&rsquo;s last 12 weeks of actual visit data and computes a rolling average of clinical visits per day. That average is then divided by the total number of clinical providers at each location to get a <strong>per-provider daily rate</strong>. When you enter PTO days, the formula multiplies:</p>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Provider Type</th><th>Formula</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>MD PTO Days</strong></td><td>MD PTO Days &times; (Clinical Visits/Day &divide; Total Clinical Providers)</td></tr>
+                  <tr><td><strong>PA PTO Days</strong></td><td>PA PTO Days &times; (Clinical Visits/Day &divide; Total Clinical Providers)</td></tr>
+                  <tr><td><strong>PT PTO Days</strong></td><td>PT PTO Days &times; (PT Visits/Day &divide; PT Provider Count)</td></tr>
+                </tbody>
+              </table>
+              <p class="helpBody" style="margin-top:12px;">The three impacts are summed to produce a <strong>Total Forecasted Missed Visits</strong> for that entity and month. The quarterly rollup adds all three months together.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Provider Counts Used</h4>
+              <p class="helpBody">Provider counts per entity are configured in <strong>Admin &rarr; Provider Settings</strong>. Pods are counted as MDs. PRN staff are excluded. Current counts:</p>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Entity</th><th>MDs</th><th>PAs</th><th>PTs</th></tr></thead>
+                <tbody>
+                  <tr><td>LAOSS</td><td>21</td><td>14</td><td>&mdash;</td></tr>
+                  <tr><td>NES</td><td>12</td><td>1</td><td>4</td></tr>
+                  <tr><td>SpineOne</td><td>2</td><td>3</td><td>2</td></tr>
+                  <tr><td>MRO</td><td>8</td><td>4</td><td>3</td></tr>
+                </tbody>
+              </table>
+              <p class="helpBody" style="margin-top:10px;">If headcount changes, update Provider Settings &mdash; no code changes needed. The forecast will automatically use the updated counts on the next save.</p>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">Important Limitations to Know</h4>
+              <table class="regionTable helpTable">
+                <thead><tr><th>Limitation</th><th>What It Means</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>MD and PA rates are equal</strong></td><td>The formula currently assumes MDs and PAs see the same volume per day since we don&rsquo;t have per-provider-type visit data. In practice MDs may see more. This is a conservative estimate.</td></tr>
+                  <tr><td><strong>Based on a rolling 12-week average</strong></td><td>The baseline rate reflects recent history. If the last 12 weeks included unusual volume (holiday weeks, closures, heavy PTO), the per-provider rate may be slightly understated or overstated.</td></tr>
+                  <tr><td><strong>Does not account for coverage</strong></td><td>If a provider on PTO has their patients covered by another provider, actual missed visits will be lower than the forecast. The tool assumes no cross-coverage unless adjustments are made to the PTO days entered.</td></tr>
+                  <tr><td><strong>Half-day increments supported</strong></td><td>Enter 0.5 for a half day of PTO. The formula scales proportionally.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="helpSubsection">
+              <h4 class="helpSubhead">How to Use This Page</h4>
+              <p class="helpBody">1. For each entity and each month in the rolling quarter, enter the total planned PTO days by provider type &mdash; MD, PA, and PT where applicable.<br/><br/>2. Click <strong>Save</strong> on each month card. The forecast result appears immediately below the inputs showing the estimated impact by provider type and the total.<br/><br/>3. The <strong>3-Month Impact Forecast</strong> table at the bottom rolls up all entities and months into a quarterly summary for leadership review.</p>
+            </div>
+          </details>
 
           <div id="ptoForecastEntities"></div>
 
