@@ -104,6 +104,7 @@ function toggleCommandView() {
   const btn = byId("commandViewToggle");
   if (btn) btn.classList.toggle("active", isActive);
 }
+window.toggleCommandView = toggleCommandView;
 
 function initCommandView() {
   const saved = localStorage.getItem("commandView");
@@ -112,6 +113,9 @@ function initCommandView() {
     const btn = byId("commandViewToggle");
     if (btn) btn.classList.add("active");
   }
+  // Wire click via JS as well (belt and suspenders)
+  const btn = byId("commandViewToggle");
+  if (btn) btn.addEventListener("click", toggleCommandView);
 }
 
 function firstExistingId(ids) {
