@@ -1095,3 +1095,349 @@ body.commandView .commandViewBtn {
 body.commandView .commandViewLabel::before {
   content: 'Exit ';
 }
+
+/* ════════════════════════════════════════════════════════════════
+   LIGHT VIEW — warm minimalist theme
+   Applied via body.lightView class toggle
+   ════════════════════════════════════════════════════════════════ */
+
+body.lightView {
+  --bg-main:         #f5f4f1;
+  --bg-sidebar:      #ffffff;
+  --bg-panel:        #ffffff;
+  --bg-panel-soft:   #f9f8f6;
+  --bg-panel-inner:  #f2f1ee;
+  --bg-glass:        rgba(0,0,0,0.025);
+  --bg-glass-strong: rgba(0,0,0,0.045);
+
+  --border-soft:     rgba(0,0,0,0.07);
+  --border-med:      rgba(0,0,0,0.12);
+
+  --text:            #1a2332;
+  --text-main:       #1a2332;
+  --text-soft:       #4a607a;
+  --text-muted:      #8fa3b8;
+
+  --accent:          #c49a1a;
+  --accent-dim:      rgba(196,154,26,0.1);
+  --accent-2:        #2a6dd9;
+  --accent-3:        #0d9c7e;
+
+  --font:            'Inter', system-ui, sans-serif;
+  --font-mono:       'IBM Plex Mono', monospace;
+}
+
+/* Body background */
+body.lightView { background: var(--bg-main); }
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+body.lightView #sidebar {
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-soft);
+  box-shadow: 1px 0 12px rgba(0,0,0,0.04);
+}
+
+body.lightView .sidebarBrand {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+body.lightView .sidebarGroupLabel {
+  color: var(--text-muted);
+}
+
+body.lightView .sidebarGroup {
+  border-bottom-color: var(--border-soft);
+}
+
+body.lightView .sidebarGroupBottom {
+  border-top-color: var(--border-soft);
+}
+
+body.lightView #sidebar button {
+  color: var(--text-soft);
+  border-radius: 6px;
+}
+
+body.lightView #sidebar button:hover {
+  background: rgba(0,0,0,0.04);
+  color: var(--text);
+}
+
+body.lightView #sidebar button.activeNav {
+  background: var(--accent-dim);
+  color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+body.lightView #navHelpBtn {
+  color: var(--accent) !important;
+}
+
+body.lightView #navHelpBtn:hover {
+  background: var(--accent-dim) !important;
+}
+
+/* ── Topbar ──────────────────────────────────────────────────── */
+body.lightView #topbar {
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-soft);
+  box-shadow: 0 1px 8px rgba(0,0,0,0.05);
+}
+
+body.lightView .eyebrow { color: var(--text-muted); }
+body.lightView h1 { color: var(--text); }
+body.lightView .pageSubheading { color: var(--text-soft); }
+
+body.lightView .topbarPill {
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  color: var(--text-soft);
+}
+
+body.lightView .pillLabel { color: var(--text-muted); }
+
+/* ── Panels ──────────────────────────────────────────────────── */
+body.lightView .panel,
+body.lightView .heroPanel,
+body.lightView .sectionPanel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04);
+}
+
+body.lightView .heroPanelTop {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+body.lightView .sectionEyebrow { color: var(--accent); }
+body.lightView .sectionHeader h3 { color: var(--text); }
+body.lightView .sectionHeader p { color: var(--text-soft); }
+
+/* ── KPI Cards ───────────────────────────────────────────────── */
+body.lightView .metricCard {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-top: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  border-radius: 10px;
+}
+
+body.lightView .metricCard::before {
+  border-radius: 10px 10px 0 0;
+  height: 3px;
+}
+
+body.lightView .metricCardLabel {
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+body.lightView .metricCardValue {
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace !important;
+  font-weight: 500;
+}
+
+body.lightView .metricCardMeta { color: var(--text-soft); }
+
+body.lightView .movementUp {
+  background: rgba(13,156,126,0.1);
+  color: #0d9c7e;
+}
+
+body.lightView .movementDown {
+  background: rgba(220,53,69,0.1);
+  color: #dc3545;
+}
+
+/* ── Entity Cards ────────────────────────────────────────────── */
+body.lightView .entityCard {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-radius: 10px;
+}
+
+body.lightView .entityCard:hover {
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+  border-color: rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+
+body.lightView .entityTitle { color: var(--text); }
+body.lightView .entitySubtitle { color: var(--text-soft); }
+body.lightView .entityMetricLabel { color: var(--text-muted); }
+
+body.lightView .entityMetricHero {
+  background: var(--bg-panel-soft);
+  border-right-color: var(--border-soft);
+}
+
+body.lightView .entityMetricHero strong {
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+body.lightView .entityTopMetrics {
+  border-color: var(--border-soft);
+}
+
+body.lightView .entityHealthRow {
+  border-color: var(--border-soft);
+}
+
+body.lightView .entityHealthItem {
+  background: var(--bg-panel-soft);
+  border-right-color: var(--border-soft);
+}
+
+body.lightView .entityHealthLabel { color: var(--text-muted); }
+
+body.lightView .entityHealthItem strong {
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+body.lightView .entityAccessPanel {
+  background: var(--bg-panel-soft);
+  border-color: var(--border-soft);
+}
+
+body.lightView .entityAccessLabel { color: var(--text-muted); }
+
+body.lightView .entityAccessValue {
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+body.lightView .entityProgressTrack { background: rgba(0,0,0,0.07); }
+
+body.lightView .entityStatusPill {
+  background: rgba(13,156,126,0.1);
+  color: #0d9c7e;
+}
+
+body.lightView .metricChip {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-soft);
+}
+
+body.lightView .metricChipGood    { background: rgba(13,156,126,0.1);  color: #0d9c7e; }
+body.lightView .metricChipWarning { background: rgba(196,154,26,0.12); color: #c49a1a; }
+body.lightView .metricChipBad     { background: rgba(220,53,69,0.1);   color: #dc3545; }
+
+body.lightView .entityBudgetTile,
+body.lightView .entityMiniStat {
+  background: var(--bg-panel-soft);
+  border-color: var(--border-soft);
+}
+
+body.lightView .entityBudgetLabel,
+body.lightView .entityMiniLabel { color: var(--text-muted); }
+
+body.lightView .entityBudgetValue,
+body.lightView .entityMiniStat strong {
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+
+body.lightView .entityDetailDrawer {
+  background: var(--bg-panel-soft);
+  border-color: var(--border-soft);
+}
+
+body.lightView .entityDetailDrawer summary { color: var(--text-soft); }
+body.lightView .entityDetailTile { background: var(--bg-panel); border-color: var(--border-soft); }
+body.lightView .entityDetailLabel { color: var(--text-muted); }
+body.lightView .entityDetailValue { color: var(--text); font-family: 'IBM Plex Mono', monospace !important; }
+
+/* ── Tables ──────────────────────────────────────────────────── */
+body.lightView .regionTable th {
+  color: var(--text-muted);
+  border-bottom-color: var(--border-med);
+}
+
+body.lightView .regionTable td {
+  color: var(--text);
+  border-bottom-color: var(--border-soft);
+}
+
+body.lightView .regionTable tbody tr:nth-child(even) {
+  background: rgba(0,0,0,0.018);
+}
+
+body.lightView .regionTable tbody tr:hover td {
+  background: rgba(42,109,217,0.04);
+}
+
+/* ── Filters & Controls ──────────────────────────────────────── */
+body.lightView .filterShell { background: var(--bg-panel-soft); border-color: var(--border-soft); }
+body.lightView .fieldRow label { color: var(--text-muted); }
+body.lightView select,
+body.lightView input[type="date"],
+body.lightView input[type="number"],
+body.lightView input[type="text"] {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
+  color: var(--text);
+}
+
+body.lightView select:focus,
+body.lightView input:focus {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(42,109,217,0.08);
+  outline: none;
+}
+
+/* ── Quick preset pills ──────────────────────────────────────── */
+body.lightView .quickPresetPill {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
+  color: var(--text-soft);
+}
+
+body.lightView .quickPresetPill:hover { border-color: var(--accent-2); color: var(--accent-2); }
+body.lightView .quickPresetActive { background: var(--accent-dim) !important; border-color: var(--accent) !important; color: var(--accent) !important; }
+
+/* ── Alert items ─────────────────────────────────────────────── */
+body.lightView #dashboardAlerts .alertItem {
+  background: rgba(220,53,69,0.04);
+  border: 1px solid rgba(220,53,69,0.15);
+  border-left: 3px solid rgba(220,53,69,0.5);
+  color: #5a1a22;
+}
+
+body.lightView #dashboardAlerts .alertItem.alertWarning {
+  background: rgba(196,154,26,0.05);
+  border-color: rgba(196,154,26,0.2);
+  border-left-color: rgba(196,154,26,0.6);
+  color: #5a4208;
+}
+
+/* ── Subtlety banner ─────────────────────────────────────────── */
+body.lightView .subtleBanner {
+  background: var(--bg-panel-soft);
+  border-color: var(--border-soft);
+  color: var(--text-soft);
+}
+
+/* ── Section headers ─────────────────────────────────────────── */
+body.lightView .sectionHeader h3,
+body.lightView h3, body.lightView h4 { color: var(--text); }
+
+/* Numbers across the board */
+body.lightView [class*="Value"],
+body.lightView [class*="value"],
+body.lightView td,
+body.lightView .ptoImpactValue,
+body.lightView .entityCurrencyValue {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ── Light View Toggle Button state ──────────────────────────── */
+body.lightView .lightViewBtn {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+body.lightView .lightViewLabel::before { content: 'Exit '; }
