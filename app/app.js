@@ -987,6 +987,19 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
         ? getTrendClass(visitCurrent, current.budgetTotals?.visitVolumeBudget)
         : getTrendClass(visitCurrent, visitComparison)
     },
+    {
+      label: "New Patients",
+      value: formatWhole(current.totals?.newPatients || 0),
+      movement: isVsBudget
+        ? buildKpiMovement(normalizeNumber(current.totals?.newPatients), normalizeNumber(current.budgetTotals?.newPatientsBudget), formatWhole)
+        : buildKpiMovement(normalizeNumber(current.totals?.newPatients), normalizeNumber(comparison.totals?.newPatients), formatWhole),
+      meta: isVsBudget
+        ? `Budget ${formatWhole(current.budgetTotals?.newPatientsBudget || 0)}`
+        : `${((current.totals?.newPatients||0)-(comparison.totals?.newPatients||0)) >= 0 ? "+" : ""}${formatWhole((current.totals?.newPatients||0)-(comparison.totals?.newPatients||0))} vs prior`,
+      className: isVsBudget
+        ? getTrendClass(normalizeNumber(current.totals?.newPatients), normalizeNumber(current.budgetTotals?.newPatientsBudget))
+        : getTrendClass(normalizeNumber(current.totals?.newPatients), normalizeNumber(comparison.totals?.newPatients))
+    },
     ...(entityHasPtData(entityScope) || entityScope === "ALL" ? [{
       label: "PT Visits",
       value: formatWhole(ptVisitsCurrent),
@@ -3336,6 +3349,7 @@ function injectUiPolishStyles() {
     setupEntityDropdown();
     setupTrendsEntityDropdown();
     renderForm();
+    syncEntryModeVisibility();
     injectUiPolishStyles();
 
     const defaultWeek = getDefaultWeekEnding();
