@@ -1441,3 +1441,353 @@ body.lightView .lightViewBtn {
 }
 
 body.lightView .lightViewLabel::before { content: 'Exit '; }
+
+/* ════════════════════════════════════════════════════════════════
+   CHANGELOG — Modal & View
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Nav badge ───────────────────────────────────────────────── */
+.changelogNavBadge {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--accent);
+  color: #000;
+  text-transform: uppercase;
+}
+
+/* ── Modal overlay ───────────────────────────────────────────── */
+.changelogModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: clOverlayIn 0.22s ease;
+}
+
+@keyframes clOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Modal box ───────────────────────────────────────────────── */
+.changelogModalBox {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow:
+    0 4px 24px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 24px 64px rgba(0,0,0,0.5);
+  animation: clBoxIn 0.28s cubic-bezier(0.16,1,0.3,1);
+}
+
+@keyframes clBoxIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Modal header ────────────────────────────────────────────── */
+.changelogModalHeader {
+  padding: 26px 28px 20px;
+  border-bottom: 1px solid var(--border-soft);
+  background: linear-gradient(
+    135deg,
+    rgba(247,198,47,0.04) 0%,
+    transparent 60%
+  );
+}
+
+.changelogModalMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.changelogModalTag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.changelogModalVersion {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+}
+
+.changelogModalTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.3px;
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+
+.changelogModalSub {
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+/* ── Modal body (scrollable) ─────────────────────────────────── */
+.changelogModalBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 28px;
+}
+
+.changelogModalBody::-webkit-scrollbar { width: 4px; }
+.changelogModalBody::-webkit-scrollbar-thumb {
+  background: var(--border-med);
+  border-radius: 2px;
+}
+
+/* ── Modal footer ────────────────────────────────────────────── */
+.changelogModalFooter {
+  padding: 16px 28px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background: var(--bg-panel-soft);
+}
+
+.changelogViewAllBtn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-med);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.changelogViewAllBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.changelogDismissBtn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #000;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  letter-spacing: 0.01em;
+}
+
+.changelogDismissBtn:hover { opacity: 0.85; }
+
+/* ── Shared entry styles (modal + view) ──────────────────────── */
+.clRelease {
+  padding-bottom: 28px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.clRelease:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.clReleaseCurrent .clReleaseHeader {
+  padding-bottom: 4px;
+}
+
+.clReleaseHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.clReleaseLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clVersion {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.clLatestBadge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--accent);
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.clDate {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.clSection {
+  margin-bottom: 16px;
+}
+
+.clSection:last-child { margin-bottom: 0; }
+
+.clSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.clTag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.clTagFeature  { background: rgba(93,232,240,0.12);  color: var(--accent-3); }
+.clTagFix      { background: rgba(255,107,107,0.12); color: #ff6b6b; }
+.clTagImprove  { background: rgba(247,198,47,0.12);  color: var(--accent); }
+
+.clSectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.clItems {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clItem {
+  font-size: 12.5px;
+  color: var(--text-soft);
+  line-height: 1.55;
+  padding-left: 16px;
+  position: relative;
+}
+
+.clItem::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+/* ── Changelog full view (sidebar page) ──────────────────────── */
+#changelogViewEntries {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+#changelogViewEntries .clRelease {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 12px;
+}
+
+#changelogViewEntries .clRelease:last-child {
+  margin-bottom: 0;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+#changelogViewEntries .clReleaseCurrent {
+  border-color: var(--accent);
+  border-width: 1px;
+  box-shadow: 0 0 0 1px rgba(247,198,47,0.12), 0 4px 16px rgba(0,0,0,0.15);
+}
+
+#changelogViewEntries .clVersion { font-size: 18px; }
+
+/* ── Light View overrides for changelog ──────────────────────── */
+body.lightView .changelogModalBox {
+  background: #fff;
+  border-color: rgba(0,0,0,0.1);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
+}
+
+body.lightView .changelogModalHeader {
+  background: linear-gradient(135deg, rgba(196,154,26,0.05) 0%, transparent 60%);
+}
+
+body.lightView .changelogModalTitle { color: #1a2332; }
+body.lightView .changelogModalSub   { color: #4a607a; }
+body.lightView .changelogModalFooter { background: #f9f8f6; border-top-color: rgba(0,0,0,0.07); }
+
+body.lightView .changelogViewAllBtn { border-color: rgba(0,0,0,0.12); color: #4a607a; }
+body.lightView .changelogViewAllBtn:hover { border-color: #c49a1a; color: #c49a1a; }
+
+body.lightView .clRelease { border-bottom-color: rgba(0,0,0,0.07); }
+body.lightView .clVersion { color: #1a2332; }
+body.lightView .clDate    { color: #8fa3b8; }
+body.lightView .clSectionTitle { color: #4a607a; }
+body.lightView .clItem    { color: #4a607a; }
+body.lightView .clItem::before { color: #8fa3b8; }
+
+body.lightView #changelogViewEntries .clRelease {
+  background: #fff;
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+
+body.lightView #changelogViewEntries .clReleaseCurrent {
+  border-color: #c49a1a;
+  box-shadow: 0 0 0 1px rgba(196,154,26,0.15), 0 4px 16px rgba(0,0,0,0.08);
+}
+
+body.lightView .changelogNavBadge { background: #c49a1a; color: #fff; }
