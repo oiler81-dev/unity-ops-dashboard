@@ -111,7 +111,8 @@ module.exports = async function (context, req) {
       const record = await getEntityRecord(regionTable, entity, weekEnding);
       const values = safeParseJson(record?.valuesJson, {});
 
-      const daysInPeriod = toNumber(values.daysInPeriod ?? record?.daysInPeriod, 0);
+      // daysInPeriod is set by Excel import; manual entries won't have it — default to 5 (standard work week)
+      const daysInPeriod = toNumber(values.daysInPeriod ?? record?.daysInPeriod, 0) || 5;
       const monthKey = buildMonthKey(values, weekEnding);
 
       const budgetRecord = monthKey
@@ -213,8 +214,12 @@ module.exports = async function (context, req) {
             daysInPeriod
           ),
           workingDaysInMonth,
+          daysInPeriod,
           monthKey,
-          monthLabel: budgetRecord?.monthLabel || ""
+          monthLabel: budgetRecord?.monthLabel || "",
+          hasBudgetRecord: !!budgetRecord,
+          visitBudgetMonthly,
+          newPatientsBudgetMonthly
         },
 
         pt: {
