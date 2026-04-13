@@ -97,25 +97,49 @@ function byId(id) {
   return document.getElementById(id);
 }
 
-// ── Command View toggle ────────────────────────────────────────
+// ── View mode toggles ─────────────────────────────────────────
+function setViewMode(mode) {
+  // Clear all modes first
+  document.body.classList.remove("commandView", "lightView");
+  const cvBtn = byId("commandViewToggle");
+  const lvBtn = byId("lightViewToggle");
+  if (cvBtn) cvBtn.classList.remove("active");
+  if (lvBtn) lvBtn.classList.remove("active");
+
+  if (mode === "command") {
+    document.body.classList.add("commandView");
+    if (cvBtn) cvBtn.classList.add("active");
+    localStorage.setItem("viewMode", "command");
+  } else if (mode === "light") {
+    document.body.classList.add("lightView");
+    if (lvBtn) lvBtn.classList.add("active");
+    localStorage.setItem("viewMode", "light");
+  } else {
+    localStorage.setItem("viewMode", "default");
+  }
+}
+
 function toggleCommandView() {
-  const isActive = document.body.classList.toggle("commandView");
-  localStorage.setItem("commandView", isActive ? "1" : "0");
-  const btn = byId("commandViewToggle");
-  if (btn) btn.classList.toggle("active", isActive);
+  const isCommand = document.body.classList.contains("commandView");
+  setViewMode(isCommand ? "default" : "command");
 }
 window.toggleCommandView = toggleCommandView;
 
+function toggleLightView() {
+  const isLight = document.body.classList.contains("lightView");
+  setViewMode(isLight ? "default" : "light");
+}
+window.toggleLightView = toggleLightView;
+
 function initCommandView() {
-  const saved = localStorage.getItem("commandView");
-  if (saved === "1") {
-    document.body.classList.add("commandView");
-    const btn = byId("commandViewToggle");
-    if (btn) btn.classList.add("active");
-  }
-  // Wire click via JS as well (belt and suspenders)
-  const btn = byId("commandViewToggle");
-  if (btn) btn.addEventListener("click", toggleCommandView);
+  const saved = localStorage.getItem("viewMode");
+  if (saved === "command") setViewMode("command");
+  else if (saved === "light") setViewMode("light");
+
+  const cvBtn = byId("commandViewToggle");
+  if (cvBtn) cvBtn.addEventListener("click", toggleCommandView);
+  const lvBtn = byId("lightViewToggle");
+  if (lvBtn) lvBtn.addEventListener("click", toggleLightView);
 }
 
 function firstExistingId(ids) {
