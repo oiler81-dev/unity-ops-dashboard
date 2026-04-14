@@ -10,6 +10,39 @@ const ENTITY_OPTIONS = [
 
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
+// ── Entity working days per week ───────────────────────────────
+const ENTITY_WORKING_DAYS = {
+  LAOSS:    5,
+  NES:      4.5,
+  SpineOne: 5,
+  MRO:      5
+};
+
+function getEntityWorkingDays(entity) {
+  return ENTITY_WORKING_DAYS[entity] ?? 5;
+}
+
+// ── PT Scope helpers ───────────────────────────────────────────
+const PT_SCOPE_MAP = {
+  "NES-PT":      "NES",
+  "SpineOne-PT": "SpineOne",
+  "MRO-PT":      "MRO"
+};
+
+function isPtScope(entityScope) {
+  return entityScope === "ALL-PT" || entityScope in PT_SCOPE_MAP;
+}
+
+function ptScopeBaseEntity(entityScope) {
+  return PT_SCOPE_MAP[entityScope] || null;
+}
+
+function ptScopeEntities(entityScope) {
+  if (entityScope === "ALL-PT") return ["NES", "SpineOne", "MRO"];
+  const base = ptScopeBaseEntity(entityScope);
+  return base ? [base] : [];
+}
+
 const ENTITY_BRANDING = {
   LAOSS: {
     label: "LAOSS",
