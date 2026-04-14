@@ -1173,7 +1173,7 @@ function showEntryViewForMissing(entity) {
   showEntryView();
 }
 
-function renderDashboardCards(current, comparison, compareAgainst, entityScope) {
+function renderDashboardCards(current, comparison, compareAgainst, entityScope, weekSets) {
   const ptVisitsCurrent = normalizeNumber(current.ptTotals?.visitsSeen);
   const ptVisitsComparison = normalizeNumber(comparison.ptTotals?.visitsSeen);
 
@@ -1184,6 +1184,10 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
   const visitCurrent = normalizeNumber(current.totals?.visitVolume);
   const visitComparison = normalizeNumber(comparison.totals?.visitVolume);
   const visitVariance = visitCurrent - visitComparison;
+  const numWeeks = weekSets?.primaryWeeks?.length || 1;
+  const daysPerWeek = entityScope === "NES" ? 4.5 : 5;
+  const totalDays = numWeeks * daysPerWeek;
+  const visitPerDay = totalDays > 0 ? (visitCurrent / totalDays).toFixed(1) : "—";
 
   const isVsBudget = compareAgainst === "budget";
 
@@ -1195,8 +1199,8 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope) 
         ? buildKpiMovement(visitCurrent, normalizeNumber(current.budgetTotals?.visitVolumeBudget), formatWhole)
         : buildKpiMovement(visitCurrent, visitComparison, formatWhole),
       meta: isVsBudget
-        ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)}`
-        : `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)} vs prior`,
+        ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)} · ${visitPerDay}/day avg`
+        : `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)} vs prior · ${visitPerDay}/day avg`,
       className: isVsBudget
         ? getTrendClass(visitCurrent, current.budgetTotals?.visitVolumeBudget)
         : getTrendClass(visitCurrent, visitComparison)
@@ -3133,7 +3137,7 @@ async function loadDashboardLanding() {
     summaryEl.innerHTML = `<div style="font-size:13px; opacity:0.85;">${weekSets.summary} • Scope: ${scopeLabel}</div>`;
   }
 
-  renderDashboardCards(current, comparison, compareAgainst, entityScope);
+  renderDashboardCards(current, comparison, compareAgainst, entityScope, weekSets);
   renderDataCompletenessBanner(current, entityScope, weekSets);
   renderDashboardEntities(current, comparison, compareAgainst, entityScope);
   renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
@@ -4613,7 +4617,7 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
 
 const CHANGELOG = [
   {
-    version: "1.8.0",
+    version: "1.9.0",
     date: "2026-04-14",
     label: "Latest",
     sections: [
@@ -4621,9 +4625,10 @@ const CHANGELOG = [
         type: "feature",
         title: "New Features",
         items: [
+          "Visit Volume KPI card now shows per-day average — displays alongside the vs prior or budget comparison (e.g. 539.8/day avg), period and entity-aware",
           "PT scope dashboard — Entity Scope dropdown now includes NES-PT, SpineOne-PT, MRO-PT, and All PT Programs as dedicated views",
-          "PT-specific KPI cards — selecting a PT scope replaces ortho cards with PT Visits Seen, Scheduled Visits, Utilization Rate, Units Billed, Cancellations, No Shows, Reschedules, and Units/Visit",
-          "PT entity cards — each PT entity gets a dedicated card showing visits seen, scheduled, units billed, utilization progress bar, and health stats",
+          "PT-specific KPI cards — visits seen, scheduled visits, utilization rate, units billed, cancellations, no shows, reschedules, and units per visit",
+          "PT entity cards — each PT entity gets a dedicated card with utilization progress bar and health stats",
           "Utilization rate metric — visits seen ÷ scheduled, color coded green above 85%, yellow above 70%, red below",
           "Command View — dark terminal-style alternate theme with Syne + JetBrains Mono and scan-line overlay",
           "Light View — warm minimalist theme with Inter + IBM Plex Mono and shadow-depth cards",
@@ -4638,13 +4643,18 @@ const CHANGELOG = [
           "Mobile responsive layout — sidebar, cards, and filters adapt to phone and tablet",
           "SpineOne PI trend chart — PI NP and cash charted over time in Trends view",
           "Provider-level PTO breakdown — add individual providers by name and days in PTO Forecast",
-          "Phone system integration foundation — Landis webhook (LAOSS + NES) and RingCentral polling (MRO + SpineOne)"
+          "Phone system integration foundation — Landis webhook (LAOSS + NES) and RingCentral polling (MRO + SpineOne)",
+          "Activity Log now defaults to most recent Friday on open"
         ]
       },
       {
         type: "fix",
         title: "Bug Fixes",
         items: [
+          "PT scope dashboard not rendering — PT functions were scoped inside the init IIFE and inaccessible; moved to module level",
+          "PT KPI cards showing no color — card class names corrected from kpi-good/bad/warning to kpi-positive/negative/neutral",
+          "PT scope showing stale ortho cards — dashboard now clears previous cards before rendering PT view",
+          "PT totals showing all-entity numbers instead of filtered scope — ptTotals now recomputed from filtered regions",
           "PT entry wiping ortho data — saving in PT mode no longer zeros ortho fields and vice versa",
           "Anchor week off-by-one — selecting 4/10 now loads the 4/10 record as expected",
           "Budget comparison always showing zero — daysInPeriod now uses entity-specific defaults",
@@ -4660,10 +4670,12 @@ const CHANGELOG = [
         type: "improvement",
         title: "Improvements",
         items: [
+          "Visit Volume per-day avg is period-aware — Last Week divides by 5 days, Rolling 4 divides by 20, NES uses 4.5 days/week automatically",
           "NES working days updated to 4.5 per week — budget proration, PTO forecast rates, and PT calculations all reflect Portland's actual schedule",
           "Entity-specific working days config — each entity has its own default; NES is 4.5, all others 5",
           "Working days hint banner appears in weekly entry when an entity operates fewer than 5 days",
           "Week ending field shows 'must be a Friday' label and helper text with an example date",
+          "Completeness banner grammar fixed — '1 entities' now correctly reads '1 entity'",
           "formatPercent now returns '—' instead of NaN% for missing values",
           "View mode toggles are mutually exclusive and persist across sessions via localStorage"
         ]
