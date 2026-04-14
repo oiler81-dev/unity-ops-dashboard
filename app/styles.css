@@ -1295,7 +1295,14 @@ body.lightView .entityHealthLabel { color: var(--text-muted); }
 
 body.lightView .entityHealthItem strong {
   font-family: 'IBM Plex Mono', monospace !important;
+  color: var(--text) !important;
 }
+
+/* In light view, override good/bad/warning inside health items
+   so they read against the white background */
+body.lightView .entityHealthItem strong.good    { color: #0d9c7e !important; }
+body.lightView .entityHealthItem strong.warning { color: #b07d10 !important; }
+body.lightView .entityHealthItem strong.bad     { color: #c0303b !important; }
 
 body.lightView .entityAccessPanel {
   background: var(--bg-panel-soft);
@@ -2459,3 +2466,21 @@ body.lightView .weekEndingWarning { color: #dc3545; background: rgba(220,53,69,0
 body.lightView .weekEndingCorrected { color: #c49a1a; background: rgba(196,154,26,0.08); }
 body.lightView .weekEndingHint { color: #8fa3b8; }
 body.lightView .fieldHint { color: #8fa3b8; }
+
+/* ── Working Days Hint ───────────────────────────────────────── */
+.workingDaysHint {
+  font-size: 11.5px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(247,198,47,0.2);
+  border-radius: 6px;
+  padding: 7px 12px;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+body.lightView .workingDaysHint {
+  color: #b07d10;
+  background: rgba(196,154,26,0.07);
+  border-color: rgba(196,154,26,0.2);
+}
