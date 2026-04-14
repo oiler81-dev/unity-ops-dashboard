@@ -2187,6 +2187,12 @@ function showActivityView() {
   const el = byId("activityView");
   if (el) el.style.display = "";
   setActiveNav("navActivityBtn");
+
+  // Default to most recent Friday if not already set
+  const filter = byId("activityWeekFilter");
+  if (filter && !filter.value) {
+    filter.value = getDefaultWeekEnding();
+  }
 }
 
 function showImportView() {
@@ -3950,6 +3956,300 @@ function injectUiPolishStyles() {
   document.head.appendChild(style);
 }
 
+// ══════════════════════════════════════════════════════════════
+// PT SCOPE DASHBOARD
+// ══════════════════════════════════════════════════════════════
+
+async function loadDashboardLandingPt(entityScope, compareAgainst, weekSets) {
+  const entities = ptScopeEntities(entityScope);
+
+  const current    = await loadDashboardDataForWeeks(weekSets.primaryWeeks, "ALL", {});
+  const comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, "ALL", {});
+
+  // Filter regions to PT entities only AND recompute ptTotals from filtered set
+  const filterPt = (data) => {
+    const regions = (data.regions || []).filter(r => entities.includes(r.entity));
+    const ptTotals = {
+      scheduledVisits:  regions.reduce((s, r) => s + normalizeNumber(r.pt?.scheduledVisits), 0),
+      cancellations:    regions.reduce((s, r) => s + normalizeNumber(r.pt?.cancellations), 0),
+      noShows:          regions.reduce((s, r) => s + normalizeNumber(r.pt?.noShows), 0),
+      reschedules:      regions.reduce((s, r) => s + normalizeNumber(r.pt?.reschedules), 0),
+      totalUnitsBilled: regions.reduce((s, r) => s + normalizeNumber(r.pt?.totalUnitsBilled), 0),
+      visitsSeen:       regions.reduce((s, r) => s + normalizeNumber(r.pt?.visitsSeen), 0)
+    };
+    const totals = {
+      visitVolume:   regions.reduce((s, r) => s + normalizeNumber(r.visitVolume), 0),
+      newPatients:   regions.reduce((s, r) => s + normalizeNumber(r.newPatients), 0),
+      cashCollected: regions.reduce((s, r) => s + normalizeNumber(r.cashCollected), 0),
+      callVolume:    regions.reduce((s, r) => s + normalizeNumber(r.callVolume), 0),
+      surgeries:     regions.reduce((s, r) => s + normalizeNumber(r.surgeries), 0),
+      ptoDays:       regions.reduce((s, r) => s + normalizeNumber(r.ptoDays), 0)
+    };
+    return { ...data, regions, ptTotals, totals };
+  };
+
+  const currentPt    = filterPt(current);
+  const comparisonPt = filterPt(comparison);
+
+  // Clear stale ortho cards before rendering PT view
+  const dashCards = byId("dashboardCards");
+  if (dashCards) dashCards.innerHTML = "";
+  const dashEntities = byId("dashboardEntities");
+  if (dashEntities) dashEntities.innerHTML = "";
+
+  const summaryEl = byId("dashboardSummaryText");
+  if (summaryEl) {
+    const label = entityScope === "ALL-PT" ? "All PT Programs" : `${entityScope} Program`;
+    summaryEl.innerHTML = `<div style="font-size:13px;opacity:0.85;">${weekSets.summary} &nbsp;·&nbsp; Scope: ${label} (PT only)</div>`;
+  }
+
+  renderDashboardCardsPt(currentPt, comparisonPt, entities, compareAgainst);
+  renderDataCompletenessBanner(currentPt, entityScope, weekSets);
+  renderDashboardEntitiesPt(currentPt, comparisonPt, entities, compareAgainst);
+  renderDashboardAlerts(currentPt, comparisonPt, entityScope, compareAgainst);
+  renderDashboardWins(currentPt, comparisonPt, entityScope, compareAgainst);
+  renderDashboardSnapshot(currentPt, entityScope, compareAgainst);
+  renderVisitsChart(weekSets.primaryWeeks, currentPt, compareAgainst);
+
+  window._lastDashboardCurrent        = currentPt;
+  window._lastDashboardComparison     = comparisonPt;
+  window._lastDashboardCompareAgainst = compareAgainst;
+  window._lastDashboardWeekSets       = weekSets;
+
+  setDashboardDebug({ entityScope, compareAgainst, weekSets, current: currentPt, comparison: comparisonPt });
+}
+
+function renderDashboardCardsPt(current, comparison, entities, compareAgainst) {
+  // PT-focused top-line cards
+  const ptCurrent    = current.ptTotals    || {};
+  const ptPrior      = comparison.ptTotals || {};
+
+  const visitsSeen      = normalizeNumber(ptCurrent.visitsSeen);
+  const visitsSeenPrior = normalizeNumber(ptPrior.visitsSeen);
+  const visitsDelta     = visitsSeen - visitsSeenPrior;
+
+  const scheduled      = normalizeNumber(ptCurrent.scheduledVisits);
+  const scheduledPrior = normalizeNumber(ptPrior.scheduledVisits);
+
+  const cancellations  = normalizeNumber(ptCurrent.cancellations);
+  const noShows        = normalizeNumber(ptCurrent.noShows);
+  const reschedules    = normalizeNumber(ptCurrent.reschedules);
+  const unitsBilled    = normalizeNumber(ptCurrent.totalUnitsBilled);
+  const unitsBilledPrior = normalizeNumber(ptPrior.totalUnitsBilled);
+
+  const cancelRate  = scheduled > 0 ? Number(((cancellations / scheduled) * 100).toFixed(1)) : 0;
+  const noShowRate  = scheduled > 0 ? Number(((noShows / scheduled) * 100).toFixed(1)) : 0;
+  const utilRate    = scheduled > 0 ? Number(((visitsSeen / scheduled) * 100).toFixed(1)) : 0;
+
+  const unitsPerVisit = visitsSeen > 0
+    ? Number((unitsBilled / visitsSeen).toFixed(1))
+    : 0;
+  const unitsPerVisitPrior = visitsSeenPrior > 0
+    ? Number((unitsBilledPrior / visitsSeenPrior).toFixed(1))
+    : 0;
+
+  const cards = [
+    {
+      label: "PT Visits Seen",
+      value: formatWhole(visitsSeen),
+      movement: buildKpiMovement(visitsSeen, visitsSeenPrior, formatWhole),
+      meta: `${visitsDelta >= 0 ? "+" : ""}${formatWhole(visitsDelta)} vs prior`,
+      className: getTrendClass(visitsSeen, visitsSeenPrior)
+    },
+    {
+      label: "Scheduled Visits",
+      value: formatWhole(scheduled),
+      movement: buildKpiMovement(scheduled, scheduledPrior, formatWhole),
+      meta: `${(scheduled - scheduledPrior) >= 0 ? "+" : ""}${formatWhole(scheduled - scheduledPrior)} vs prior`,
+      className: getTrendClass(scheduled, scheduledPrior)
+    },
+    {
+      label: "Utilization Rate",
+      value: `${utilRate}%`,
+      meta: `${visitsSeen} seen of ${scheduled} scheduled`,
+      className: utilRate >= 85 ? "kpi-good" : utilRate >= 70 ? "kpi-warning" : "kpi-bad"
+    },
+    {
+      label: "Units Billed",
+      value: formatWhole(unitsBilled),
+      movement: buildKpiMovement(unitsBilled, unitsBilledPrior, formatWhole),
+      meta: `${unitsPerVisit} units/visit avg`,
+      className: getTrendClass(unitsBilled, unitsBilledPrior)
+    },
+    {
+      label: "Cancellations",
+      value: formatWhole(cancellations),
+      meta: `${cancelRate}% cancel rate`,
+      className: cancelRate >= 10 ? "kpi-bad" : cancelRate >= 6 ? "kpi-warning" : "kpi-good"
+    },
+    {
+      label: "No Shows",
+      value: formatWhole(noShows),
+      meta: `${noShowRate}% no-show rate`,
+      className: noShowRate >= 8 ? "kpi-bad" : noShowRate >= 5 ? "kpi-warning" : "kpi-good"
+    },
+    {
+      label: "Reschedules",
+      value: formatWhole(reschedules),
+      meta: "Across selected scope",
+      className: "kpi-neutral"
+    },
+    {
+      label: "Units / Visit",
+      value: unitsPerVisit.toFixed(1),
+      movement: buildKpiMovement(unitsPerVisit, unitsPerVisitPrior, (v) => v.toFixed(1)),
+      meta: `Prior: ${unitsPerVisitPrior.toFixed(1)}`,
+      className: getTrendClass(unitsPerVisit, unitsPerVisitPrior)
+    }
+  ];
+
+  renderMetricCards("dashboardCards", cards);
+}
+
+function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst) {
+  const container = byId("dashboardEntities");
+  if (!container) return;
+
+  const currentMap    = getEntityMap(current);
+  const comparisonMap = getEntityMap(comparison);
+
+  container.innerHTML = `
+    <div class="entityCardGrid">
+      ${entities.map(entity => {
+        const brand = getBranding(entity);
+        const row   = currentMap[entity];
+        const prior = comparisonMap[entity] || {};
+        if (!row) return `
+          <div class="entityCard" style="border-top:4px solid ${brand.accent};">
+            <div class="entityCardHeader">
+              <div class="entityHeaderLeft">
+                <div class="entityStatusRow"><span class="entityStatusPill">missing</span></div>
+                <div class="entityTitle">${entity} PT</div>
+                <div class="entitySubtitle">${brand.fullName}</div>
+              </div>
+              <div class="entityLogoWrap"><img src="${brand.logo}" alt="${entity}" class="entityLogo" /></div>
+            </div>
+            <div style="padding:12px;font-size:12px;color:var(--text-muted);">No PT data for this period.</div>
+          </div>`;
+
+        const pt      = row.pt      || {};
+        const ptPrior = prior.pt    || {};
+
+        const visitsSeen      = normalizeNumber(pt.visitsSeen);
+        const visitsSeenPrior = normalizeNumber(ptPrior.visitsSeen);
+        const scheduled       = normalizeNumber(pt.scheduledVisits);
+        const cancellations   = normalizeNumber(pt.cancellations);
+        const noShows         = normalizeNumber(pt.noShows);
+        const reschedules     = normalizeNumber(pt.reschedules);
+        const unitsBilled     = normalizeNumber(pt.totalUnitsBilled);
+        const unitsPerVisit   = normalizeNumber(pt.unitsPerVisit);
+        const visitsPerDay    = normalizeNumber(pt.visitsPerDay);
+
+        const cancelRate  = scheduled > 0 ? Number(((cancellations / scheduled) * 100).toFixed(1)) : 0;
+        const noShowRate  = scheduled > 0 ? Number(((noShows / scheduled) * 100).toFixed(1)) : 0;
+        const utilRate    = scheduled > 0 ? Number(((visitsSeen / scheduled) * 100).toFixed(1)) : 0;
+
+        const visitsDelta = visitsSeen - visitsSeenPrior;
+        const fmtDelta = (n) => `${n >= 0 ? "+" : ""}${formatWhole(n)}`;
+
+        const noShowCls  = noShowRate  >= 8 ? "bad" : noShowRate  >= 5 ? "warning" : "good";
+        const cancelCls  = cancelRate  >= 10 ? "bad" : cancelRate  >= 6 ? "warning" : "good";
+        const utilCls    = utilRate    >= 85 ? "good" : utilRate   >= 70 ? "warning" : "bad";
+
+        return `
+          <div class="entityCard" style="border-top:4px solid ${brand.accent};">
+            <div class="entityCardHeader">
+              <div class="entityHeaderLeft">
+                <div class="entityStatusRow">
+                  <span class="entityStatusPill">PT Program</span>
+                  <span class="metricChip metricChip${utilRate >= 85 ? "Good" : utilRate >= 70 ? "Warning" : "Bad"}">${utilRate}% utilization</span>
+                </div>
+                <div class="entityTitle">${entity} — PT</div>
+                <div class="entitySubtitle">${brand.fullName}</div>
+              </div>
+              <div class="entityLogoWrap"><img src="${brand.logo}" alt="${entity}" class="entityLogo" /></div>
+            </div>
+
+            <div class="entityTopMetrics">
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Visits Seen</span>
+                <strong>${formatWhole(visitsSeen)}</strong>
+              </div>
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Scheduled</span>
+                <strong>${formatWhole(scheduled)}</strong>
+              </div>
+              <div class="entityMetricHero">
+                <span class="entityMetricLabel">Units Billed</span>
+                <strong>${formatWhole(unitsBilled)}</strong>
+              </div>
+            </div>
+
+            <div class="entityCompareGrid">
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">vs Prior</span>
+                <strong class="${visitsDelta >= 0 ? "good" : "bad"}">${fmtDelta(visitsDelta)}</strong>
+              </div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Units/Visit</span>
+                <strong>${unitsPerVisit.toFixed(1)}</strong>
+              </div>
+              <div class="entityMiniStat">
+                <span class="entityMiniLabel">Visits/Day</span>
+                <strong>${visitsPerDay.toFixed(1)}</strong>
+              </div>
+            </div>
+
+            <div class="entityHealthRow">
+              <div class="entityHealthItem">
+                <span class="entityHealthLabel">No Show</span>
+                <strong class="${noShowCls}">${noShowRate}%</strong>
+              </div>
+              <div class="entityHealthItem">
+                <span class="entityHealthLabel">Cancel</span>
+                <strong class="${cancelCls}">${cancelRate}%</strong>
+              </div>
+              <div class="entityHealthItem">
+                <span class="entityHealthLabel">Reschedules</span>
+                <strong>${formatWhole(reschedules)}</strong>
+              </div>
+            </div>
+
+            <div class="entityAccessPanel">
+              <div class="entityAccessLabelRow">
+                <span class="entityAccessLabel">Utilization</span>
+                <span class="entityAccessValue">${utilRate}%</span>
+              </div>
+              <div class="entityProgressTrack">
+                <div class="entityProgressBar ${utilRate >= 85 ? "entityProgressGood" : utilRate >= 70 ? "entityProgressWarning" : "entityProgressBad"}"
+                  style="width:${Math.min(utilRate, 100)}%"></div>
+              </div>
+            </div>
+
+            <details class="entityDetailDrawer">
+              <summary>More detail</summary>
+              <div class="entityDetailGrid">
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">No Shows</div>
+                  <div class="entityDetailValue">${formatWhole(noShows)}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">Cancellations</div>
+                  <div class="entityDetailValue">${formatWhole(cancellations)}</div>
+                </div>
+                <div class="entityDetailTile">
+                  <div class="entityDetailLabel">Reschedules</div>
+                  <div class="entityDetailValue">${formatWhole(reschedules)}</div>
+                </div>
+              </div>
+            </details>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 (async function init() {
   try {
     currentUser = await apiGet("/api/me");
@@ -4832,301 +5132,6 @@ function showThresholdSettingsView() {
   if (el) el.style.display = "";
   setActiveNav("navThresholdSettingsBtn");
   renderThresholdSettingsView();
-}
-
-
-// ══════════════════════════════════════════════════════════════
-// PT SCOPE DASHBOARD
-// ══════════════════════════════════════════════════════════════
-
-async function loadDashboardLandingPt(entityScope, compareAgainst, weekSets) {
-  const entities = ptScopeEntities(entityScope);
-
-  const current    = await loadDashboardDataForWeeks(weekSets.primaryWeeks, "ALL", {});
-  const comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, "ALL", {});
-
-  // Filter regions to PT entities only AND recompute ptTotals from filtered set
-  const filterPt = (data) => {
-    const regions = (data.regions || []).filter(r => entities.includes(r.entity));
-    const ptTotals = {
-      scheduledVisits:  regions.reduce((s, r) => s + normalizeNumber(r.pt?.scheduledVisits), 0),
-      cancellations:    regions.reduce((s, r) => s + normalizeNumber(r.pt?.cancellations), 0),
-      noShows:          regions.reduce((s, r) => s + normalizeNumber(r.pt?.noShows), 0),
-      reschedules:      regions.reduce((s, r) => s + normalizeNumber(r.pt?.reschedules), 0),
-      totalUnitsBilled: regions.reduce((s, r) => s + normalizeNumber(r.pt?.totalUnitsBilled), 0),
-      visitsSeen:       regions.reduce((s, r) => s + normalizeNumber(r.pt?.visitsSeen), 0)
-    };
-    const totals = {
-      visitVolume:   regions.reduce((s, r) => s + normalizeNumber(r.visitVolume), 0),
-      newPatients:   regions.reduce((s, r) => s + normalizeNumber(r.newPatients), 0),
-      cashCollected: regions.reduce((s, r) => s + normalizeNumber(r.cashCollected), 0),
-      callVolume:    regions.reduce((s, r) => s + normalizeNumber(r.callVolume), 0),
-      surgeries:     regions.reduce((s, r) => s + normalizeNumber(r.surgeries), 0),
-      ptoDays:       regions.reduce((s, r) => s + normalizeNumber(r.ptoDays), 0)
-    };
-    return { ...data, regions, ptTotals, totals };
-  };
-
-  const currentPt    = filterPt(current);
-  const comparisonPt = filterPt(comparison);
-
-  // Clear stale ortho cards before rendering PT view
-  const dashCards = byId("dashboardCards");
-  if (dashCards) dashCards.innerHTML = "";
-  const dashEntities = byId("dashboardEntities");
-  if (dashEntities) dashEntities.innerHTML = "";
-
-  const summaryEl = byId("dashboardSummaryText");
-  if (summaryEl) {
-    const label = entityScope === "ALL-PT" ? "All PT Programs" : `${entityScope} Program`;
-    summaryEl.innerHTML = `<div style="font-size:13px;opacity:0.85;">${weekSets.summary} &nbsp;·&nbsp; Scope: ${label} (PT only)</div>`;
-  }
-
-  renderDashboardCardsPt(currentPt, comparisonPt, entities, compareAgainst);
-  renderDataCompletenessBanner(currentPt, entityScope, weekSets);
-  renderDashboardEntitiesPt(currentPt, comparisonPt, entities, compareAgainst);
-  renderDashboardAlerts(currentPt, comparisonPt, entityScope, compareAgainst);
-  renderDashboardWins(currentPt, comparisonPt, entityScope, compareAgainst);
-  renderDashboardSnapshot(currentPt, entityScope, compareAgainst);
-  renderVisitsChart(weekSets.primaryWeeks, currentPt, compareAgainst);
-
-  window._lastDashboardCurrent        = currentPt;
-  window._lastDashboardComparison     = comparisonPt;
-  window._lastDashboardCompareAgainst = compareAgainst;
-  window._lastDashboardWeekSets       = weekSets;
-
-  setDashboardDebug({ entityScope, compareAgainst, weekSets, current: currentPt, comparison: comparisonPt });
-}
-
-function renderDashboardCardsPt(current, comparison, entities, compareAgainst) {
-  // PT-focused top-line cards
-  const ptCurrent    = current.ptTotals    || {};
-  const ptPrior      = comparison.ptTotals || {};
-
-  const visitsSeen      = normalizeNumber(ptCurrent.visitsSeen);
-  const visitsSeenPrior = normalizeNumber(ptPrior.visitsSeen);
-  const visitsDelta     = visitsSeen - visitsSeenPrior;
-
-  const scheduled      = normalizeNumber(ptCurrent.scheduledVisits);
-  const scheduledPrior = normalizeNumber(ptPrior.scheduledVisits);
-
-  const cancellations  = normalizeNumber(ptCurrent.cancellations);
-  const noShows        = normalizeNumber(ptCurrent.noShows);
-  const reschedules    = normalizeNumber(ptCurrent.reschedules);
-  const unitsBilled    = normalizeNumber(ptCurrent.totalUnitsBilled);
-  const unitsBilledPrior = normalizeNumber(ptPrior.totalUnitsBilled);
-
-  const cancelRate  = scheduled > 0 ? Number(((cancellations / scheduled) * 100).toFixed(1)) : 0;
-  const noShowRate  = scheduled > 0 ? Number(((noShows / scheduled) * 100).toFixed(1)) : 0;
-  const utilRate    = scheduled > 0 ? Number(((visitsSeen / scheduled) * 100).toFixed(1)) : 0;
-
-  const unitsPerVisit = visitsSeen > 0
-    ? Number((unitsBilled / visitsSeen).toFixed(1))
-    : 0;
-  const unitsPerVisitPrior = visitsSeenPrior > 0
-    ? Number((unitsBilledPrior / visitsSeenPrior).toFixed(1))
-    : 0;
-
-  const cards = [
-    {
-      label: "PT Visits Seen",
-      value: formatWhole(visitsSeen),
-      movement: buildKpiMovement(visitsSeen, visitsSeenPrior, formatWhole),
-      meta: `${visitsDelta >= 0 ? "+" : ""}${formatWhole(visitsDelta)} vs prior`,
-      className: getTrendClass(visitsSeen, visitsSeenPrior)
-    },
-    {
-      label: "Scheduled Visits",
-      value: formatWhole(scheduled),
-      movement: buildKpiMovement(scheduled, scheduledPrior, formatWhole),
-      meta: `${(scheduled - scheduledPrior) >= 0 ? "+" : ""}${formatWhole(scheduled - scheduledPrior)} vs prior`,
-      className: getTrendClass(scheduled, scheduledPrior)
-    },
-    {
-      label: "Utilization Rate",
-      value: `${utilRate}%`,
-      meta: `${visitsSeen} seen of ${scheduled} scheduled`,
-      className: utilRate >= 85 ? "kpi-good" : utilRate >= 70 ? "kpi-warning" : "kpi-bad"
-    },
-    {
-      label: "Units Billed",
-      value: formatWhole(unitsBilled),
-      movement: buildKpiMovement(unitsBilled, unitsBilledPrior, formatWhole),
-      meta: `${unitsPerVisit} units/visit avg`,
-      className: getTrendClass(unitsBilled, unitsBilledPrior)
-    },
-    {
-      label: "Cancellations",
-      value: formatWhole(cancellations),
-      meta: `${cancelRate}% cancel rate`,
-      className: cancelRate >= 10 ? "kpi-bad" : cancelRate >= 6 ? "kpi-warning" : "kpi-good"
-    },
-    {
-      label: "No Shows",
-      value: formatWhole(noShows),
-      meta: `${noShowRate}% no-show rate`,
-      className: noShowRate >= 8 ? "kpi-bad" : noShowRate >= 5 ? "kpi-warning" : "kpi-good"
-    },
-    {
-      label: "Reschedules",
-      value: formatWhole(reschedules),
-      meta: "Across selected scope",
-      className: "kpi-neutral"
-    },
-    {
-      label: "Units / Visit",
-      value: unitsPerVisit.toFixed(1),
-      movement: buildKpiMovement(unitsPerVisit, unitsPerVisitPrior, (v) => v.toFixed(1)),
-      meta: `Prior: ${unitsPerVisitPrior.toFixed(1)}`,
-      className: getTrendClass(unitsPerVisit, unitsPerVisitPrior)
-    }
-  ];
-
-  renderMetricCards("dashboardCards", cards);
-}
-
-function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst) {
-  const container = byId("dashboardEntities");
-  if (!container) return;
-
-  const currentMap    = getEntityMap(current);
-  const comparisonMap = getEntityMap(comparison);
-
-  container.innerHTML = `
-    <div class="entityCardGrid">
-      ${entities.map(entity => {
-        const brand = getBranding(entity);
-        const row   = currentMap[entity];
-        const prior = comparisonMap[entity] || {};
-        if (!row) return `
-          <div class="entityCard" style="border-top:4px solid ${brand.accent};">
-            <div class="entityCardHeader">
-              <div class="entityHeaderLeft">
-                <div class="entityStatusRow"><span class="entityStatusPill">missing</span></div>
-                <div class="entityTitle">${entity} PT</div>
-                <div class="entitySubtitle">${brand.fullName}</div>
-              </div>
-              <div class="entityLogoWrap"><img src="${brand.logo}" alt="${entity}" class="entityLogo" /></div>
-            </div>
-            <div style="padding:12px;font-size:12px;color:var(--text-muted);">No PT data for this period.</div>
-          </div>`;
-
-        const pt      = row.pt      || {};
-        const ptPrior = prior.pt    || {};
-
-        const visitsSeen      = normalizeNumber(pt.visitsSeen);
-        const visitsSeenPrior = normalizeNumber(ptPrior.visitsSeen);
-        const scheduled       = normalizeNumber(pt.scheduledVisits);
-        const cancellations   = normalizeNumber(pt.cancellations);
-        const noShows         = normalizeNumber(pt.noShows);
-        const reschedules     = normalizeNumber(pt.reschedules);
-        const unitsBilled     = normalizeNumber(pt.totalUnitsBilled);
-        const unitsPerVisit   = normalizeNumber(pt.unitsPerVisit);
-        const visitsPerDay    = normalizeNumber(pt.visitsPerDay);
-
-        const cancelRate  = scheduled > 0 ? Number(((cancellations / scheduled) * 100).toFixed(1)) : 0;
-        const noShowRate  = scheduled > 0 ? Number(((noShows / scheduled) * 100).toFixed(1)) : 0;
-        const utilRate    = scheduled > 0 ? Number(((visitsSeen / scheduled) * 100).toFixed(1)) : 0;
-
-        const visitsDelta = visitsSeen - visitsSeenPrior;
-        const fmtDelta = (n) => `${n >= 0 ? "+" : ""}${formatWhole(n)}`;
-
-        const noShowCls  = noShowRate  >= 8 ? "bad" : noShowRate  >= 5 ? "warning" : "good";
-        const cancelCls  = cancelRate  >= 10 ? "bad" : cancelRate  >= 6 ? "warning" : "good";
-        const utilCls    = utilRate    >= 85 ? "good" : utilRate   >= 70 ? "warning" : "bad";
-
-        return `
-          <div class="entityCard" style="border-top:4px solid ${brand.accent};">
-            <div class="entityCardHeader">
-              <div class="entityHeaderLeft">
-                <div class="entityStatusRow">
-                  <span class="entityStatusPill">PT Program</span>
-                  <span class="metricChip metricChip${utilRate >= 85 ? "Good" : utilRate >= 70 ? "Warning" : "Bad"}">${utilRate}% utilization</span>
-                </div>
-                <div class="entityTitle">${entity} — PT</div>
-                <div class="entitySubtitle">${brand.fullName}</div>
-              </div>
-              <div class="entityLogoWrap"><img src="${brand.logo}" alt="${entity}" class="entityLogo" /></div>
-            </div>
-
-            <div class="entityTopMetrics">
-              <div class="entityMetricHero">
-                <span class="entityMetricLabel">Visits Seen</span>
-                <strong>${formatWhole(visitsSeen)}</strong>
-              </div>
-              <div class="entityMetricHero">
-                <span class="entityMetricLabel">Scheduled</span>
-                <strong>${formatWhole(scheduled)}</strong>
-              </div>
-              <div class="entityMetricHero">
-                <span class="entityMetricLabel">Units Billed</span>
-                <strong>${formatWhole(unitsBilled)}</strong>
-              </div>
-            </div>
-
-            <div class="entityCompareGrid">
-              <div class="entityMiniStat">
-                <span class="entityMiniLabel">vs Prior</span>
-                <strong class="${visitsDelta >= 0 ? "good" : "bad"}">${fmtDelta(visitsDelta)}</strong>
-              </div>
-              <div class="entityMiniStat">
-                <span class="entityMiniLabel">Units/Visit</span>
-                <strong>${unitsPerVisit.toFixed(1)}</strong>
-              </div>
-              <div class="entityMiniStat">
-                <span class="entityMiniLabel">Visits/Day</span>
-                <strong>${visitsPerDay.toFixed(1)}</strong>
-              </div>
-            </div>
-
-            <div class="entityHealthRow">
-              <div class="entityHealthItem">
-                <span class="entityHealthLabel">No Show</span>
-                <strong class="${noShowCls}">${noShowRate}%</strong>
-              </div>
-              <div class="entityHealthItem">
-                <span class="entityHealthLabel">Cancel</span>
-                <strong class="${cancelCls}">${cancelRate}%</strong>
-              </div>
-              <div class="entityHealthItem">
-                <span class="entityHealthLabel">Reschedules</span>
-                <strong>${formatWhole(reschedules)}</strong>
-              </div>
-            </div>
-
-            <div class="entityAccessPanel">
-              <div class="entityAccessLabelRow">
-                <span class="entityAccessLabel">Utilization</span>
-                <span class="entityAccessValue">${utilRate}%</span>
-              </div>
-              <div class="entityProgressTrack">
-                <div class="entityProgressBar ${utilRate >= 85 ? "entityProgressGood" : utilRate >= 70 ? "entityProgressWarning" : "entityProgressBad"}"
-                  style="width:${Math.min(utilRate, 100)}%"></div>
-              </div>
-            </div>
-
-            <details class="entityDetailDrawer">
-              <summary>More detail</summary>
-              <div class="entityDetailGrid">
-                <div class="entityDetailTile">
-                  <div class="entityDetailLabel">No Shows</div>
-                  <div class="entityDetailValue">${formatWhole(noShows)}</div>
-                </div>
-                <div class="entityDetailTile">
-                  <div class="entityDetailLabel">Cancellations</div>
-                  <div class="entityDetailValue">${formatWhole(cancellations)}</div>
-                </div>
-                <div class="entityDetailTile">
-                  <div class="entityDetailLabel">Reschedules</div>
-                  <div class="entityDetailValue">${formatWhole(reschedules)}</div>
-                </div>
-              </div>
-            </details>
-          </div>
-        `;
-      }).join("")}
-    </div>
-  `;
 }
 
     initChangelog();
