@@ -8,6 +8,14 @@ const SHARED_TABLE = "SharedPageData";
 const BUDGET_TABLE = "BudgetData";
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
+// Default working days per week per entity (used when daysInPeriod not stored on record)
+const ENTITY_WORKING_DAYS = {
+  LAOSS:     5,
+  NES:       4.5,
+  SpineOne:  5,
+  MRO:       5
+};
+
 function toNumber(value, fallback = 0) {
   if (value == null || value === "") return fallback;
   const n = Number(value);
@@ -111,8 +119,9 @@ module.exports = async function (context, req) {
       const record = await getEntityRecord(regionTable, entity, weekEnding);
       const values = safeParseJson(record?.valuesJson, {});
 
-      // daysInPeriod is set by Excel import; manual entries won't have it — default to 5 (standard work week)
-      const daysInPeriod = toNumber(values.daysInPeriod ?? record?.daysInPeriod, 0) || 5;
+      // daysInPeriod is set by Excel import; manual entries won't have it — use entity-specific default
+      const defaultDays = ENTITY_WORKING_DAYS[entity] ?? 5;
+      const daysInPeriod = toNumber(values.daysInPeriod ?? record?.daysInPeriod, 0) || defaultDays;
       const monthKey = buildMonthKey(values, weekEnding);
 
       const budgetRecord = monthKey
