@@ -321,7 +321,9 @@ function formatCurrency(value, decimals = 0) {
 }
 
 function formatPercent(value, digits = 1) {
-  return `${normalizeNumber(value).toFixed(digits)}%`;
+  const n = normalizeNumber(value);
+  if (isNaN(n)) return "—";
+  return `${n.toFixed(digits)}%`;
 }
 
 function formatVariance(actual, target) {
@@ -3800,8 +3802,12 @@ function injectUiPolishStyles() {
       font-size:14px;
       font-weight:500;
       line-height:1;
-      color:#eaf1f8;
+      color:var(--text-soft);
     }
+
+    .entityHealthItem strong.good    { color:#22d47a; }
+    .entityHealthItem strong.warning { color:#f7c62f; }
+    .entityHealthItem strong.bad     { color:#ff6b6b; }
 
     /* Access health bar */
     .entityAccessPanel {
