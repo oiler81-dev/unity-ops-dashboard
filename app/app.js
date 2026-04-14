@@ -97,6 +97,56 @@ function byId(id) {
   return document.getElementById(id);
 }
 
+function formHasUnsavedData() {
+  // Check if any visible, editable form field has a value
+  // compared to what was last loaded from the server
+  const loaded = currentWeekData?.values || currentWeekData?.data || {};
+  const fieldIds = [
+    "newPatients", "surgeries", "established", "noShows", "cancelled",
+    "totalCalls", "abandonedCalls", "cashCollected", "ptoDays",
+    "reschedules", "piNp", "piCashCollection",
+    "ptScheduledVisits", "ptCancellations", "ptNoShows",
+    "ptReschedules", "ptTotalUnitsBilled", "ptVisitsSeen"
+  ];
+  for (const id of fieldIds) {
+    const el = byId(id);
+    if (!el || el.style.display === "none" || el.closest("[style*='display:none']")) continue;
+    const current = String(el.value || "").trim();
+    const stored  = String(loaded[id] ?? "").trim();
+    // If user typed something and it differs from what was loaded, flag it
+    if (current !== "" && current !== "0" && current !== stored) return true;
+  }
+  // Also check narrative
+  const narr = byId("operationsNarrative");
+  if (narr && narr.value.trim() && narr.value.trim() !== String(loaded.operationsNarrative || "").trim()) return true;
+  return false;
+}
+
+// ── Alert Thresholds (configurable, stored in localStorage) ───
+const THRESHOLD_DEFAULTS = {
+  noShowRate:        6,
+  cancellationRate:  8,
+  abandonedCallRate: 10,
+  visitDropVsPrior:  100
+};
+
+function getThreshold(key, fallback) {
+  const stored = localStorage.getItem("threshold_" + key);
+  if (stored !== null) {
+    const n = parseFloat(stored);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback ?? THRESHOLD_DEFAULTS[key] ?? 0;
+}
+
+function setThreshold(key, value) {
+  localStorage.setItem("threshold_" + key, String(value));
+}
+
+function resetThresholds() {
+  Object.keys(THRESHOLD_DEFAULTS).forEach(k => localStorage.removeItem("threshold_" + k));
+}
+
 // ── View mode toggles ─────────────────────────────────────────
 function setViewMode(mode) {
   // Clear all modes first
@@ -1004,6 +1054,65 @@ function getPerformanceSummary(row, compareAgainst) {
   return { text: "Mixed performance", tone: "warning" };
 }
 
+function renderDataCompletenessBanner(current, entityScope, weekSets) {
+  const container = byId("dashboardCompletenessBanner");
+  if (!container) return;
+
+  const entities = entityScope === "ALL" ? ENTITIES : [entityScope];
+  const missing = [];
+  const hasData = [];
+
+  (current.regions || []).forEach(r => {
+    if (entities.includes(r.entity)) {
+      if (r.status === "missing" || normalizeNumber(r.visitVolume) === 0) {
+        missing.push(r.entity);
+      } else {
+        hasData.push(r.entity);
+      }
+    }
+  });
+
+  // Check entities not in regions at all
+  entities.forEach(e => {
+    const found = (current.regions || []).find(r => r.entity === e);
+    if (!found && !missing.includes(e)) missing.push(e);
+  });
+
+  const total = entities.length;
+  const entered = total - missing.length;
+  const weekLabel = weekSets?.primaryWeeks?.[0]
+    ? new Date(weekSets.primaryWeeks[0] + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : "selected week";
+
+  if (missing.length === 0) {
+    container.innerHTML = `
+      <div class="completenessBanner completenessGood">
+        <span class="completenessIcon">✓</span>
+        <span class="completenessText">All <strong>${total}</strong> entities have data entered for the week of ${weekLabel}.</span>
+      </div>`;
+  } else {
+    container.innerHTML = `
+      <div class="completenessBanner completenessWarn">
+        <span class="completenessIcon">◆</span>
+        <span class="completenessText">
+          <strong>${entered} of ${total}</strong> entities have data for the week of ${weekLabel}.
+          Missing: <strong>${missing.join(", ")}</strong>.
+          <span class="completenessAction" onclick="showEntryViewForMissing('${missing[0]}')">Enter data →</span>
+        </span>
+      </div>`;
+  }
+}
+
+function showEntryViewForMissing(entity) {
+  // Switch to weekly entry with the missing entity pre-selected
+  const select = byId("entitySelect");
+  if (select) {
+    select.value = entity;
+    select.dispatchEvent(new Event("change"));
+  }
+  showEntryView();
+}
+
 function renderDashboardCards(current, comparison, compareAgainst, entityScope) {
   const ptVisitsCurrent = normalizeNumber(current.ptTotals?.visitsSeen);
   const ptVisitsComparison = normalizeNumber(comparison.ptTotals?.visitsSeen);
@@ -1163,9 +1272,9 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
 
         const visitBudgetStatus = getGoalStatus(row.visitVolume, row.visitVolumeBudget);
         const npBudgetStatus = getGoalStatus(row.newPatients, row.newPatientsBudget);
-        const callStatus    = getGoalStatus(row.abandonedCallRate, 10, true);
-        const noShowStatus  = getGoalStatus(row.noShowRate, 6, true);
-        const cancelStatus  = getGoalStatus(row.cancellationRate, 8, true);
+        const callStatus    = getGoalStatus(row.abandonedCallRate, getThreshold("abandonedCallRate", 10), true);
+        const noShowStatus  = getGoalStatus(row.noShowRate, getThreshold("noShowRate", 6), true);
+        const cancelStatus  = getGoalStatus(row.cancellationRate, getThreshold("cancellationRate", 8), true);
         const summary = getPerformanceSummary(row, compareAgainst);
 
         const visitGoalPct = progressPercent(row.visitVolume, row.visitVolumeBudget);
@@ -1309,6 +1418,11 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
                   <div class="entityDetailValue">${formatWhole(row.ptoDays || 0)}</div>
                 </div>
               </div>
+              ${row.operationsNarrative ? `
+              <div class="entityNarrativeBlock">
+                <div class="entityNarrativeLabel">Ops Notes</div>
+                <div class="entityNarrativeText">${row.operationsNarrative}</div>
+              </div>` : ""}
             </details>
           </div>
         `;
@@ -1335,16 +1449,20 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
       return;
     }
 
-    if (normalizeNumber(row.noShowRate) >= 6) {
-      alerts.push({ severity: "bad", text: `${entity} no show rate is elevated at ${normalizeNumber(row.noShowRate).toFixed(1)}%.` });
+    const noShowLimit    = getThreshold("noShowRate", 6);
+    const cancelLimit    = getThreshold("cancellationRate", 8);
+    const abandonedLimit = getThreshold("abandonedCallRate", 10);
+
+    if (normalizeNumber(row.noShowRate) >= noShowLimit) {
+      alerts.push({ severity: "bad", text: `${entity} no show rate is elevated at ${normalizeNumber(row.noShowRate).toFixed(1)}% (threshold: ${noShowLimit}%).` });
     }
 
-    if (normalizeNumber(row.cancellationRate) >= 8) {
-      alerts.push({ severity: "bad", text: `${entity} cancellation rate is elevated at ${normalizeNumber(row.cancellationRate).toFixed(1)}%.` });
+    if (normalizeNumber(row.cancellationRate) >= cancelLimit) {
+      alerts.push({ severity: "bad", text: `${entity} cancellation rate is elevated at ${normalizeNumber(row.cancellationRate).toFixed(1)}% (threshold: ${cancelLimit}%).` });
     }
 
-    if (normalizeNumber(row.abandonedCallRate) >= 10) {
-      alerts.push({ severity: "bad", text: `${entity} abandoned call rate is elevated at ${normalizeNumber(row.abandonedCallRate).toFixed(1)}%.` });
+    if (normalizeNumber(row.abandonedCallRate) >= abandonedLimit) {
+      alerts.push({ severity: "bad", text: `${entity} abandoned call rate is elevated at ${normalizeNumber(row.abandonedCallRate).toFixed(1)}% (threshold: ${abandonedLimit}%).` });
     }
 
     if (compareAgainst === "priorPeriod") {
@@ -1517,6 +1635,11 @@ function renderActivityTable(rows) {
     if (status === "submitted") return "activityStatusPill activityStatusSubmitted";
     return "activityStatusPill activityStatusSaved";
   };
+
+  // Add SpineOne PI chart section if SpineOne selected
+  const piSection = byId("trendsPiSection");
+  if (piSection) piSection.style.display = entity === "SpineOne" ? "" : "none";
+  if (entity === "SpineOne") renderSpineOnePiChart(items);
 
   wrap.innerHTML = `
     <table class="regionTable">
@@ -1850,7 +1973,8 @@ function renderTrendsCards(result) {
     return `${c} (${diff >= 0 ? "+" : ""}${diff})`;
   };
 
-  renderMetricCards("trendsCards", [
+  const entity = getSelectedTrendsEntity();
+  const baseCards = [
     { label: "Weeks Loaded", value: items.length, className: "kpi-neutral" },
     {
       label: "Latest Visit Volume",
@@ -1872,13 +1996,30 @@ function renderTrendsCards(result) {
       value: latest ? formatDelta(latest.callVolume, previous?.callVolume) : "-",
       className: latest ? getTrendClass(latest.callVolume, previous?.callVolume) : "kpi-neutral"
     }
-  ]);
+  ];
+
+  if (entity === "SpineOne") {
+    baseCards.push({
+      label: "PI New Patients",
+      value: latest ? formatDelta(latest.piNp || 0, previous?.piNp || 0) : "-",
+      className: latest ? getTrendClass(latest.piNp, previous?.piNp) : "kpi-neutral"
+    });
+    baseCards.push({
+      label: "PI Cash Collection",
+      value: latest ? formatCurrency(latest.piCashCollection || 0) : "-",
+      meta: previous ? `Prior: ${formatCurrency(previous.piCashCollection || 0)}` : "",
+      className: latest ? getTrendClass(latest.piCashCollection, previous?.piCashCollection) : "kpi-neutral"
+    });
+  }
+
+  renderMetricCards("trendsCards", baseCards);
 }
 
 function renderTrendsTable(result) {
   const wrap = byId("trendsTableWrap");
   if (!wrap) return;
 
+  const entity = getSelectedTrendsEntity();
   const items = result.items || [];
 
   if (!items.length) {
@@ -1899,6 +2040,7 @@ function renderTrendsTable(result) {
           <th>No Show %</th>
           <th>Cancel %</th>
           <th>Abandoned %</th>
+          ${entity === "SpineOne" ? "<th>PI NP</th><th>PI Cash</th>" : ""}
         </tr>
       </thead>
       <tbody>
@@ -1913,6 +2055,7 @@ function renderTrendsTable(result) {
             <td>${formatPercent(item.noShowRate)}</td>
             <td>${formatPercent(item.cancellationRate)}</td>
             <td>${formatPercent(item.abandonedCallRate)}</td>
+            ${entity === "SpineOne" ? `<td>${formatWhole(item.piNp || 0)}</td><td>${formatCurrency(item.piCashCollection || 0)}</td>` : ""}
           </tr>
         `).join("")}
       </tbody>
@@ -1921,7 +2064,7 @@ function renderTrendsTable(result) {
 }
 
 function hideAllViews() {
-  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "providerSettingsView", "changelogView", "helpView"];
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "providerSettingsView", "changelogView", "goalSettingsView", "thresholdSettingsView", "helpView"];
   ids.forEach((id) => {
     const el = byId(id);
     if (el) el.style.display = "none";
@@ -2006,6 +2149,45 @@ function setPtoForecastDebug(data) {
   el.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
+
+// ── PTO Provider Breakdown Helpers ───────────────────────────
+function syncPtoTotalsFromProviders(entity, monthKey) {
+  // Sum provider days by type and update the aggregate inputs
+  const rows = document.querySelectorAll(`.ptoProviderName[data-entity="${entity}"][data-monthkey="${monthKey}"]`);
+  let mdTotal = 0, paTotal = 0, ptTotal = 0;
+  rows.forEach(nameInput => {
+    const container = nameInput.closest(".ptoProviderRow");
+    if (!container) return;
+    const type = container.querySelector(".ptoProviderType")?.value;
+    const days = parseFloat(container.querySelector(".ptoProviderDays")?.value || "0") || 0;
+    if (type === "MD") mdTotal += days;
+    else if (type === "PA") paTotal += days;
+    else if (type === "PT") ptTotal += days;
+  });
+
+  // Find aggregate inputs for this entity/month and update
+  const mdInput = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="md"]`);
+  const paInput = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pa"]`);
+  const ptInput = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pt"]`);
+  if (mdInput && mdTotal > 0) mdInput.value = mdTotal;
+  if (paInput && paTotal > 0) paInput.value = paTotal;
+  if (ptInput && ptTotal > 0) ptInput.value = ptTotal;
+}
+
+function collectProviderBreakdown(entity, monthKey) {
+  const rows = document.querySelectorAll(`.ptoProviderName[data-entity="${entity}"][data-monthkey="${monthKey}"]`);
+  const breakdown = [];
+  rows.forEach(nameInput => {
+    const container = nameInput.closest(".ptoProviderRow");
+    if (!container) return;
+    const name = nameInput.value.trim();
+    const type = container.querySelector(".ptoProviderType")?.value || "MD";
+    const days = parseFloat(container.querySelector(".ptoProviderDays")?.value || "0") || 0;
+    if (name || days > 0) breakdown.push({ name, type, days });
+  });
+  return breakdown;
+}
+
 function renderPtoForecastEntities(data) {
   const container = byId("ptoForecastEntities");
   if (!container) return;
@@ -2069,6 +2251,42 @@ function renderPtoForecastEntities(data) {
                 </div>` : ""}
               </div>
 
+              ${(month.providerBreakdown?.length > 0) ? `
+              <details class="ptoProviderBreakdown">
+                <summary class="ptoProviderBreakdownToggle">Provider breakdown &nbsp;·&nbsp; ${month.providerBreakdown.length} logged</summary>
+                <div class="ptoProviderList">
+                  ${month.providerBreakdown.map((p, pi) => `
+                    <div class="ptoProviderRow">
+                      <input type="text" class="ptoProviderName" placeholder="Provider name"
+                        data-entity="${entity}" data-monthkey="${month.monthKey}" data-pi="${pi}"
+                        value="${p.name || ""}" />
+                      <select class="ptoProviderType"
+                        data-entity="${entity}" data-monthkey="${month.monthKey}" data-pi="${pi}">
+                        <option value="MD" ${p.type === "MD" ? "selected" : ""}>MD</option>
+                        <option value="PA" ${p.type === "PA" ? "selected" : ""}>PA</option>
+                        <option value="PT" ${p.type === "PT" ? "selected" : ""}>PT</option>
+                      </select>
+                      <input type="number" class="ptoProviderDays" placeholder="Days"
+                        data-entity="${entity}" data-monthkey="${month.monthKey}" data-pi="${pi}"
+                        step="0.5" min="0" value="${p.days || ""}" />
+                    </div>
+                  `).join("")}
+                  <button class="ptoAddProviderBtn" type="button"
+                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-idx="${i}">
+                    + Add Provider
+                  </button>
+                </div>
+              </details>` : `
+              <details class="ptoProviderBreakdown">
+                <summary class="ptoProviderBreakdownToggle">+ Add provider-level breakdown</summary>
+                <div class="ptoProviderList" id="ptoProviderList_${entity}_${i}">
+                  <button class="ptoAddProviderBtn" type="button"
+                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-idx="${i}">
+                    + Add Provider
+                  </button>
+                </div>
+              </details>`}
+
               <button
                 class="ptoSaveBtn"
                 data-entity="${entity}"
@@ -2106,6 +2324,51 @@ function renderPtoForecastEntities(data) {
     `;
   }).join("");
 
+  // Wire up add provider buttons
+  document.querySelectorAll(".ptoAddProviderBtn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const entity = btn.dataset.entity;
+      const monthKey = btn.dataset.monthkey;
+      const idx = btn.dataset.idx;
+      const list = btn.closest(".ptoProviderList");
+      if (!list) return;
+
+      const row = document.createElement("div");
+      row.className = "ptoProviderRow";
+      row.innerHTML = `
+        <input type="text" class="ptoProviderName" placeholder="Provider name"
+          data-entity="${entity}" data-monthkey="${monthKey}" data-pi="new" />
+        <select class="ptoProviderType" data-entity="${entity}" data-monthkey="${monthKey}" data-pi="new">
+          <option value="MD">MD</option>
+          <option value="PA">PA</option>
+          <option value="PT">PT</option>
+        </select>
+        <input type="number" class="ptoProviderDays" placeholder="Days"
+          data-entity="${entity}" data-monthkey="${monthKey}" data-pi="new" step="0.5" min="0" />
+        <button type="button" class="ptoRemoveProviderBtn" title="Remove">✕</button>
+      `;
+      list.insertBefore(row, btn);
+      row.querySelector(".ptoRemoveProviderBtn").addEventListener("click", () => row.remove());
+
+      // Sync totals when days change
+      row.querySelector(".ptoProviderDays").addEventListener("input", () => {
+        syncPtoTotalsFromProviders(entity, monthKey);
+      });
+      row.querySelector(".ptoProviderType").addEventListener("change", () => {
+        syncPtoTotalsFromProviders(entity, monthKey);
+      });
+    });
+  });
+
+  // Wire auto-sync for existing provider rows
+  document.querySelectorAll(".ptoProviderDays, .ptoProviderType").forEach(input => {
+    input.addEventListener("input", () => {
+      const entity = input.dataset.entity;
+      const monthKey = input.dataset.monthkey;
+      syncPtoTotalsFromProviders(entity, monthKey);
+    });
+  });
+
   // Wire up save buttons
   document.querySelectorAll(".ptoSaveBtn").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -2125,8 +2388,11 @@ function renderPtoForecastEntities(data) {
       btn.disabled = true;
 
       try {
+        // Collect provider breakdown if present
+        const providerBreakdown = collectProviderBreakdown(entity, monthKey);
+
         const result = await apiPost("/api/pto-forecast", {
-          entity, monthKey, mdPtoDays, paPtoDays, ptPtoDays
+          entity, monthKey, mdPtoDays, paPtoDays, ptPtoDays, providerBreakdown
         });
 
         const resultEl = byId(`ptoResult_${entity}_${idx}`);
@@ -2793,11 +3059,18 @@ async function loadDashboardLanding() {
   }
 
   renderDashboardCards(current, comparison, compareAgainst, entityScope);
+  renderDataCompletenessBanner(current, entityScope, weekSets);
   renderDashboardEntities(current, comparison, compareAgainst, entityScope);
   renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
   renderDashboardWins(current, comparison, entityScope, compareAgainst);
   renderDashboardSnapshot(current, entityScope, compareAgainst);
   renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
+
+  // Store for digest generator
+  window._lastDashboardCurrent        = current;
+  window._lastDashboardComparison     = comparison;
+  window._lastDashboardCompareAgainst = compareAgainst;
+  window._lastDashboardWeekSets       = weekSets;
 
   setDashboardDebug({
     compareAgainst,
@@ -2832,12 +3105,93 @@ async function loadWeek() {
   setFormValues(result.values || result.data || {});
   renderEntryAuditSummary(result);
 
+  // Auto-populate call metrics from phone system if not already entered
+  const existingValues = result.values || result.data || {};
+  const hasCallData = normalizeNumber(existingValues.totalCalls || existingValues.callVolume) > 0;
+  if (!hasCallData) {
+    loadAndPopulateCallData(entity, weekEnding);
+  } else {
+    // Show call data badge regardless (so team can see it's synced)
+    loadCallDataBadge(entity, weekEnding);
+  }
+
   setStatus(`Loaded ${selectedLabel} for ${weekEnding} (${result.status || "saved"})`);
   setDebug({
     selectedEntry: selectedLabel,
     baseEntity: entity,
     result
   });
+}
+
+async function loadAndPopulateCallData(entity, weekEnding) {
+  const banner = byId("callDataBanner");
+  if (banner) { banner.textContent = "Checking phone system data..."; banner.style.display = ""; banner.className = "callDataBanner callDataBannerLoading"; }
+
+  try {
+    const callData = await apiGet(
+      `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
+    );
+
+    if (!callData.hasData) {
+      if (banner) { banner.textContent = "No phone system data found for this week yet — enter manually."; banner.className = "callDataBanner callDataBannerMissing"; }
+      return;
+    }
+
+    // Auto-fill call fields
+    const totalCallsEl   = byId("totalCalls");
+    const abandonedEl    = byId("abandonedCalls");
+
+    if (totalCallsEl && !totalCallsEl.value) {
+      totalCallsEl.value = callData.totalCalls;
+    }
+    if (abandonedEl && !abandonedEl.value) {
+      abandonedEl.value = callData.abandonedCalls;
+    }
+
+    // Show rich banner
+    if (banner) {
+      banner.className = "callDataBanner callDataBannerSynced";
+      banner.innerHTML = `
+        <span class="callDataBannerIcon">📞</span>
+        <span class="callDataBannerText">
+          <strong>Phone data synced from ${callData.source === "ringcentral" ? "RingCentral" : "Landis"}</strong>
+          &nbsp;·&nbsp; ${formatWhole(callData.totalCalls)} calls
+          &nbsp;·&nbsp; ${callData.abandonedCalls} abandoned (${callData.abandonedRate}%)
+          &nbsp;·&nbsp; Avg wait ${callData.avgWaitFormatted}
+          &nbsp;·&nbsp; Avg talk ${callData.avgTalkFormatted}
+          &nbsp;·&nbsp; Answer rate ${callData.answerRate}%
+        </span>
+        <span class="callDataBannerSource">${callData.datesFound.length} of 5 days synced</span>
+      `;
+    }
+
+    updateDerivedDisplays();
+  } catch (e) {
+    if (banner) { banner.textContent = "Could not load phone system data."; banner.className = "callDataBanner callDataBannerMissing"; }
+  }
+}
+
+async function loadCallDataBadge(entity, weekEnding) {
+  try {
+    const callData = await apiGet(
+      `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
+    );
+    const banner = byId("callDataBanner");
+    if (banner && callData.hasData) {
+      banner.style.display = "";
+      banner.className = "callDataBanner callDataBannerSynced";
+      banner.innerHTML = `
+        <span class="callDataBannerIcon">📞</span>
+        <span class="callDataBannerText">
+          <strong>${callData.source === "ringcentral" ? "RingCentral" : "Landis"} data available</strong>
+          &nbsp;·&nbsp; ${formatWhole(callData.totalCalls)} calls
+          &nbsp;·&nbsp; ${callData.abandonedRate}% abandoned
+          &nbsp;·&nbsp; ${callData.answerRate}% answer rate
+          &nbsp;·&nbsp; Avg wait ${callData.avgWaitFormatted}
+        </span>
+      `;
+    }
+  } catch (e) { /* silent */ }
 }
 
 async function saveWeek() {
@@ -2864,6 +3218,78 @@ async function saveWeek() {
   });
 
   await loadWeek();
+
+  // Check if all entities now have data — if so prompt digest
+  checkAndPromptDigest(payload.weekEnding);
+}
+
+async function checkAndPromptDigest(weekEnding) {
+  if (!weekEnding) return;
+  try {
+    // Reload summary for all entities for this week
+    const summaries = await Promise.all(
+      ENTITIES.map(e => apiGet(`/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(e)}`))
+    );
+    const allEntered = summaries.every(s => s.found && normalizeNumber(s.values?.visitVolume ?? s.data?.visitVolume) > 0);
+    if (allEntered) {
+      showAllDataEnteredPrompt(weekEnding);
+    }
+  } catch (e) {
+    // Silent — don't disrupt the save flow
+  }
+}
+
+function showAllDataEnteredPrompt(weekEnding) {
+  const existing = byId("allDataPrompt");
+  if (existing) return; // Already showing
+
+  const weekLabel = new Date(weekEnding + "T12:00:00Z").toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric"
+  });
+
+  const toast = document.createElement("div");
+  toast.id = "allDataPrompt";
+  toast.className = "allDataToast";
+  toast.innerHTML = `
+    <div class="allDataToastIcon">✓</div>
+    <div class="allDataToastContent">
+      <div class="allDataToastTitle">All entities entered for ${weekLabel}</div>
+      <div class="allDataToastSub">Ready to send the weekly digest.</div>
+    </div>
+    <div class="allDataToastActions">
+      <button type="button" class="allDataToastBtn" id="allDataDigestBtn">Generate Digest</button>
+      <button type="button" class="allDataToastDismiss" id="allDataDismissBtn">✕</button>
+    </div>
+  `;
+  document.body.appendChild(toast);
+
+  // Animate in
+  requestAnimationFrame(() => toast.classList.add("allDataToastVisible"));
+
+  byId("allDataDismissBtn").onclick = () => {
+    toast.classList.remove("allDataToastVisible");
+    setTimeout(() => toast.remove(), 300);
+  };
+
+  byId("allDataDigestBtn").onclick = () => {
+    toast.classList.remove("allDataToastVisible");
+    setTimeout(() => toast.remove(), 300);
+    // Load dashboard data for this week then show digest
+    loadDashboardDataForWeeks([weekEnding], "ALL", { includeBudget: true }).then(current => {
+      const prev = addDays(weekEnding, -7);
+      loadDashboardDataForWeeks([prev], "ALL", {}).then(comparison => {
+        showDigestModal(current, comparison, "priorPeriod", { primaryWeeks: [weekEnding] });
+      });
+    });
+  };
+
+  // Auto-dismiss after 12 seconds
+  setTimeout(() => {
+    if (byId("allDataPrompt")) {
+      toast.classList.remove("allDataToastVisible");
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 12000);
 }
 
 function syncTrendsRangeUi() {
@@ -2894,6 +3320,71 @@ function syncTrendsPtVisibility() {
 function isMeaningfulTrendsRow(item) {
   const today = new Date().toISOString().slice(0, 10);
   return item.weekEnding <= today;
+}
+
+
+// ── SpineOne PI Trend Chart ───────────────────────────────────
+function renderSpineOnePiChart(items) {
+  const ctx = byId("trendsPiChart");
+  if (!ctx) return;
+
+  const labels = [...items].reverse().map(i => i.weekEnding);
+  const piNpData = [...items].reverse().map(i => normalizeNumber(i.piNp));
+  const piCashData = [...items].reverse().map(i => normalizeNumber(i.piCashCollection));
+
+  if (window.piChartInstance) {
+    window.piChartInstance.destroy();
+  }
+
+  window.piChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "PI New Patients",
+          data: piNpData,
+          backgroundColor: "rgba(93,232,240,0.55)",
+          borderColor: "rgba(93,232,240,0.9)",
+          borderWidth: 1,
+          borderRadius: 3,
+          yAxisID: "yNp"
+        },
+        {
+          label: "PI Cash ($)",
+          data: piCashData,
+          type: "line",
+          borderColor: "rgba(247,198,47,0.9)",
+          backgroundColor: "rgba(247,198,47,0.08)",
+          borderWidth: 2,
+          pointRadius: 3,
+          tension: 0.3,
+          fill: true,
+          yAxisID: "yCash"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { labels: { color: "#93b4cc", font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.dataset.yAxisID === "yCash") return ` PI Cash: ${formatCurrency(ctx.raw)}`;
+              return ` PI NP: ${formatWhole(ctx.raw)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: "#506a7e", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" } },
+        yNp:   { position: "left",  ticks: { color: "#5de8f0", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" }, title: { display: true, text: "PI NP", color: "#5de8f0", font: { size: 10 } } },
+        yCash: { position: "right", ticks: { color: "#f7c62f", font: { size: 10 }, callback: v => formatCurrency(v) }, grid: { display: false }, title: { display: true, text: "PI Cash", color: "#f7c62f", font: { size: 10 } } }
+      }
+    }
+  });
 }
 
 async function loadTrends() {
@@ -3445,6 +3936,19 @@ function injectUiPolishStyles() {
 
     if (byId("weekEnding")) {
       byId("weekEnding").addEventListener("change", async () => {
+        // If the user has unsaved data in the form, warn before wiping
+        const hasUnsavedData = formHasUnsavedData();
+        if (hasUnsavedData) {
+          const confirmed = confirm(
+            "You have unsaved data in the form. Changing the week will load the new date and your current entries will be lost.\n\nContinue?"
+          );
+          if (!confirmed) {
+            // Revert the date back to whatever was loaded
+            const prev = currentWeekData?.weekEnding || getDefaultWeekEnding();
+            byId("weekEnding").value = prev;
+            return;
+          }
+        }
         try {
           await loadWeek();
         } catch (e) {
@@ -3537,6 +4041,25 @@ function injectUiPolishStyles() {
 
     if (byId("navHelpBtn")) {
       byId("navHelpBtn").addEventListener("click", showHelpView);
+    }
+
+    if (byId("navGoalSettingsBtn")) {
+      byId("navGoalSettingsBtn").addEventListener("click", showGoalSettingsView);
+    }
+
+    if (byId("navThresholdSettingsBtn")) {
+      byId("navThresholdSettingsBtn").addEventListener("click", showThresholdSettingsView);
+    }
+
+    if (byId("digestBtn")) {
+      byId("digestBtn").addEventListener("click", () => {
+        showDigestModal(
+          window._lastDashboardCurrent,
+          window._lastDashboardComparison,
+          window._lastDashboardCompareAgainst,
+          window._lastDashboardWeekSets
+        );
+      });
     }
 
     if (byId("loadDashboardBtn")) {
@@ -3915,6 +4438,257 @@ function initChangelog() {
   if (hasUnseenChangelog()) {
     setTimeout(showChangelogModal, 900);
   }
+}
+
+
+// ── Entity Goals (per-entity, per-metric monthly targets) ─────
+function getEntityGoal(entity, metric) {
+  const key = `goal_${entity}_${metric}`;
+  const stored = localStorage.getItem(key);
+  if (stored !== null) {
+    const n = parseFloat(stored);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function setEntityGoal(entity, metric, value) {
+  localStorage.setItem(`goal_${entity}_${metric}`, String(value));
+}
+
+function renderGoalSettingsView() {
+  const container = byId("goalSettingsContent");
+  if (!container) return;
+
+  const metrics = [
+    { key: "visitVolume",   label: "Weekly Visit Target" },
+    { key: "newPatients",   label: "Weekly NP Target"    },
+    { key: "cashCollected", label: "Weekly Cash Target"  }
+  ];
+
+  container.innerHTML = `
+    <div class="goalGrid">
+      ${ENTITIES.map(entity => `
+        <div class="goalEntityBlock">
+          <div class="goalEntityTitle">${entity}</div>
+          ${metrics.map(m => {
+            const val = getEntityGoal(entity, m.key);
+            return `
+              <div class="goalRow">
+                <label class="goalLabel">${m.label}</label>
+                <input
+                  type="number"
+                  class="goalInput"
+                  data-entity="${entity}"
+                  data-metric="${m.key}"
+                  value="${val !== null ? val : ""}"
+                  placeholder="Not set"
+                  min="0"
+                  step="1"
+                />
+              </div>`;
+          }).join("")}
+        </div>
+      `).join("")}
+    </div>
+    <div class="goalActions">
+      <button type="button" class="primaryBtn" id="saveGoalsBtn">Save Goals</button>
+      <button type="button" class="secondaryBtn" id="clearGoalsBtn">Clear All</button>
+    </div>
+  `;
+
+  byId("saveGoalsBtn").addEventListener("click", () => {
+    container.querySelectorAll(".goalInput").forEach(input => {
+      const entity = input.dataset.entity;
+      const metric = input.dataset.metric;
+      const val = parseFloat(input.value);
+      if (Number.isFinite(val) && val > 0) {
+        setEntityGoal(entity, metric, val);
+      } else {
+        localStorage.removeItem(`goal_${entity}_${metric}`);
+      }
+    });
+    showGoalBanner("Goals saved.", true);
+  });
+
+  byId("clearGoalsBtn").addEventListener("click", () => {
+    ENTITIES.forEach(e => ["visitVolume","newPatients","cashCollected"].forEach(m => {
+      localStorage.removeItem(`goal_${e}_${m}`);
+    }));
+    renderGoalSettingsView();
+    showGoalBanner("All goals cleared.");
+  });
+}
+
+function showGoalBanner(msg, good = false) {
+  const el = byId("goalStatusBanner");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = "goalStatusBanner " + (good ? "goalStatusGood" : "goalStatusNeutral");
+  el.style.display = "";
+  setTimeout(() => { el.style.display = "none"; }, 3000);
+}
+
+function showGoalSettingsView() {
+  hideAllViews();
+  const el = byId("goalSettingsView");
+  if (el) el.style.display = "";
+  setActiveNav("navGoalSettingsBtn");
+  renderGoalSettingsView();
+}
+
+
+// ── Weekly Digest Generator ───────────────────────────────────
+function generateWeeklyDigest(current, comparison, compareAgainst, weekSets) {
+  const weekLabel = weekSets?.primaryWeeks?.[0]
+    ? new Date(weekSets.primaryWeeks[0] + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+    : "Selected Week";
+
+  const lines = [];
+  lines.push(`📊 UnityMSK Weekly Ops Summary — Week Ending ${weekLabel}`);
+  lines.push("─".repeat(52));
+
+  ENTITIES.forEach(entity => {
+    const row = (current.regions || []).find(r => r.entity === entity);
+    const prior = (comparison.regions || []).find(r => r.entity === entity);
+    if (!row || normalizeNumber(row.visitVolume) === 0) {
+      lines.push(`
+${entity}: No data entered`);
+      return;
+    }
+
+    const visitDelta = prior ? normalizeNumber(row.visitVolume) - normalizeNumber(prior.visitVolume) : null;
+    const npDelta    = prior ? normalizeNumber(row.newPatients) - normalizeNumber(prior.newPatients) : null;
+    const sign = (n) => n >= 0 ? "+" : "";
+
+    lines.push(`
+${entity}`);
+    lines.push(`  Visits:     ${formatWhole(row.visitVolume)}${visitDelta !== null ? "  (" + sign(visitDelta) + visitDelta + " vs prior)" : ""}`);
+    lines.push(`  New Pts:    ${formatWhole(row.newPatients)}${npDelta !== null ? "  (" + sign(npDelta) + npDelta + " vs prior)" : ""}`);
+    lines.push(`  Cash:       ${formatCurrency(row.cashCollected || 0)}`);
+    lines.push(`  No Show:    ${normalizeNumber(row.noShowRate).toFixed(1)}%  |  Cancel: ${normalizeNumber(row.cancellationRate).toFixed(1)}%  |  Abandoned: ${normalizeNumber(row.abandonedCallRate).toFixed(1)}%`);
+    if (row.ptoDays > 0) lines.push(`  PTO Days:   ${row.ptoDays}`);
+    if (row.operationsNarrative) lines.push(`  Notes:      ${row.operationsNarrative}`);
+  });
+
+  lines.push("\n" + "─".repeat(52));
+  lines.push(`Generated by UnityMSK Ops Dashboard · ${new Date().toLocaleDateString()}`);
+  return lines.join("\n");
+}
+
+function showDigestModal(current, comparison, compareAgainst, weekSets) {
+  const existing = byId("digestModal");
+  if (existing) existing.remove();
+
+  const text = generateWeeklyDigest(current, comparison, compareAgainst, weekSets);
+
+  const modal = document.createElement("div");
+  modal.id = "digestModal";
+  modal.className = "changelogModalOverlay";
+  modal.innerHTML = `
+    <div class="changelogModalBox" style="max-width:620px;">
+      <div class="changelogModalHeader">
+        <div class="changelogModalMeta">
+          <span class="changelogModalTag">Weekly Summary</span>
+        </div>
+        <h2 class="changelogModalTitle">Email / Teams Digest</h2>
+        <p class="changelogModalSub">Copy and paste into an email or Teams message to share with leadership.</p>
+      </div>
+      <div class="changelogModalBody" style="padding:16px 24px;">
+        <textarea id="digestTextarea" class="digestTextarea" readonly>${text}</textarea>
+      </div>
+      <div class="changelogModalFooter">
+        <button type="button" class="changelogViewAllBtn" id="digestCopyBtn">Copy to Clipboard</button>
+        <button type="button" class="changelogDismissBtn" id="digestCloseBtn">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  modal.style.display = "flex";
+  document.body.style.overflow = "hidden";
+
+  byId("digestCloseBtn").onclick = () => {
+    modal.remove();
+    document.body.style.overflow = "";
+  };
+  modal.onclick = (e) => { if (e.target === modal) { modal.remove(); document.body.style.overflow = ""; } };
+
+  byId("digestCopyBtn").onclick = () => {
+    const ta = byId("digestTextarea");
+    ta.select();
+    document.execCommand("copy");
+    byId("digestCopyBtn").textContent = "Copied ✓";
+    setTimeout(() => { byId("digestCopyBtn").textContent = "Copy to Clipboard"; }, 2000);
+  };
+}
+
+
+// ── Threshold Settings View ───────────────────────────────────
+function renderThresholdSettingsView() {
+  const container = byId("thresholdSettingsContent");
+  if (!container) return;
+
+  const thresholds = [
+    { key: "noShowRate",        label: "No-Show Rate Alert (%)",        unit: "%", desc: "Alert fires when no-show rate exceeds this value" },
+    { key: "cancellationRate",  label: "Cancellation Rate Alert (%)",   unit: "%", desc: "Alert fires when cancellation rate exceeds this value" },
+    { key: "abandonedCallRate", label: "Abandoned Call Rate Alert (%)", unit: "%", desc: "Alert fires when abandoned call rate exceeds this value" },
+    { key: "visitDropVsPrior",  label: "Visit Drop Alert (visits)",     unit: "",  desc: "Alert fires when visits drop more than this vs prior period" }
+  ];
+
+  container.innerHTML = `
+    <div class="thresholdGrid">
+      ${thresholds.map(t => `
+        <div class="thresholdRow">
+          <div class="thresholdInfo">
+            <div class="thresholdLabel">${t.label}</div>
+            <div class="thresholdDesc">${t.desc}</div>
+          </div>
+          <div class="thresholdInputWrap">
+            <input
+              type="number"
+              class="thresholdInput"
+              data-key="${t.key}"
+              value="${getThreshold(t.key, THRESHOLD_DEFAULTS[t.key])}"
+              min="0"
+              step="0.5"
+            />
+            ${t.unit ? `<span class="thresholdUnit">${t.unit}</span>` : ""}
+          </div>
+        </div>
+      `).join("")}
+    </div>
+    <div class="goalActions">
+      <button type="button" class="primaryBtn" id="saveThresholdsBtn">Save Thresholds</button>
+      <button type="button" class="secondaryBtn" id="resetThresholdsBtn">Reset to Defaults</button>
+    </div>
+    <div id="thresholdStatusBanner" class="goalStatusBanner" style="display:none;"></div>
+  `;
+
+  byId("saveThresholdsBtn").addEventListener("click", () => {
+    container.querySelectorAll(".thresholdInput").forEach(input => {
+      const key = input.dataset.key;
+      const val = parseFloat(input.value);
+      if (Number.isFinite(val)) setThreshold(key, val);
+    });
+    const banner = byId("thresholdStatusBanner");
+    if (banner) { banner.textContent = "Thresholds saved."; banner.className = "goalStatusBanner goalStatusGood"; banner.style.display = ""; setTimeout(() => banner.style.display = "none", 3000); }
+  });
+
+  byId("resetThresholdsBtn").addEventListener("click", () => {
+    resetThresholds();
+    renderThresholdSettingsView();
+    const banner = byId("thresholdStatusBanner");
+    if (banner) { banner.textContent = "Reset to defaults."; banner.className = "goalStatusBanner goalStatusNeutral"; banner.style.display = ""; setTimeout(() => banner.style.display = "none", 3000); }
+  });
+}
+
+function showThresholdSettingsView() {
+  hideAllViews();
+  const el = byId("thresholdSettingsView");
+  if (el) el.style.display = "";
+  setActiveNav("navThresholdSettingsBtn");
+  renderThresholdSettingsView();
 }
 
     initChangelog();
