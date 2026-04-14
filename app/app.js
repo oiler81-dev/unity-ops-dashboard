@@ -2836,6 +2836,25 @@ function buildWeekSets() {
     };
   }
 
+  if (periodType === "ytd") {
+    const now = new Date();
+    const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    const today = now.toISOString().slice(0, 10);
+    const primaryWeeks = [];
+    const walker = new Date(yearStart);
+    while (walker.toISOString().slice(0, 10) <= today) {
+      if (walker.getUTCDay() === 5) primaryWeeks.push(walker.toISOString().slice(0, 10));
+      walker.setUTCDate(walker.getUTCDate() + 1);
+    }
+    const comparisonWeeks = primaryWeeks.map((w) => addDays(w, -364));
+    const yearLabel = now.getUTCFullYear();
+    return {
+      primaryWeeks,
+      comparisonWeeks,
+      summary: `Year to Date ${yearLabel} (${primaryWeeks.length} weeks)`
+    };
+  }
+
   if (periodType === "custom") {
     const primaryWeeks = [];
     const start = new Date(`${customStart}T12:00:00Z`);
@@ -2866,7 +2885,7 @@ function buildWeekSets() {
 function syncDashboardPeriodUi() {
   const periodType = byId("dashboardPeriodType")?.value || "lastWeek";
   const custom = periodType === "custom";
-  const hideAnchor = periodType === "mtd";
+  const hideAnchor = periodType === "mtd" || periodType === "lastMonth" || periodType === "ytd";
 
   const weekWrap = byId("dashboardWeekWrap");
   const startWrap = byId("dashboardCustomStartWrap");
@@ -4289,6 +4308,16 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
         if (periodSelect) periodSelect.value = preset;
         syncDashboardPeriodUi();
         syncQuickPresetPills(preset);
+        // Auto-set anchor week for period types that use it
+        const anchorInput = byId("dashboardWeekEnding");
+        if (anchorInput) {
+          const pt = byId("dashboardPeriodType")?.value;
+          if (pt === "lastMonth" || pt === "ytd") {
+            anchorInput.value = "";
+          } else if (!anchorInput.value) {
+            anchorInput.value = getDefaultWeekEnding();
+          }
+        }
         try {
           await loadDashboardLanding();
         } catch (e) {
@@ -4617,7 +4646,7 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
 
 const CHANGELOG = [
   {
-    version: "1.9.0",
+    version: "2.0.0",
     date: "2026-04-14",
     label: "Latest",
     sections: [
@@ -4626,6 +4655,8 @@ const CHANGELOG = [
         title: "New Features",
         items: [
           "Visit Volume KPI card now shows per-day average — displays alongside the vs prior or budget comparison (e.g. 539.8/day avg), period and entity-aware",
+          "Year to Date (YTD) period option added to dashboard — pulls all Fridays from Jan 1 to today and compares against the same period last year",
+          "Anchor Week field now hides automatically when Last Month or YTD is selected — clears cleanly so it does not imply a selection that has no effect",
           "PT scope dashboard — Entity Scope dropdown now includes NES-PT, SpineOne-PT, MRO-PT, and All PT Programs as dedicated views",
           "PT-specific KPI cards — visits seen, scheduled visits, utilization rate, units billed, cancellations, no shows, reschedules, and units per visit",
           "PT entity cards — each PT entity gets a dedicated card with utilization progress bar and health stats",
@@ -4671,6 +4702,7 @@ const CHANGELOG = [
         title: "Improvements",
         items: [
           "Visit Volume per-day avg is period-aware — Last Week divides by 5 days, Rolling 4 divides by 20, NES uses 4.5 days/week automatically",
+          "Period dropdown now has 6 options: Last Week, MTD, Last Month, YTD, Rolling 4 Weeks, Custom Range",
           "NES working days updated to 4.5 per week — budget proration, PTO forecast rates, and PT calculations all reflect Portland's actual schedule",
           "Entity-specific working days config — each entity has its own default; NES is 4.5, all others 5",
           "Working days hint banner appears in weekly entry when an entity operates fewer than 5 days",
