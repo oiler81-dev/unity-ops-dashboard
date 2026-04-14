@@ -4277,7 +4277,7 @@ function injectUiPolishStyles() {
 
 const CHANGELOG = [
   {
-    version: "1.7.0",
+    version: "1.8.0",
     date: "2026-04-14",
     label: "Latest",
     sections: [
@@ -4285,23 +4285,24 @@ const CHANGELOG = [
         type: "feature",
         title: "New Features",
         items: [
-          "Command View — dark terminal-style alternate theme with Syne + JetBrains Mono typography and scan-line overlay",
+          "PT scope dashboard — Entity Scope dropdown now includes NES-PT, SpineOne-PT, MRO-PT, and All PT Programs as dedicated views",
+          "PT-specific KPI cards — selecting a PT scope replaces ortho cards with PT Visits Seen, Scheduled Visits, Utilization Rate, Units Billed, Cancellations, No Shows, Reschedules, and Units/Visit",
+          "PT entity cards — each PT entity gets a dedicated card showing visits seen, scheduled, units billed, utilization progress bar, and health stats",
+          "Utilization rate metric — visits seen ÷ scheduled, color coded green above 85%, yellow above 70%, red below",
+          "Command View — dark terminal-style alternate theme with Syne + JetBrains Mono and scan-line overlay",
           "Light View — warm minimalist theme with Inter + IBM Plex Mono and shadow-depth cards",
-          "New Patients KPI card added to top-line dashboard metrics with budget and prior period support",
+          "New Patients KPI card added to top-line dashboard metrics",
           "Rescheduled field added to weekly entry for NES, SpineOne, and MRO",
-          "PTO Forecast inline documentation panel covering formula, provider counts, and limitations",
-          "What's New modal — version-aware popup on login showing recent changes",
-          "Changelog view — full release history accessible from sidebar",
-          "Data completeness banner — shows which entities are missing data for the selected week with a direct link to enter",
-          "Inline ops narrative — weekly notes now visible directly on entity cards under More Detail",
-          "Alert Thresholds editor — configure no-show, cancel, and abandoned rate alert triggers from Admin without touching code",
-          "Goal Settings — set weekly visit, NP, and cash targets per entity from Admin",
-          "Weekly Digest generator — copy-ready email and Teams summary with one click from the dashboard",
-          "Automated digest prompt — toast appears when all entities have entered data for the week",
-          "Mobile responsive layout — sidebar, cards, and filters adapt to phone and tablet screens",
-          "SpineOne PI trend chart — PI new patients and cash collection charted over time in Trends view",
-          "Provider-level PTO breakdown — add individual providers by name, type, and days within PTO Forecast",
-          "Phone system integration foundation — Azure Functions for Landis webhook (LAOSS + NES) and RingCentral polling (MRO + SpineOne) writing to CallData table"
+          "Data completeness banner — shows missing entities with a direct link to enter data",
+          "Inline ops narrative — weekly notes visible on entity cards under More Detail",
+          "Alert Thresholds editor — configure alert triggers from Admin without code changes",
+          "Goal Settings — set weekly targets per entity from Admin",
+          "Weekly Digest generator — copy-ready email and Teams summary from the dashboard",
+          "Automated digest prompt — toast fires when all entities have entered data for the week",
+          "Mobile responsive layout — sidebar, cards, and filters adapt to phone and tablet",
+          "SpineOne PI trend chart — PI NP and cash charted over time in Trends view",
+          "Provider-level PTO breakdown — add individual providers by name and days in PTO Forecast",
+          "Phone system integration foundation — Landis webhook (LAOSS + NES) and RingCentral polling (MRO + SpineOne)"
         ]
       },
       {
@@ -4312,10 +4313,10 @@ const CHANGELOG = [
           "Anchor week off-by-one — selecting 4/10 now loads the 4/10 record as expected",
           "Budget comparison always showing zero — daysInPeriod now uses entity-specific defaults",
           "Reschedules field not visible on initial load — syncEntryModeVisibility now called on first render",
-          "No Show, Cancel, Abandoned stats blank on entity cards — CSS specificity conflict resolved, values now display correctly with color coding",
+          "No Show, Cancel, Abandoned stats blank on entity cards — CSS specificity conflict resolved",
           "Week ending date change wiping unsaved form data — confirmation dialog added before reloading",
           "Week ending auto-defaulting to next Friday instead of most recent past Friday",
-          "Non-Friday week ending dates — field now auto-corrects to nearest prior Friday with a visible notice",
+          "Non-Friday week ending dates auto-correct to nearest prior Friday with a visible notice",
           "LAOSS 4/12 record migrated to correct date 4/10"
         ]
       },
@@ -4324,12 +4325,11 @@ const CHANGELOG = [
         title: "Improvements",
         items: [
           "NES working days updated to 4.5 per week — budget proration, PTO forecast rates, and PT calculations all reflect Portland's actual schedule",
-          "Entity-specific working days config — LAOSS, SpineOne, MRO default to 5; NES defaults to 4.5; configurable per entity going forward",
+          "Entity-specific working days config — each entity has its own default; NES is 4.5, all others 5",
           "Working days hint banner appears in weekly entry when an entity operates fewer than 5 days",
-          "Week ending field now shows 'must be a Friday' label and helper text explaining correct selection",
-          "All 48 budget records seeded to Azure BudgetData table from 2026 spreadsheet",
-          "View mode toggles are mutually exclusive and persist across sessions via localStorage",
-          "formatPercent now returns '—' instead of NaN% for missing values"
+          "Week ending field shows 'must be a Friday' label and helper text with an example date",
+          "formatPercent now returns '—' instead of NaN% for missing values",
+          "View mode toggles are mutually exclusive and persist across sessions via localStorage"
         ]
       }
     ]
