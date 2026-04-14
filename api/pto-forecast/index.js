@@ -8,6 +8,14 @@ const SETTINGS_TABLE = "ProviderSettingsData";
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 const RATE_WEEKS = 12; // weeks of history used to compute daily rates
 
+// Default working days per week per entity
+const ENTITY_WORKING_DAYS = {
+  LAOSS:    5,
+  NES:      4.5,
+  SpineOne: 5,
+  MRO:      5
+};
+
 // Fallback defaults if provider settings haven't been configured yet
 const PROVIDER_DEFAULTS = {
   LAOSS:    { mdCount: 21, paCount: 14, ptCount: 0 },
@@ -95,9 +103,10 @@ async function computeEntityRates(regionTable, entity) {
       return sum + toNumber(v.surgeryActual ?? v.surgeries ?? r.surgeries, 0);
     }, 0);
 
+    const defaultDays = ENTITY_WORKING_DAYS[entity] ?? 5;
     const totalDays = recent.reduce((sum, r) => {
       const v = safeParseJson(r.valuesJson, {});
-      return sum + toNumber(v.daysInPeriod ?? r.daysInPeriod, 5);
+      return sum + toNumber(v.daysInPeriod ?? r.daysInPeriod, defaultDays);
     }, 0);
 
     const nonSurgicalVisits = Math.max(0, totalVisits - totalSurgeries);
