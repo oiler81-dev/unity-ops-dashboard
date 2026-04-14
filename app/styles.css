@@ -1791,3 +1791,671 @@ body.lightView #changelogViewEntries .clReleaseCurrent {
 }
 
 body.lightView .changelogNavBadge { background: #c49a1a; color: #fff; }
+
+/* ════════════════════════════════════════════════════════════════
+   ENHANCEMENTS: Completeness, Narrative, Goals, Thresholds,
+                 Digest, Mobile
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Data Completeness Banner ───────────────────────────────── */
+#dashboardCompletenessBanner { margin-bottom: 12px; }
+
+.completenessBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid;
+}
+
+.completenessGood {
+  background: rgba(34,212,122,0.07);
+  border-color: rgba(34,212,122,0.2);
+  color: var(--text-soft);
+}
+
+.completenessWarn {
+  background: rgba(245,200,66,0.07);
+  border-color: rgba(245,200,66,0.2);
+  color: var(--text-soft);
+}
+
+.completenessIcon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.completenessGood .completenessIcon { color: #22d47a; }
+.completenessWarn .completenessIcon { color: #f5c842; }
+
+.completenessAction {
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  margin-left: 6px;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.completenessAction:hover { text-decoration-color: var(--accent); }
+
+/* ── Inline Narrative on Entity Cards ───────────────────────── */
+.entityNarrativeBlock {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  background: var(--bg-panel-inner);
+  border-radius: 7px;
+  border: 1px solid var(--border-soft);
+}
+
+.entityNarrativeLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.entityNarrativeText {
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+/* ── Goal Settings ───────────────────────────────────────────── */
+.goalGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  padding: 20px 20px 0;
+}
+
+.goalEntityBlock {
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.goalEntityTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.goalRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 12px;
+}
+
+.goalLabel {
+  font-size: 11px;
+  color: var(--text-soft);
+  flex: 1;
+}
+
+.goalInput {
+  width: 110px;
+  text-align: right;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.goalActions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+
+.goalStatusBanner {
+  margin: 0 20px 16px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.goalStatusGood    { background: rgba(34,212,122,0.1); color: #22d47a; }
+.goalStatusNeutral { background: rgba(247,198,47,0.1); color: var(--accent); }
+
+/* ── Threshold Settings ──────────────────────────────────────── */
+.thresholdGrid {
+  padding: 20px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.thresholdRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-soft);
+  gap: 20px;
+}
+
+.thresholdRow:last-child { border-bottom: none; }
+
+.thresholdInfo { flex: 1; }
+
+.thresholdLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.thresholdDesc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.thresholdInputWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.thresholdInput {
+  width: 80px;
+  text-align: right;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-med);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.thresholdUnit {
+  font-size: 12px;
+  color: var(--text-muted);
+  width: 16px;
+}
+
+/* ── Weekly Digest Modal ─────────────────────────────────────── */
+.digestTextarea {
+  width: 100%;
+  height: 320px;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text);
+  resize: none;
+  outline: none;
+}
+
+/* ── Mobile Responsive ───────────────────────────────────────── */
+@media (max-width: 768px) {
+  #appShell {
+    flex-direction: column;
+  }
+
+  #sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+    padding: 8px 12px;
+    gap: 6px;
+    display: flex;
+    align-items: center;
+  }
+
+  .sidebarBrand {
+    border-bottom: none;
+    border-right: 1px solid var(--border-soft);
+    padding: 4px 12px 4px 0;
+    flex-shrink: 0;
+    min-width: 48px;
+  }
+
+  .sidebarBrandLogo { height: 28px; }
+
+  .sidebarGroup,
+  .sidebarGroupBottom {
+    border: none;
+    padding: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .sidebarGroupLabel { display: none; }
+
+  #sidebar button {
+    padding: 6px 10px;
+    font-size: 10px;
+    white-space: nowrap;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .sidebarIcon { display: none; }
+
+  .changelogNavBadge { display: none !important; }
+
+  #topbar {
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pageSubheading { display: none; }
+
+  h1 { font-size: 16px; }
+
+  .eyebrow { font-size: 9px; }
+
+  .topbarMeta {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .commandViewBtn { font-size: 10px; padding: 5px 9px; }
+  .commandViewLabel, .lightViewLabel { display: none; }
+
+  main { padding: 0; }
+
+  .entityCardGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .filterShell .fieldRow {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dashboardThreeUp {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cardGrid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .goalGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .changelogModalBox {
+    margin: 12px;
+    max-height: 90vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .cardGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  #sidebar button .sidebarIcon { display: none; }
+}
+
+/* ── Light View overrides for new components ─────────────────── */
+body.lightView .completenessBanner { color: var(--text); }
+body.lightView .entityNarrativeBlock { background: #f2f1ee; border-color: rgba(0,0,0,0.07); }
+body.lightView .entityNarrativeText  { color: #4a607a; }
+body.lightView .goalEntityBlock      { background: #f9f8f6; border-color: rgba(0,0,0,0.07); }
+body.lightView .goalInput,
+body.lightView .thresholdInput       { background: #fff; border-color: rgba(0,0,0,0.12); color: #1a2332; }
+body.lightView .thresholdRow         { border-bottom-color: rgba(0,0,0,0.07); }
+body.lightView .digestTextarea       { background: #f9f8f6; border-color: rgba(0,0,0,0.1); color: #1a2332; }
+
+/* ════════════════════════════════════════════════════════════════
+   PI TRENDS, PROVIDER PTO, AUTOMATED DIGEST TOAST
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Provider-level PTO breakdown ────────────────────────────── */
+.ptoProviderBreakdown {
+  margin-top: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ptoProviderBreakdownToggle {
+  padding: 9px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  cursor: pointer;
+  list-style: none;
+  background: var(--bg-panel-soft);
+  transition: background 0.15s;
+}
+
+.ptoProviderBreakdownToggle::-webkit-details-marker { display: none; }
+.ptoProviderBreakdown[open] .ptoProviderBreakdownToggle { background: var(--bg-panel-inner); }
+
+.ptoProviderList {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ptoProviderRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ptoProviderName {
+  flex: 2;
+  min-width: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.ptoProviderType {
+  width: 60px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.ptoProviderDays {
+  width: 70px;
+  text-align: right;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-med);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.ptoRemoveProviderBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.ptoRemoveProviderBtn:hover {
+  background: rgba(255,69,96,0.1);
+  border-color: rgba(255,69,96,0.3);
+  color: #ff4560;
+}
+
+.ptoAddProviderBtn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px dashed rgba(247,198,47,0.3);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.ptoAddProviderBtn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* ── All-data entered toast ──────────────────────────────────── */
+.allDataToast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--bg-panel);
+  border: 1px solid rgba(34,212,122,0.3);
+  border-left: 4px solid #22d47a;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+  max-width: 440px;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.16,1,0.3,1), opacity 0.3s ease;
+}
+
+.allDataToast.allDataToastVisible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.allDataToastIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(34,212,122,0.12);
+  color: #22d47a;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.allDataToastContent { flex: 1; min-width: 0; }
+
+.allDataToastTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.allDataToastSub {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.allDataToastActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.allDataToastBtn {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: none;
+  background: var(--accent);
+  color: #000;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.allDataToastBtn:hover { opacity: 0.85; }
+
+.allDataToastDismiss {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.allDataToastDismiss:hover { color: var(--text); background: var(--bg-glass); }
+
+/* Light view overrides */
+body.lightView .allDataToast {
+  background: #fff;
+  border-color: rgba(13,156,126,0.2);
+  border-left-color: #0d9c7e;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+
+body.lightView .allDataToastTitle { color: #1a2332; }
+body.lightView .allDataToastSub   { color: #4a607a; }
+body.lightView .ptoProviderName,
+body.lightView .ptoProviderType,
+body.lightView .ptoProviderDays { background: #fff; border-color: rgba(0,0,0,0.12); color: #1a2332; }
+body.lightView .ptoProviderBreakdownToggle { background: #f9f8f6; color: #4a607a; }
+
+/* ════════════════════════════════════════════════════════════════
+   CALL DATA SYNC BANNER
+   ════════════════════════════════════════════════════════════════ */
+
+.callDataBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 14px;
+  border: 1px solid;
+  transition: all 0.2s ease;
+}
+
+.callDataBannerLoading {
+  background: rgba(77,159,255,0.06);
+  border-color: rgba(77,159,255,0.2);
+  color: var(--text-soft);
+}
+
+.callDataBannerMissing {
+  background: rgba(255,255,255,0.03);
+  border-color: var(--border-soft);
+  color: var(--text-muted);
+}
+
+.callDataBannerSynced {
+  background: rgba(93,232,240,0.06);
+  border-color: rgba(93,232,240,0.2);
+  color: var(--text-soft);
+}
+
+.callDataBannerIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.callDataBannerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.callDataBannerText strong {
+  color: var(--accent-3);
+}
+
+.callDataBannerSource {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Light view */
+body.lightView .callDataBannerSynced {
+  background: rgba(13,156,126,0.05);
+  border-color: rgba(13,156,126,0.2);
+}
+body.lightView .callDataBannerText strong { color: #0d9c7e; }
+body.lightView .callDataBannerMissing { border-color: rgba(0,0,0,0.08); color: #8fa3b8; }
+
+/* ── Week Ending Field Guardrails ────────────────────────────── */
+.fieldHint {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+
+.weekEndingWarning {
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ff6b6b;
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: rgba(255,107,107,0.1);
+  border: 1px solid rgba(255,107,107,0.25);
+}
+
+.weekEndingCorrected {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: rgba(247,198,47,0.3);
+}
+
+.weekEndingHint {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.weekEndingHint strong {
+  color: var(--text-soft);
+}
+
+body.lightView .weekEndingWarning { color: #dc3545; background: rgba(220,53,69,0.06); }
+body.lightView .weekEndingCorrected { color: #c49a1a; background: rgba(196,154,26,0.08); }
+body.lightView .weekEndingHint { color: #8fa3b8; }
+body.lightView .fieldHint { color: #8fa3b8; }
