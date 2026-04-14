@@ -255,9 +255,20 @@ function setDashboardDebug(data) {
 }
 
 function getDefaultWeekEnding() {
+  // Always return the most recent past Friday (or today if today is Friday)
   const d = new Date();
-  const diff = (5 - d.getDay() + 7) % 7;
-  d.setDate(d.getDate() + diff);
+  const day = d.getDay(); // 0=Sun, 5=Fri
+  const daysBack = day >= 5 ? day - 5 : day + 2; // how many days back to reach Friday
+  d.setDate(d.getDate() - daysBack);
+  return d.toISOString().slice(0, 10);
+}
+
+function nearestPriorFriday(isoDate) {
+  const d = new Date(isoDate + "T12:00:00Z");
+  const day = d.getUTCDay();
+  if (day === 5) return isoDate;
+  const daysBack = day < 5 ? day + 2 : day - 5;
+  d.setUTCDate(d.getUTCDate() - daysBack);
   return d.toISOString().slice(0, 10);
 }
 
@@ -3936,6 +3947,31 @@ function injectUiPolishStyles() {
 
     if (byId("weekEnding")) {
       byId("weekEnding").addEventListener("change", async () => {
+        const input = byId("weekEnding");
+        const warning = byId("weekEndingWarning");
+
+        // Snap to nearest Friday if not already a Friday
+        if (input?.value) {
+          const d = new Date(input.value + "T12:00:00Z");
+          const day = d.getUTCDay(); // 0=Sun, 5=Fri
+          if (day !== 5) {
+            // Calculate how many days to shift to nearest prior Friday
+            const daysToFriday = day < 5 ? -(day + 2) : -(day - 5);
+            d.setUTCDate(d.getUTCDate() + daysToFriday);
+            const corrected = d.toISOString().slice(0, 10);
+
+            if (warning) {
+              warning.textContent = `⚠ ${input.value} is not a Friday — auto-corrected to ${corrected}.`;
+              warning.style.display = "";
+              warning.className = "weekEndingWarning weekEndingCorrected";
+              setTimeout(() => { if (warning) warning.style.display = "none"; }, 5000);
+            }
+            input.value = corrected;
+          } else {
+            if (warning) warning.style.display = "none";
+          }
+        }
+
         // If the user has unsaved data in the form, warn before wiping
         const hasUnsavedData = formHasUnsavedData();
         if (hasUnsavedData) {
@@ -3943,7 +3979,6 @@ function injectUiPolishStyles() {
             "You have unsaved data in the form. Changing the week will load the new date and your current entries will be lost.\n\nContinue?"
           );
           if (!confirmed) {
-            // Revert the date back to whatever was loaded
             const prev = currentWeekData?.weekEnding || getDefaultWeekEnding();
             byId("weekEnding").value = prev;
             return;
