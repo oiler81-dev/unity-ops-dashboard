@@ -4265,8 +4265,8 @@ function injectUiPolishStyles() {
 
 const CHANGELOG = [
   {
-    version: "1.6.0",
-    date: "2026-04-13",
+    version: "1.7.0",
+    date: "2026-04-14",
     label: "Latest",
     sections: [
       {
@@ -4279,7 +4279,17 @@ const CHANGELOG = [
           "Rescheduled field added to weekly entry for NES, SpineOne, and MRO",
           "PTO Forecast inline documentation panel covering formula, provider counts, and limitations",
           "What's New modal — version-aware popup on login showing recent changes",
-          "Changelog view — full release history accessible from sidebar"
+          "Changelog view — full release history accessible from sidebar",
+          "Data completeness banner — shows which entities are missing data for the selected week with a direct link to enter",
+          "Inline ops narrative — weekly notes now visible directly on entity cards under More Detail",
+          "Alert Thresholds editor — configure no-show, cancel, and abandoned rate alert triggers from Admin without touching code",
+          "Goal Settings — set weekly visit, NP, and cash targets per entity from Admin",
+          "Weekly Digest generator — copy-ready email and Teams summary with one click from the dashboard",
+          "Automated digest prompt — toast appears when all entities have entered data for the week",
+          "Mobile responsive layout — sidebar, cards, and filters adapt to phone and tablet screens",
+          "SpineOne PI trend chart — PI new patients and cash collection charted over time in Trends view",
+          "Provider-level PTO breakdown — add individual providers by name, type, and days within PTO Forecast",
+          "Phone system integration foundation — Azure Functions for Landis webhook (LAOSS + NES) and RingCentral polling (MRO + SpineOne) writing to CallData table"
         ]
       },
       {
@@ -4288,17 +4298,53 @@ const CHANGELOG = [
         items: [
           "PT entry wiping ortho data — saving in PT mode no longer zeros ortho fields and vice versa",
           "Anchor week off-by-one — selecting 4/10 now loads the 4/10 record as expected",
-          "Budget comparison always showing zero — daysInPeriod now defaults to 5 for manual entries",
-          "Reschedules field not visible on initial load — syncEntryModeVisibility now called on first render"
+          "Budget comparison always showing zero — daysInPeriod now uses entity-specific defaults",
+          "Reschedules field not visible on initial load — syncEntryModeVisibility now called on first render",
+          "No Show, Cancel, Abandoned stats blank on entity cards — CSS specificity conflict resolved, values now display correctly with color coding",
+          "Week ending date change wiping unsaved form data — confirmation dialog added before reloading",
+          "Week ending auto-defaulting to next Friday instead of most recent past Friday",
+          "Non-Friday week ending dates — field now auto-corrects to nearest prior Friday with a visible notice",
+          "LAOSS 4/12 record migrated to correct date 4/10"
         ]
       },
       {
         type: "improvement",
         title: "Improvements",
         items: [
+          "NES working days updated to 4.5 per week — budget proration, PTO forecast rates, and PT calculations all reflect Portland's actual schedule",
+          "Entity-specific working days config — LAOSS, SpineOne, MRO default to 5; NES defaults to 4.5; configurable per entity going forward",
+          "Working days hint banner appears in weekly entry when an entity operates fewer than 5 days",
+          "Week ending field now shows 'must be a Friday' label and helper text explaining correct selection",
           "All 48 budget records seeded to Azure BudgetData table from 2026 spreadsheet",
-          "Budget debug fields added — hasBudgetRecord, daysInPeriod, visitBudgetMonthly visible in debug panel",
-          "View mode toggles are mutually exclusive and persist across sessions via localStorage"
+          "View mode toggles are mutually exclusive and persist across sessions via localStorage",
+          "formatPercent now returns '—' instead of NaN% for missing values"
+        ]
+      }
+    ]
+  },
+  {
+    version: "1.6.0",
+    date: "2026-04-13",
+    sections: [
+      {
+        type: "feature",
+        title: "New Features",
+        items: [
+          "Command View and Light View theme toggles",
+          "New Patients KPI card on dashboard",
+          "Rescheduled field for NES, SpineOne, MRO",
+          "PTO Forecast How It Works panel",
+          "What's New modal and Changelog sidebar view"
+        ]
+      },
+      {
+        type: "fix",
+        title: "Bug Fixes",
+        items: [
+          "PT entry wiping ortho data on save",
+          "Anchor week showing previous week's data",
+          "Budget comparison returning zero",
+          "Reschedules field hidden on initial load"
         ]
       }
     ]
