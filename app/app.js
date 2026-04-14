@@ -4067,7 +4067,7 @@ function renderDashboardCardsPt(current, comparison, entities, compareAgainst) {
       label: "Utilization Rate",
       value: `${utilRate}%`,
       meta: `${visitsSeen} seen of ${scheduled} scheduled`,
-      className: utilRate >= 85 ? "kpi-good" : utilRate >= 70 ? "kpi-warning" : "kpi-bad"
+      className: utilRate >= 85 ? "kpi-positive" : utilRate >= 70 ? "kpi-neutral" : "kpi-negative"
     },
     {
       label: "Units Billed",
@@ -4080,13 +4080,13 @@ function renderDashboardCardsPt(current, comparison, entities, compareAgainst) {
       label: "Cancellations",
       value: formatWhole(cancellations),
       meta: `${cancelRate}% cancel rate`,
-      className: cancelRate >= 10 ? "kpi-bad" : cancelRate >= 6 ? "kpi-warning" : "kpi-good"
+      className: cancelRate >= 10 ? "kpi-negative" : cancelRate >= 6 ? "kpi-neutral" : "kpi-positive"
     },
     {
       label: "No Shows",
       value: formatWhole(noShows),
       meta: `${noShowRate}% no-show rate`,
-      className: noShowRate >= 8 ? "kpi-bad" : noShowRate >= 5 ? "kpi-warning" : "kpi-good"
+      className: noShowRate >= 8 ? "kpi-negative" : noShowRate >= 5 ? "kpi-neutral" : "kpi-positive"
     },
     {
       label: "Reschedules",
