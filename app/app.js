@@ -1141,18 +1141,21 @@ function renderDataCompletenessBanner(current, entityScope, weekSets) {
     ? new Date(weekSets.primaryWeeks[0] + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : "selected week";
 
+  const entityWord = total === 1 ? "entity" : "entities";
+  const scopeLabel = isPtScope(entityScope) ? " PT programs" : ` ${entityWord}`;
+
   if (missing.length === 0) {
     container.innerHTML = `
       <div class="completenessBanner completenessGood">
         <span class="completenessIcon">✓</span>
-        <span class="completenessText">All <strong>${total}</strong> entities have data entered for the week of ${weekLabel}.</span>
+        <span class="completenessText">All <strong>${total}</strong>${scopeLabel} have data entered for the week of ${weekLabel}.</span>
       </div>`;
   } else {
     container.innerHTML = `
       <div class="completenessBanner completenessWarn">
         <span class="completenessIcon">◆</span>
         <span class="completenessText">
-          <strong>${entered} of ${total}</strong> entities have data for the week of ${weekLabel}.
+          <strong>${entered} of ${total}</strong>${scopeLabel} have data for the week of ${weekLabel}.
           Missing: <strong>${missing.join(", ")}</strong>.
           <span class="completenessAction" onclick="showEntryViewForMissing('${missing[0]}')">Enter data →</span>
         </span>
@@ -4842,14 +4845,36 @@ async function loadDashboardLandingPt(entityScope, compareAgainst, weekSets) {
   const current    = await loadDashboardDataForWeeks(weekSets.primaryWeeks, "ALL", {});
   const comparison = await loadDashboardDataForWeeks(weekSets.comparisonWeeks, "ALL", {});
 
-  // Filter regions to PT entities only
-  const filterPt = (data) => ({
-    ...data,
-    regions: (data.regions || []).filter(r => entities.includes(r.entity))
-  });
+  // Filter regions to PT entities only AND recompute ptTotals from filtered set
+  const filterPt = (data) => {
+    const regions = (data.regions || []).filter(r => entities.includes(r.entity));
+    const ptTotals = {
+      scheduledVisits:  regions.reduce((s, r) => s + normalizeNumber(r.pt?.scheduledVisits), 0),
+      cancellations:    regions.reduce((s, r) => s + normalizeNumber(r.pt?.cancellations), 0),
+      noShows:          regions.reduce((s, r) => s + normalizeNumber(r.pt?.noShows), 0),
+      reschedules:      regions.reduce((s, r) => s + normalizeNumber(r.pt?.reschedules), 0),
+      totalUnitsBilled: regions.reduce((s, r) => s + normalizeNumber(r.pt?.totalUnitsBilled), 0),
+      visitsSeen:       regions.reduce((s, r) => s + normalizeNumber(r.pt?.visitsSeen), 0)
+    };
+    const totals = {
+      visitVolume:   regions.reduce((s, r) => s + normalizeNumber(r.visitVolume), 0),
+      newPatients:   regions.reduce((s, r) => s + normalizeNumber(r.newPatients), 0),
+      cashCollected: regions.reduce((s, r) => s + normalizeNumber(r.cashCollected), 0),
+      callVolume:    regions.reduce((s, r) => s + normalizeNumber(r.callVolume), 0),
+      surgeries:     regions.reduce((s, r) => s + normalizeNumber(r.surgeries), 0),
+      ptoDays:       regions.reduce((s, r) => s + normalizeNumber(r.ptoDays), 0)
+    };
+    return { ...data, regions, ptTotals, totals };
+  };
 
   const currentPt    = filterPt(current);
   const comparisonPt = filterPt(comparison);
+
+  // Clear stale ortho cards before rendering PT view
+  const dashCards = byId("dashboardCards");
+  if (dashCards) dashCards.innerHTML = "";
+  const dashEntities = byId("dashboardEntities");
+  if (dashEntities) dashEntities.innerHTML = "";
 
   const summaryEl = byId("dashboardSummaryText");
   if (summaryEl) {
