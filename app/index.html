@@ -40,6 +40,8 @@
         <div class="sidebarGroupLabel">Admin</div>
         <button id="navImportBtn" type="button"><span class="sidebarIcon">⇪</span>Import Data</button>
         <button id="navProviderSettingsBtn" type="button"><span class="sidebarIcon">⊞</span>Provider Settings</button>
+        <button id="navGoalSettingsBtn" type="button"><span class="sidebarIcon">◎</span>Goal Settings</button>
+        <button id="navThresholdSettingsBtn" type="button"><span class="sidebarIcon">⧖</span>Alert Thresholds</button>
       </div>
 
       <div class="sidebarGroupBottom">
@@ -147,8 +149,9 @@
                   <input type="date" id="dashboardCustomEnd" />
                 </div>
 
-                <div class="buttonAlignBottom dashboardButtonWrap">
+                <div class="buttonAlignBottom dashboardButtonWrap" style="display:flex;gap:8px;">
                   <button id="loadDashboardBtn" type="button">Load Dashboard</button>
+                  <button id="digestBtn" type="button" class="secondaryBtn" title="Generate email/Teams digest">📋 Digest</button>
                 </div>
               </div>
 
@@ -182,6 +185,8 @@
               <canvas id="visitsChart" height="120"></canvas>
             </div>
           </div>
+
+          <div id="dashboardCompletenessBanner"></div>
 
           <div class="panel sectionPanel">
             <div class="sectionHeader">
@@ -242,8 +247,12 @@
               </div>
 
               <div>
-                <label for="weekEnding">Week Ending</label>
+                <label for="weekEnding">Week Ending <span class="fieldHint">must be a Friday</span></label>
                 <input type="date" id="weekEnding" />
+                <div id="weekEndingWarning" class="weekEndingWarning" style="display:none;">
+                  ⚠ That date is not a Friday. Week ending must always be a Friday.
+                </div>
+                <div class="weekEndingHint">Select the <strong>Friday</strong> that closes the reporting week — e.g. if reporting on Mon Apr 7 – Fri Apr 11, select <strong>Apr 11</strong>.</div>
               </div>
             </div>
 
@@ -386,6 +395,15 @@
                 <h3>Trend History</h3>
               </div>
               <div id="trendsTableWrap"></div>
+            </div>
+
+            <div id="trendsPiSection" class="panel innerPanel" style="display:none;">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">SpineOne PI Performance</div>
+                <h3>Personal Injury — NP & Cash Trend</h3>
+                <p>Weekly PI new patients and cash collection over the selected period.</p>
+              </div>
+              <canvas id="trendsPiChart" height="120"></canvas>
             </div>
 
             <div class="panel innerPanel ptSectionPanel">
@@ -647,6 +665,37 @@
             <summary>PTO Forecast Debug Output</summary>
             <pre id="ptoForecastDebugOutput" class="debugOutput"></pre>
           </details>
+        </section>
+
+        <section id="goalSettingsView" style="display:none;">
+          <div class="panel heroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Admin — Planning</div>
+                <h3>Goal Settings</h3>
+                <p>Set weekly visit, new patient, and cash targets per entity. Goals appear on entity cards and power the comparison mode alongside budget targets.</p>
+              </div>
+            </div>
+          </div>
+          <div class="panel sectionPanel">
+            <div id="goalStatusBanner" class="goalStatusBanner" style="display:none;"></div>
+            <div id="goalSettingsContent"></div>
+          </div>
+        </section>
+
+        <section id="thresholdSettingsView" style="display:none;">
+          <div class="panel heroPanel">
+            <div class="heroPanelTop">
+              <div class="sectionHeader compact">
+                <div class="sectionEyebrow">Admin — Watchlist</div>
+                <h3>Alert Thresholds</h3>
+                <p>Configure the thresholds that trigger watchlist alerts on the dashboard. Changes take effect immediately on next dashboard load.</p>
+              </div>
+            </div>
+          </div>
+          <div class="panel sectionPanel">
+            <div id="thresholdSettingsContent"></div>
+          </div>
         </section>
 
         <section id="changelogView" style="display:none;">
