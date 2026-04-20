@@ -17,26 +17,34 @@ const KPI_FIELDS = [
 ];
 
 const REGION_USER_MAP = {
-  "tony.guerrero@laorthos.com": { entity: "LAOSS", role: "regional" },
+  // LAOSS — Los Angeles
+  "tguerrero@laorthos.com":      { entity: "LAOSS", role: "regional" },
+  "tony.guerrero@laorthos.com":  { entity: "LAOSS", role: "regional" },  // alias
 
-  "annette@nespecialists.com": { entity: "NES", role: "regional" },
-  "marketa.stuck@nespecialists.com": { entity: "NES", role: "regional" },
+  // NES — Portland
+  "annette@nespecialists.com":         { entity: "NES", role: "regional" },
+  "marketa.stuck@nespecialists.com":   { entity: "NES", role: "regional" },
 
-  "chris.zamucen@spineone.com": { entity: "SpineOne", role: "regional" },
+  // SpineOne — Denver
+  "chris.zamucen@spineone.com":  { entity: "SpineOne", role: "regional" },
   "lauren.bradley@spineone.com": { entity: "SpineOne", role: "regional" },
 
+  // MRO — Chicago
   "greg.lundgren@mrorthopedics.com": { entity: "MRO", role: "regional" },
 
-  "nperez@unitymsk.com": { entity: "admin", role: "admin" },
+  // Admins
+  "nperez@unitymsk.com":       { entity: "admin", role: "admin" },
   "tessa.kelley@spineone.com": { entity: "admin", role: "admin" }
 };
 
 const WEEKLY_TABLE = "WeeklyRegionData";
+const AUDIT_TABLE  = "WeeklyAuditLog";
 
 module.exports = {
   ENTITIES,
   ENTITY_LABELS,
   KPI_FIELDS,
   REGION_USER_MAP,
-  WEEKLY_TABLE
+  WEEKLY_TABLE,
+  AUDIT_TABLE
 };
