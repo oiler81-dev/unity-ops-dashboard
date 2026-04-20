@@ -2220,6 +2220,98 @@ function setPtoForecastDebug(data) {
 }
 
 
+// ── PTO Weekly Breakdown Helpers ─────────────────────────────
+function getFridaysInMonth(monthKey) {
+  // Returns array of {date, label} for each Friday in the month
+  const [yyyy, mm] = monthKey.split("-").map(Number);
+  const fridays = [];
+  const d = new Date(Date.UTC(yyyy, mm - 1, 1));
+  // Advance to first Friday
+  while (d.getUTCDay() !== 5) d.setUTCDate(d.getUTCDate() + 1);
+  let week = 1;
+  while (d.getUTCMonth() === mm - 1) {
+    const iso = d.toISOString().slice(0, 10);
+    const label = `Wk ${week} — ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`;
+    fridays.push({ date: iso, label, week });
+    d.setUTCDate(d.getUTCDate() + 7);
+    week++;
+  }
+  return fridays;
+}
+
+function getPtoWeeklyMode(entity, monthKey) {
+  return localStorage.getItem(`ptoWeeklyMode_${entity}_${monthKey}`) === "1";
+}
+
+function setPtoWeeklyMode(entity, monthKey, on) {
+  localStorage.setItem(`ptoWeeklyMode_${entity}_${monthKey}`, on ? "1" : "0");
+}
+
+function getPtoWeekValue(entity, monthKey, date, type) {
+  const key = `ptoWeek_${entity}_${monthKey}_${date}_${type}`;
+  const v = localStorage.getItem(key);
+  return v !== null ? parseFloat(v) || 0 : 0;
+}
+
+function setPtoWeekValue(entity, monthKey, date, type, value) {
+  localStorage.setItem(`ptoWeek_${entity}_${monthKey}_${date}_${type}`, String(value));
+}
+
+function sumPtoWeekly(entity, monthKey, type) {
+  const fridays = getFridaysInMonth(monthKey);
+  return fridays.reduce((sum, f) => sum + getPtoWeekValue(entity, monthKey, f.date, type), 0);
+}
+
+function renderPtoWeeklyRows(entity, monthKey, hasPt, canEdit) {
+  const fridays = getFridaysInMonth(monthKey);
+  const disabledAttr = canEdit ? "" : "readonly disabled";
+
+  return `
+    <div class="ptoWeeklyTable">
+      <div class="ptoWeeklyHeader">
+        <span class="ptoWeeklyCol ptoWeeklyColLabel">Week Ending</span>
+        <span class="ptoWeeklyCol">MD Days</span>
+        <span class="ptoWeeklyCol">PA Days</span>
+        ${hasPt ? `<span class="ptoWeeklyCol">PT Days</span>` : ""}
+      </div>
+      ${fridays.map(f => `
+        <div class="ptoWeeklyRow" data-date="${f.date}">
+          <span class="ptoWeeklyCol ptoWeeklyColLabel">${f.label}</span>
+          <input type="number" class="ptoWeekInput ptoWeekInputMd"
+            data-entity="${entity}" data-monthkey="${monthKey}" data-date="${f.date}" data-type="md"
+            step="0.5" min="0" placeholder="0"
+            value="${getPtoWeekValue(entity, monthKey, f.date, "md") || ""}"
+            ${disabledAttr} />
+          <input type="number" class="ptoWeekInput ptoWeekInputPa"
+            data-entity="${entity}" data-monthkey="${monthKey}" data-date="${f.date}" data-type="pa"
+            step="0.5" min="0" placeholder="0"
+            value="${getPtoWeekValue(entity, monthKey, f.date, "pa") || ""}"
+            ${disabledAttr} />
+          ${hasPt ? `
+          <input type="number" class="ptoWeekInput ptoWeekInputPt"
+            data-entity="${entity}" data-monthkey="${monthKey}" data-date="${f.date}" data-type="pt"
+            step="0.5" min="0" placeholder="0"
+            value="${getPtoWeekValue(entity, monthKey, f.date, "pt") || ""}"
+            ${disabledAttr} />` : ""}
+        </div>
+      `).join("")}
+      <div class="ptoWeeklyTotalsRow">
+        <span class="ptoWeeklyCol ptoWeeklyColLabel">Month Total</span>
+        <span class="ptoWeeklyTotal" id="ptoWeekTotal_md_${entity}_${monthKey}">
+          ${sumPtoWeekly(entity, monthKey, "md") || "—"}
+        </span>
+        <span class="ptoWeeklyTotal" id="ptoWeekTotal_pa_${entity}_${monthKey}">
+          ${sumPtoWeekly(entity, monthKey, "pa") || "—"}
+        </span>
+        ${hasPt ? `
+        <span class="ptoWeeklyTotal" id="ptoWeekTotal_pt_${entity}_${monthKey}">
+          ${sumPtoWeekly(entity, monthKey, "pt") || "—"}
+        </span>` : ""}
+      </div>
+    </div>
+  `;
+}
+
 // ── PTO Provider Breakdown Helpers ───────────────────────────
 function syncPtoTotalsFromProviders(entity, monthKey) {
   // Sum provider days by type and update the aggregate inputs
@@ -2296,32 +2388,67 @@ function renderPtoForecastEntities(data) {
 
         <div class="ptoMonthGrid">
           ${months.map((month, i) => `
-            <div class="ptoMonthCard">
-              <div class="ptoMonthLabel">${month.monthLabel}</div>
-
-              <div class="ptoInputRow">
-                <div class="ptoInputGroup">
-                  <label class="ptoInputLabel" for="pto_md_${entity}_${i}">MD PTO Days</label>
-                  <input type="number" id="pto_md_${entity}_${i}" class="ptoInput"
-                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="md"
-                    step="0.5" min="0" value="${month.mdPtoDays || ""}" placeholder="0"
-                    ${(() => { const isAdmin = currentUser?.access?.isAdmin; const ue = currentUser?.access?.entity; return (!isAdmin && ue && ue !== entity) ? 'readonly disabled' : ''; })()} />
-                </div>
-                <div class="ptoInputGroup">
-                  <label class="ptoInputLabel" for="pto_pa_${entity}_${i}">PA PTO Days</label>
-                  <input type="number" id="pto_pa_${entity}_${i}" class="ptoInput"
-                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="pa"
-                    step="0.5" min="0" value="${month.paPtoDays || ""}" placeholder="0"
-                    ${(() => { const ue = currentUser?.access?.entity; return (!currentUser?.access?.isAdmin && ue && ue !== entity) ? 'readonly disabled' : ''; })()} />
-                </div>
-                ${(entityData.providerSettings?.ptCount > 0) ? `
-                <div class="ptoInputGroup">
-                  <label class="ptoInputLabel" for="pto_pt_${entity}_${i}">PT PTO Days</label>
-                  <input type="number" id="pto_pt_${entity}_${i}" class="ptoInput"
-                    data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="pt"
-                    step="0.5" min="0" value="${month.ptPtoDays || ""}" placeholder="0" />
-                </div>` : ""}
+            <div class="ptoMonthCard" id="ptoMonthCard_${entity}_${i}">
+              <div class="ptoMonthCardHeader">
+                <div class="ptoMonthLabel">${month.monthLabel}</div>
+                ${(() => {
+                  const isAdmin = currentUser?.access?.isAdmin;
+                  const ue = currentUser?.access?.entity;
+                  const canEdit = isAdmin || !ue || ue === entity;
+                  if (!canEdit) return "";
+                  const isWeekly = getPtoWeeklyMode(entity, month.monthKey);
+                  return `
+                    <div class="ptoModeToggle">
+                      <button type="button" class="ptoModeBtn ${!isWeekly ? "ptoModeBtnActive" : ""}"
+                        data-entity="${entity}" data-monthkey="${month.monthKey}" data-mode="monthly">
+                        Monthly
+                      </button>
+                      <button type="button" class="ptoModeBtn ${isWeekly ? "ptoModeBtnActive" : ""}"
+                        data-entity="${entity}" data-monthkey="${month.monthKey}" data-mode="weekly">
+                        By Week
+                      </button>
+                    </div>`;
+                })()}
               </div>
+
+              ${(() => {
+                const isAdmin = currentUser?.access?.isAdmin;
+                const ue = currentUser?.access?.entity;
+                const canEdit = isAdmin || !ue || ue === entity;
+                const hasPt = entityData.providerSettings?.ptCount > 0;
+                const isWeekly = getPtoWeeklyMode(entity, month.monthKey);
+                const disabledAttr = canEdit ? "" : "readonly disabled";
+
+                if (isWeekly) {
+                  return renderPtoWeeklyRows(entity, month.monthKey, hasPt, canEdit);
+                }
+
+                return `
+                <div class="ptoInputRow">
+                  <div class="ptoInputGroup">
+                    <label class="ptoInputLabel" for="pto_md_${entity}_${i}">MD PTO Days</label>
+                    <input type="number" id="pto_md_${entity}_${i}" class="ptoInput"
+                      data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="md"
+                      step="0.5" min="0" value="${month.mdPtoDays || ""}" placeholder="0"
+                      ${disabledAttr} />
+                  </div>
+                  <div class="ptoInputGroup">
+                    <label class="ptoInputLabel" for="pto_pa_${entity}_${i}">PA PTO Days</label>
+                    <input type="number" id="pto_pa_${entity}_${i}" class="ptoInput"
+                      data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="pa"
+                      step="0.5" min="0" value="${month.paPtoDays || ""}" placeholder="0"
+                      ${disabledAttr} />
+                  </div>
+                  ${hasPt ? `
+                  <div class="ptoInputGroup">
+                    <label class="ptoInputLabel" for="pto_pt_${entity}_${i}">PT PTO Days</label>
+                    <input type="number" id="pto_pt_${entity}_${i}" class="ptoInput"
+                      data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="pt"
+                      step="0.5" min="0" value="${month.ptPtoDays || ""}" placeholder="0"
+                      ${disabledAttr} />
+                  </div>` : ""}
+                </div>`;
+              })()}
 
               ${(month.providerBreakdown?.length > 0) ? `
               <details class="ptoProviderBreakdown">
@@ -2397,6 +2524,66 @@ function renderPtoForecastEntities(data) {
     `;
   }).join("");
 
+  // Wire up mode toggle buttons (Monthly / By Week)
+  document.querySelectorAll(".ptoModeBtn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const entity = btn.dataset.entity;
+      const monthKey = btn.dataset.monthkey;
+      const mode = btn.dataset.mode;
+      const isWeekly = mode === "weekly";
+
+      setPtoWeeklyMode(entity, monthKey, isWeekly);
+
+      // Find this month card's index and re-render the entity panel
+      // Easiest: reload the whole PTO view
+      loadPtoForecast();
+    });
+  });
+
+  // Wire weekly inputs to update totals live and sync to monthly aggregate fields
+  document.querySelectorAll(".ptoWeekInput").forEach((input) => {
+    input.addEventListener("input", () => {
+      const entity   = input.dataset.entity;
+      const monthKey = input.dataset.monthkey;
+      const date     = input.dataset.date;
+      const type     = input.dataset.type;
+      const val      = parseFloat(input.value) || 0;
+
+      // Persist to localStorage
+      setPtoWeekValue(entity, monthKey, date, type, val);
+
+      // Update totals display
+      const total = sumPtoWeekly(entity, monthKey, type);
+      const totalEl = byId(`ptoWeekTotal_${type}_${entity}_${monthKey}`);
+      if (totalEl) totalEl.textContent = total > 0 ? total : "—";
+
+      // Sync to the aggregate monthly input (used by save button)
+      const aggInput = document.querySelector(
+        `.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="${type}"]`
+      );
+      if (aggInput) {
+        aggInput.value = total > 0 ? total : "";
+      } else {
+        // Store in a hidden data attr on the card for save to pick up
+        const card = byId(`ptoMonthCard_${entity}_${getMonthIdx(entity, monthKey)}`);
+        if (card) card.dataset[`ptoTotal_${type}`] = total;
+      }
+    });
+  });
+
+  function getMonthIdx(entity, monthKey) {
+    // Find idx by scanning ptoMonthCard IDs
+    const cards = document.querySelectorAll(`[id^="ptoMonthCard_${entity}_"]`);
+    for (const card of cards) {
+      const parts = card.id.split("_");
+      const idx = parts[parts.length - 1];
+      // Check if month inputs match
+      const md = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"]`);
+      if (md) return idx;
+    }
+    return 0;
+  }
+
   // Wire up add provider buttons
   document.querySelectorAll(".ptoAddProviderBtn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -2449,13 +2636,22 @@ function renderPtoForecastEntities(data) {
       const monthKey = btn.getAttribute("data-monthkey");
       const idx = btn.getAttribute("data-idx");
 
-      const mdInput  = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="md"]`);
-      const paInput  = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pa"]`);
-      const ptInput  = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pt"]`);
+      // In weekly mode, sum from localStorage; in monthly mode, read the input
+      const isWeekly = getPtoWeeklyMode(entity, monthKey);
 
-      const mdPtoDays = parseFloat(mdInput?.value || "0") || 0;
-      const paPtoDays = parseFloat(paInput?.value || "0") || 0;
-      const ptPtoDays = parseFloat(ptInput?.value || "0") || 0;
+      let mdPtoDays, paPtoDays, ptPtoDays;
+      if (isWeekly) {
+        mdPtoDays = sumPtoWeekly(entity, monthKey, "md");
+        paPtoDays = sumPtoWeekly(entity, monthKey, "pa");
+        ptPtoDays = sumPtoWeekly(entity, monthKey, "pt");
+      } else {
+        const mdInput = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="md"]`);
+        const paInput = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pa"]`);
+        const ptInput = document.querySelector(`.ptoInput[data-entity="${entity}"][data-monthkey="${monthKey}"][data-type="pt"]`);
+        mdPtoDays = parseFloat(mdInput?.value || "0") || 0;
+        paPtoDays = parseFloat(paInput?.value || "0") || 0;
+        ptPtoDays = parseFloat(ptInput?.value || "0") || 0;
+      }
 
       btn.textContent = "Saving...";
       btn.disabled = true;
@@ -3219,7 +3415,13 @@ async function loadWeek() {
   );
 
   currentWeekData = result;
-  setFormValues(result.values || result.data || {});
+
+  // API may return data nested under result.values / result.data (manual entry path)
+  // OR flat at the top level (Azure Table row returned directly).
+  // Fall back to result itself so saved data always repopulates the form.
+  const formData = result.values || result.data ||
+    (result.found && result.visitVolume != null ? result : {});
+  setFormValues(formData);
   renderEntryAuditSummary(result);
 
   // Auto-populate call metrics from phone system if not already entered
@@ -3347,7 +3549,10 @@ async function checkAndPromptDigest(weekEnding) {
     const summaries = await Promise.all(
       ENTITIES.map(e => apiGet(`/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(e)}`))
     );
-    const allEntered = summaries.every(s => s.found && normalizeNumber(s.values?.visitVolume ?? s.data?.visitVolume) > 0);
+    const allEntered = summaries.every(s => {
+      const vv = s.values?.visitVolume ?? s.data?.visitVolume ?? (s.found ? s.visitVolume : null);
+      return s.found && normalizeNumber(vv) > 0;
+    });
     if (allEntered) {
       showAllDataEnteredPrompt(weekEnding);
     }
