@@ -1700,11 +1700,6 @@ function renderActivityTable(rows) {
     return "activityStatusPill activityStatusSaved";
   };
 
-  // Add SpineOne PI chart section if SpineOne selected
-  const piSection = byId("trendsPiSection");
-  if (piSection) piSection.style.display = entity === "SpineOne" ? "" : "none";
-  if (entity === "SpineOne") renderSpineOnePiChart(items);
-
   wrap.innerHTML = `
     <table class="regionTable">
       <thead>
@@ -2091,6 +2086,11 @@ function renderTrendsTable(result) {
     return;
   }
 
+  // Show/hide SpineOne PI section and render chart
+  const piSection = byId("trendsPiSection");
+  if (piSection) piSection.style.display = entity === "SpineOne" ? "" : "none";
+  if (entity === "SpineOne") renderSpineOnePiChart(items);
+
   wrap.innerHTML = `
     <table class="regionTable">
       <thead>
@@ -2304,7 +2304,8 @@ function renderPtoForecastEntities(data) {
                   <label class="ptoInputLabel" for="pto_md_${entity}_${i}">MD PTO Days</label>
                   <input type="number" id="pto_md_${entity}_${i}" class="ptoInput"
                     data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="md"
-                    step="0.5" min="0" value="${month.mdPtoDays || ""}" placeholder="0" />
+                    step="0.5" min="0" value="${month.mdPtoDays || ""}" placeholder="0"
+                    ${(() => { const isAdmin = currentUser?.access?.isAdmin; const ue = currentUser?.access?.entity; return (!isAdmin && ue && ue !== entity) ? 'readonly disabled' : ''; })()} />
                 </div>
                 <div class="ptoInputGroup">
                   <label class="ptoInputLabel" for="pto_pa_${entity}_${i}">PA PTO Days</label>
@@ -2357,13 +2358,14 @@ function renderPtoForecastEntities(data) {
                 </div>
               </details>`}
 
-              <button
-                class="ptoSaveBtn"
-                data-entity="${entity}"
-                data-monthkey="${month.monthKey}"
-                data-idx="${i}"
-                type="button"
-              >Save</button>
+              ${(() => {
+                const isAdmin = currentUser?.access?.isAdmin;
+                const userEntity = currentUser?.access?.entity;
+                const canEdit = isAdmin || !userEntity || userEntity === entity;
+                return canEdit
+                  ? `<button class="ptoSaveBtn" data-entity="${entity}" data-monthkey="${month.monthKey}" data-idx="${i}" type="button">Save</button>`
+                  : `<div class="ptoReadonlyNotice">Read only — contact an admin to update ${entity}</div>`;
+              })()}
 
               <div class="ptoForecastResult" id="ptoResult_${entity}_${i}">
                 ${month.totalMissedVisits > 0 ? `
@@ -2591,7 +2593,15 @@ async function loadPtoForecast() {
 
     if (bannerEl) {
       const labels = (data.monthLabels || []).join(", ");
-      bannerEl.textContent = `Rolling quarter: ${labels} · Enter projected PTO days per entity and month, then save.`;
+      const isAdmin = currentUser?.access?.isAdmin;
+      if (isAdmin) {
+        bannerEl.textContent = `Rolling quarter: ${labels} · Enter projected PTO days per entity and month, then save.`;
+        bannerEl.className = "subtleBanner";
+      } else {
+        const userEntity = currentUser?.access?.entity || "your entity";
+        bannerEl.innerHTML = `You are viewing PTO data for <strong>${userEntity}</strong> only. Contact an admin to update other entities.`;
+        bannerEl.className = "subtleBanner ptoAccessNotice";
+      }
     }
 
     renderPtoForecastEntities(data);
@@ -4701,6 +4711,7 @@ const CHANGELOG = [
         type: "improvement",
         title: "Improvements",
         items: [
+          "PTO Forecast now role-aware on the frontend — non-admins see only their entity, inputs disabled for other entities, access notice shown in banner",
           "Visit Volume per-day avg is period-aware — Last Week divides by 5 days, Rolling 4 divides by 20, NES uses 4.5 days/week automatically",
           "Period dropdown now has 6 options: Last Week, MTD, Last Month, YTD, Rolling 4 Weeks, Custom Range",
           "NES working days updated to 4.5 per week — budget proration, PTO forecast rates, and PT calculations all reflect Portland's actual schedule",
