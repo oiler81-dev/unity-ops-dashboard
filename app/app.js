@@ -2311,7 +2311,8 @@ function renderPtoForecastEntities(data) {
                   <label class="ptoInputLabel" for="pto_pa_${entity}_${i}">PA PTO Days</label>
                   <input type="number" id="pto_pa_${entity}_${i}" class="ptoInput"
                     data-entity="${entity}" data-monthkey="${month.monthKey}" data-type="pa"
-                    step="0.5" min="0" value="${month.paPtoDays || ""}" placeholder="0" />
+                    step="0.5" min="0" value="${month.paPtoDays || ""}" placeholder="0"
+                    ${(() => { const ue = currentUser?.access?.entity; return (!currentUser?.access?.isAdmin && ue && ue !== entity) ? 'readonly disabled' : ''; })()} />
                 </div>
                 ${(entityData.providerSettings?.ptCount > 0) ? `
                 <div class="ptoInputGroup">
@@ -2586,7 +2587,15 @@ async function loadPtoForecast() {
     }
 
     if (!Array.isArray(data.entities) || data.entities.length === 0) {
-      if (bannerEl) bannerEl.textContent = "No entity data returned. Check that weekly data has been imported.";
+      const isAdmin = currentUser?.access?.isAdmin;
+      const userEntity = currentUser?.access?.entity;
+      if (bannerEl) {
+        if (!isAdmin && userEntity && userEntity !== "admin") {
+          bannerEl.textContent = `No PTO data found for ${userEntity} yet. Enter days in the form below once it loads, or check that weekly data has been imported first.`;
+        } else {
+          bannerEl.textContent = "No entity data returned. Check that weekly data has been imported.";
+        }
+      }
       setPtoForecastDebug(data);
       return;
     }
@@ -2599,8 +2608,8 @@ async function loadPtoForecast() {
         bannerEl.className = "subtleBanner";
       } else {
         const userEntity = currentUser?.access?.entity || "your entity";
-        bannerEl.innerHTML = `You are viewing PTO data for <strong>${userEntity}</strong> only. Contact an admin to update other entities.`;
-        bannerEl.className = "subtleBanner ptoAccessNotice";
+        bannerEl.innerHTML = `Rolling quarter: ${labels} · You are entering PTO data for <strong>${userEntity}</strong>. Enter days below and hit Save.`;
+        bannerEl.className = "subtleBanner";
       }
     }
 
