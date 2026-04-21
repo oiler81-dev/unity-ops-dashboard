@@ -21,17 +21,30 @@ function timingSafeStringCompare(a, b) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
-const TABLE_NAME   = "CallData";
-const ENTITY_MAP   = {
-  // Map Landis queue/team names to your entity keys
-  // Update these to match your actual Landis queue names
-  "LAOSS":         "LAOSS",
-  "LA Ortho":      "LAOSS",
-  "Los Angeles":   "LAOSS",
-  "NES":           "NES",
-  "Portland":      "NES",
-  "NE Spine":      "NES"
+const TABLE_NAME = "CallData";
+
+// Known entity tokens that appear inside Landis queue names, OU paths, interaction
+// object names, and email domains. Each token is checked as a word-boundary match
+// (bounded by non-alphanumerics) so short tokens like "NES" never match inside
+// unrelated words.
+const ENTITY_TOKENS = {
+  LAOSS: ["LAOSS", "laorthos.com", "laorthos.org"],
+  NES:   ["NES", "nespecialists.com", "NES OU"]
+  // SpineOne and MRO are not yet served by Landis — add tokens here when onboarded.
 };
+
+function tokenMatchesEntity(haystack) {
+  if (!haystack) return null;
+  const hay = String(haystack);
+  for (const [entity, tokens] of Object.entries(ENTITY_TOKENS)) {
+    for (const token of tokens) {
+      // Word-boundary: token must be surrounded by start/end or non-alphanumeric chars.
+      const re = new RegExp(`(^|[^a-z0-9])${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`, "i");
+      if (re.test(hay)) return entity;
+    }
+  }
+  return null;
+}
 
 function getTableClient() {
   const connStr = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -46,21 +59,22 @@ function toDateKey(dateStr) {
 }
 
 function resolveEntity(payload) {
-  // Try queue name, team name, or campaign name. Match exactly (case-insensitive)
-  // against ENTITY_MAP keys — substring/loose matching let a short value like
-  // "n" match "NES".
+  // Landis naming: "Landis-LAOSS-Tarzana", OUPath "Default\\Landis-LAOSS-WC" or
+  // "NES OU\\Landis-NES-New Patients", agent UPNs "*@laorthos.com" / "*@nespecialists.com".
+  // Check each candidate with a word-boundary token match.
   const candidates = [
     payload.QueueName, payload.TeamName, payload.CampaignName,
     payload.queueName, payload.teamName, payload.Location,
-    payload.location, payload.Site, payload.site
+    payload.location, payload.Site, payload.site,
+    payload.OUPath, payload.ouPath,
+    payload.InteractionObjectName, payload.interactionObjectName,
+    // Agent/caller UPNs as last-resort fallback — domain identifies the entity.
+    payload.AgentUpn, payload.agentUpn,
+    payload.CallerUpn, payload.callerUpn
   ];
-  const lowerMap = Object.fromEntries(
-    Object.entries(ENTITY_MAP).map(([k, v]) => [k.toLowerCase(), v])
-  );
   for (const c of candidates) {
-    if (!c) continue;
-    const normalized = String(c).trim().toLowerCase();
-    if (normalized && lowerMap[normalized]) return lowerMap[normalized];
+    const match = tokenMatchesEntity(c);
+    if (match) return match;
   }
   return null;
 }
