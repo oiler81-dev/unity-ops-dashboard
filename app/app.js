@@ -327,6 +327,19 @@ function normalizeNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Escape any string before interpolating into innerHTML templates. Prevents
+// stored XSS via notes fields, usernames, statuses, etc.
+function escapeHtml(value) {
+  if (value == null) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/`/g, "&#96;");
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -895,6 +908,7 @@ function setFormValues(data) {
   const keys = [
     "newPatients",
     "surgeries",
+    "imaging",
     "established",
     "noShows",
     "cancelled",
@@ -904,6 +918,7 @@ function setFormValues(data) {
     "ptoDays",
     "piNp",
     "piCashCollection",
+    "reschedules",
     "operationsNarrative",
     "ptScheduledVisits",
     "ptCancellations",
@@ -928,7 +943,9 @@ function getFormValues() {
   const ptMode = entityHasPtEntry();
 
   // Preserve the OTHER mode's existing saved values so saving PT doesn't wipe ortho and vice versa
-  const existing = currentWeekData?.values || currentWeekData?.data || {};
+  // API may return data flat at top level (no values/data wrapper) — fall back to currentWeekData itself
+  const existing = currentWeekData?.values || currentWeekData?.data ||
+    (currentWeekData?.found && currentWeekData?.visitVolume != null ? currentWeekData : {});
 
   const raw = {
     // Ortho fields: use form value if in ortho mode, otherwise preserve existing saved value
@@ -1004,11 +1021,11 @@ function renderEntryAuditSummary(data) {
   }
 
   el.innerHTML = `
-    <strong>Created by:</strong> ${data.createdBy || "n/a"}<br />
-    <strong>Created at:</strong> ${formatDateTime(data.createdAt)}<br />
-    <strong>Last updated by:</strong> ${data.updatedBy || "n/a"}<br />
-    <strong>Last updated at:</strong> ${formatDateTime(data.updatedAt)}<br />
-    <strong>Status:</strong> ${data.status || "saved"}
+    <strong>Created by:</strong> ${escapeHtml(data.createdBy || "n/a")}<br />
+    <strong>Created at:</strong> ${escapeHtml(formatDateTime(data.createdAt))}<br />
+    <strong>Last updated by:</strong> ${escapeHtml(data.updatedBy || "n/a")}<br />
+    <strong>Last updated at:</strong> ${escapeHtml(formatDateTime(data.updatedAt))}<br />
+    <strong>Status:</strong> ${escapeHtml(data.status || "saved")}
   `;
 }
 
@@ -1191,8 +1208,12 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope, 
   const avgCancel = averageMetric(current.regions, "cancellationRate");
   const avgCxnsCombined = avgNoShow + avgCancel;
 
-  const visitCurrent = normalizeNumber(current.totals?.visitVolume);
-  const visitComparison = normalizeNumber(comparison.totals?.visitVolume);
+  // For entities/scopes with PT, include PT visits seen in the combined visit volume
+  const hasPt = entityHasPtData(entityScope) || entityScope === "ALL";
+  const orthoVisitCurrent    = normalizeNumber(current.totals?.visitVolume);
+  const orthoVisitComparison = normalizeNumber(comparison.totals?.visitVolume);
+  const visitCurrent    = hasPt ? orthoVisitCurrent    + normalizeNumber(current.ptTotals?.visitsSeen)    : orthoVisitCurrent;
+  const visitComparison = hasPt ? orthoVisitComparison + normalizeNumber(comparison.ptTotals?.visitsSeen) : orthoVisitComparison;
   const visitVariance = visitCurrent - visitComparison;
   const numWeeks = weekSets?.primaryWeeks?.length || 1;
   const daysPerWeek = entityScope === "NES" ? 4.5 : 5;
@@ -1503,7 +1524,7 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
               ${row.operationsNarrative ? `
               <div class="entityNarrativeBlock">
                 <div class="entityNarrativeLabel">Ops Notes</div>
-                <div class="entityNarrativeText">${row.operationsNarrative}</div>
+                <div class="entityNarrativeText">${escapeHtml(row.operationsNarrative)}</div>
               </div>` : ""}
             </details>
           </div>
@@ -1736,15 +1757,15 @@ function renderActivityTable(rows) {
       <tbody>
         ${rows.map((item) => `
           <tr>
-            <td><strong>${item.entity}</strong></td>
-            <td>${item.weekEnding || "—"}</td>
-            <td><span class="${statusPillClass(item.status)}">${item.status || "saved"}</span></td>
-            <td>${item.updatedBy || "—"}</td>
+            <td><strong>${escapeHtml(item.entity)}</strong></td>
+            <td>${escapeHtml(item.weekEnding || "—")}</td>
+            <td><span class="${statusPillClass(item.status)}">${escapeHtml(item.status || "saved")}</span></td>
+            <td>${escapeHtml(item.updatedBy || "—")}</td>
             <td>
-              <div>${item.updatedAt ? formatDateTime(item.updatedAt) : "—"}</div>
+              <div>${escapeHtml(item.updatedAt ? formatDateTime(item.updatedAt) : "—")}</div>
             </td>
-            <td>${item.createdBy || "—"}</td>
-            <td>${item.createdAt ? formatDateTime(item.createdAt) : "—"}</td>
+            <td>${escapeHtml(item.createdBy || "—")}</td>
+            <td>${escapeHtml(item.createdAt ? formatDateTime(item.createdAt) : "—")}</td>
             <td>${formatWhole(item.visitVolume)}</td>
             <td>${formatWhole(item.newPatients)}</td>
           </tr>
@@ -2538,7 +2559,7 @@ function renderPtoForecastEntities(data) {
                     <span class="ptoImpactLabel">Total Forecasted Impact</span>
                     <strong class="ptoImpactValue">${formatWhole(month.totalMissedVisits)} visits</strong>
                   </div>
-                  ${month.savedBy ? `<div class="ptoSavedBy">Saved by ${month.savedBy}</div>` : ""}
+                  ${month.savedBy ? `<div class="ptoSavedBy">Saved by ${escapeHtml(month.savedBy)}</div>` : ""}
                 ` : `<div class="ptoNoData">Enter PTO days above to see forecast</div>`}
               </div>
             </div>
@@ -2934,7 +2955,7 @@ function renderProviderSettingsTable(entities) {
               ${e.mdCount + e.paCount + e.ptCount}
             </td>
             <td style="font-size:11.5px;color:var(--text-muted);">
-              ${e.updatedAt ? new Date(e.updatedAt).toLocaleDateString() + (e.updatedBy ? ` · ${e.updatedBy}` : "") : "Default"}
+              ${e.updatedAt ? escapeHtml(new Date(e.updatedAt).toLocaleDateString() + (e.updatedBy ? ` · ${e.updatedBy}` : "")) : "Default"}
             </td>
             <td>
               <button type="button"
@@ -3162,6 +3183,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
           callVolume: 0,
           newPatients: 0,
           surgeries: 0,
+          imaging: 0,
           cashCollected: 0,
           ptoDays: 0,
           piNp: 0,
@@ -5334,7 +5356,7 @@ function showDigestModal(current, comparison, compareAgainst, weekSets) {
         <p class="changelogModalSub">Copy and paste into an email or Teams message to share with leadership.</p>
       </div>
       <div class="changelogModalBody" style="padding:16px 24px;">
-        <textarea id="digestTextarea" class="digestTextarea" readonly>${text}</textarea>
+        <textarea id="digestTextarea" class="digestTextarea" readonly></textarea>
       </div>
       <div class="changelogModalFooter">
         <button type="button" class="changelogViewAllBtn" id="digestCopyBtn">Copy to Clipboard</button>
@@ -5344,6 +5366,10 @@ function showDigestModal(current, comparison, compareAgainst, weekSets) {
   `;
 
   document.body.appendChild(modal);
+  // Assign via .value rather than interpolating into innerHTML — prevents
+  // a stored </textarea><script>... payload in any source field from breaking out.
+  const digestTa = byId("digestTextarea");
+  if (digestTa) digestTa.value = text;
   modal.style.display = "flex";
   document.body.style.overflow = "hidden";
 

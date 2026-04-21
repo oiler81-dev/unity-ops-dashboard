@@ -115,32 +115,19 @@ module.exports = async function (context, req) {
 
     const regions = [];
 
-    const PT_ENTITY_BASES = ["NES", "SpineOne", "MRO"];
+    // Scope to the caller's entity — admins see all four, regionals only their own.
+    const scopeEntities = access.isAdmin
+      ? ENTITIES
+      : ENTITIES.filter((e) => e === access.entity);
 
-    for (const entity of ENTITIES) {
+    for (const entity of scopeEntities) {
       const record = await getEntityRecord(regionTable, entity, weekEnding);
       const values = safeParseJson(record?.valuesJson, {});
 
-      // For entities with a separate PT record (stored as "{entity}-PT"),
-      // fetch that record and overlay PT fields onto values so they flow through correctly.
-      if (PT_ENTITY_BASES.includes(entity)) {
-        const ptRecord = await getEntityRecord(regionTable, `${entity}-PT`, weekEnding);
-        if (ptRecord) {
-          const ptValues = safeParseJson(ptRecord?.valuesJson, {});
-          // Overlay PT fields — PT record wins for all pt* fields
-          const ptFields = [
-            "ptScheduledVisits", "ptCancellations", "ptNoShows", "ptReschedules",
-            "ptTotalUnitsBilled", "ptVisitsSeen", "ptWorkingDays", "ptUnitsPerVisit", "ptVisitsPerDay"
-          ];
-          for (const f of ptFields) {
-            const v = ptRecord[f] ?? ptValues[f];
-            if (v != null && v !== "") {
-              record[f] = v;
-              values[f] = v;
-            }
-          }
-        }
-      }
+      // PT data lives on the base entity partition — never on a separate "{entity}-PT" partition.
+      // getSelectedEntity() on the frontend always returns the base entity, so PT saves go to the
+      // same row as ortho saves. Overlaying from a "{entity}-PT" partition here clobbered the
+      // correct PT values with stale legacy data.
 
       // daysInPeriod is set by Excel import; manual entries won't have it — use entity-specific default
       const defaultDays = ENTITY_WORKING_DAYS[entity] ?? 5;

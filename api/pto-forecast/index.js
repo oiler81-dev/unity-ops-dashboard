@@ -236,6 +236,14 @@ module.exports = async function (context, req) {
         return respond(400, { ok: false, error: "Missing entity or monthKey" });
       }
 
+      if (!ENTITIES.includes(entity)) {
+        return respond(400, { ok: false, error: "Invalid entity" });
+      }
+
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) {
+        return respond(400, { ok: false, error: "Invalid monthKey format (expected YYYY-MM)" });
+      }
+
       // Operators can only save for their own entity; admins can save any
       if (!access.isAdmin && access.entity !== entity) {
         return respond(403, { ok: false, error: "Forbidden" });
@@ -244,6 +252,17 @@ module.exports = async function (context, req) {
       const rates = await computeEntityRates(regionTable, entity);
       const providerSettings = await getProviderSettings(settingsTable, entity);
       const forecast = computeForecast(mdPtoDays, paPtoDays, ptPtoDays, rates, providerSettings);
+
+      // Normalize and persist provider breakdown so it shows up on reload
+      const rawBreakdown = Array.isArray(body.providerBreakdown) ? body.providerBreakdown : [];
+      const providerBreakdown = rawBreakdown
+        .map((p) => ({
+          name: String(p?.name || "").trim().slice(0, 120),
+          type: ["MD", "PA", "PT"].includes(p?.type) ? p.type : "MD",
+          days: toNumber(p?.days, 0)
+        }))
+        .filter((p) => p.name || p.days > 0)
+        .slice(0, 50);
 
       await forecastTable.upsertEntity({
         partitionKey: entity,
@@ -254,6 +273,7 @@ module.exports = async function (context, req) {
         mdPtoDays,
         paPtoDays,
         ptPtoDays,
+        providerBreakdownJson: JSON.stringify(providerBreakdown),
         missedMdVisits:    forecast.missedMdVisits,
         missedPaVisits:    forecast.missedPaVisits,
         missedPtVisits:    forecast.missedPtVisits,
@@ -311,6 +331,7 @@ module.exports = async function (context, req) {
                   mdPtoDays,
                   paPtoDays,
                   ptPtoDays,
+                  providerBreakdown: safeParseJson(saved?.providerBreakdownJson, []),
                   missedMdVisits:    saved ? toNumber(saved.missedMdVisits)    : forecast.missedMdVisits,
                   missedPaVisits:    saved ? toNumber(saved.missedPaVisits)    : forecast.missedPaVisits,
                   missedPtVisits:    saved ? toNumber(saved.missedPtVisits)    : forecast.missedPtVisits,
@@ -324,6 +345,7 @@ module.exports = async function (context, req) {
                   monthKey,
                   monthLabel: monthKeyToLabel(monthKey),
                   mdPtoDays: 0, paPtoDays: 0, ptPtoDays: 0,
+                  providerBreakdown: [],
                   missedMdVisits: 0, missedPaVisits: 0, missedPtVisits: 0,
                   totalMissedVisits: 0,
                   savedBy: null, savedAt: null, hasSavedEntry: false
