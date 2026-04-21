@@ -115,9 +115,32 @@ module.exports = async function (context, req) {
 
     const regions = [];
 
+    const PT_ENTITY_BASES = ["NES", "SpineOne", "MRO"];
+
     for (const entity of ENTITIES) {
       const record = await getEntityRecord(regionTable, entity, weekEnding);
       const values = safeParseJson(record?.valuesJson, {});
+
+      // For entities with a separate PT record (stored as "{entity}-PT"),
+      // fetch that record and overlay PT fields onto values so they flow through correctly.
+      if (PT_ENTITY_BASES.includes(entity)) {
+        const ptRecord = await getEntityRecord(regionTable, `${entity}-PT`, weekEnding);
+        if (ptRecord) {
+          const ptValues = safeParseJson(ptRecord?.valuesJson, {});
+          // Overlay PT fields — PT record wins for all pt* fields
+          const ptFields = [
+            "ptScheduledVisits", "ptCancellations", "ptNoShows", "ptReschedules",
+            "ptTotalUnitsBilled", "ptVisitsSeen", "ptWorkingDays", "ptUnitsPerVisit", "ptVisitsPerDay"
+          ];
+          for (const f of ptFields) {
+            const v = ptRecord[f] ?? ptValues[f];
+            if (v != null && v !== "") {
+              record[f] = v;
+              values[f] = v;
+            }
+          }
+        }
+      }
 
       // daysInPeriod is set by Excel import; manual entries won't have it — use entity-specific default
       const defaultDays = ENTITY_WORKING_DAYS[entity] ?? 5;
