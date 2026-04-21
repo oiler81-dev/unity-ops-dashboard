@@ -210,6 +210,9 @@ module.exports = async function (context, req) {
         piCashCollection: entity === "SpineOne"
           ? toNumber(values.piCashCollection ?? record?.piCashCollection, 0)
           : 0,
+        imaging: entity === "SpineOne"
+          ? toNumber(values.imaging ?? record?.imaging, 0)
+          : 0,
 
         budget: {
           visitVolumeBudget: prorateMonthlyToWeek(
@@ -254,7 +257,8 @@ module.exports = async function (context, req) {
       cashCollected: regions.reduce((sum, r) => sum + toNumber(r.cashCollected, 0), 0),
       ptoDays: regions.reduce((sum, r) => sum + toNumber(r.ptoDays, 0), 0),
       piNp: regions.reduce((sum, r) => sum + toNumber(r.piNp, 0), 0),
-      piCashCollection: regions.reduce((sum, r) => sum + toNumber(r.piCashCollection, 0), 0)
+      piCashCollection: regions.reduce((sum, r) => sum + toNumber(r.piCashCollection, 0), 0),
+      imaging: regions.reduce((sum, r) => sum + toNumber(r.imaging, 0), 0)
     };
 
     const budgetTotals = {
