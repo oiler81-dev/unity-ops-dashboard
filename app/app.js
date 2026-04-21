@@ -514,6 +514,7 @@ function calculateDerivedMetrics(values = {}) {
     cashCollected: normalizeNumber(values.cashCollected),
     piNp: normalizeNumber(values.piNp),
     piCashCollection: normalizeNumber(values.piCashCollection),
+    imaging: normalizeNumber(values.imaging),
     operationsNarrative: String(values.operationsNarrative || "").trim()
   };
 }
@@ -630,6 +631,11 @@ function renderForm() {
     <div class="nonPtField">
       <label for="surgeries">Surgeries</label>
       <input type="number" id="surgeries" step="1" min="0" />
+    </div>
+
+    <div class="spineOnlyField" style="display:none;">
+      <label for="imaging">Imaging</label>
+      <input type="number" id="imaging" step="1" min="0" />
     </div>
 
     <div class="nonPtField">
@@ -777,6 +783,7 @@ function renderForm() {
   [
     "newPatients",
     "surgeries",
+    "imaging",
     "established",
     "noShows",
     "cancelled",
@@ -843,6 +850,7 @@ function mapWeeklyValuesToFormData(values) {
   const mapped = {
     newPatients: values?.newPatients ?? values?.npActual ?? "",
     surgeries: values?.surgeries ?? "",
+    imaging: values?.imaging ?? "",
     established: values?.established ?? "",
     noShows: values?.noShows ?? "",
     cancelled: values?.cancelled ?? "",
@@ -927,6 +935,7 @@ function getFormValues() {
     reschedules:       ptMode ? (existing.reschedules       ?? 0) : (byId("reschedules")?.value || ""),
     newPatients:       ptMode ? (existing.newPatients       ?? 0) : (byId("newPatients")?.value || ""),
     surgeries:         ptMode ? (existing.surgeries         ?? 0) : (byId("surgeries")?.value || ""),
+    imaging:           ptMode ? (existing.imaging            ?? 0) : (byId("imaging")?.value   || ""),
     established:       ptMode ? (existing.established       ?? 0) : (byId("established")?.value || ""),
     noShows:           ptMode ? (existing.noShows           ?? 0) : (byId("noShows")?.value || ""),
     cancelled:         ptMode ? (existing.cancelled         ?? 0) : (byId("cancelled")?.value || ""),
@@ -966,6 +975,7 @@ function getFormValues() {
     ptoDays: derived.ptoDays,
     piNp: derived.piNp,
     piCashCollection: derived.piCashCollection,
+    imaging: derived.imaging,
     operationsNarrative: derived.operationsNarrative,
     ptScheduledVisits: derived.ptScheduledVisits,
     ptCancellations: derived.ptCancellations,
@@ -1265,6 +1275,13 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope, 
 
   if (entityScope === "SpineOne") {
     cards.push({
+      label: "Imaging",
+      value: formatWhole(current.totals?.imaging || 0),
+      meta: "SpineOne only · across selected period",
+      className: "kpi-neutral"
+    });
+
+    cards.push({
       label: "SpineOne PI NP",
       value: formatWhole(current.totals?.piNp || 0),
       meta: "SpineOne only",
@@ -1301,6 +1318,7 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           callVolume: 0,
           newPatients: 0,
           surgeries: 0,
+          imaging: 0,
           cashCollected: 0,
           ptoDays: 0,
           noShowRate: 0,
@@ -1941,7 +1959,13 @@ function renderExecutiveCards(summary) {
       value: formatWhole(summary.totals?.piNp || 0),
       meta: `Cash ${formatCurrency(summary.totals?.piCashCollection || 0)}`,
       className: "kpi-neutral"
-    }
+    },
+    ...(normalizeNumber(summary.totals?.imaging) > 0 ? [{
+      label: "Imaging",
+      value: formatWhole(summary.totals?.imaging || 0),
+      meta: "SpineOne only",
+      className: "kpi-neutral"
+    }] : [])
   ]);
 }
 
@@ -3165,6 +3189,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
       row.callVolume += normalizeNumber(region.callVolume);
       row.newPatients += normalizeNumber(region.newPatients);
       row.surgeries += normalizeNumber(region.surgeries);
+      row.imaging += normalizeNumber(region.imaging);
       row.cashCollected += normalizeNumber(region.cashCollected);
       row.ptoDays += normalizeNumber(region.ptoDays);
       row.piNp += normalizeNumber(region.piNp);
@@ -3212,6 +3237,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
     callVolume: row.callVolume,
     newPatients: row.newPatients,
     surgeries: row.surgeries,
+    imaging: row.imaging,
     cashCollected: row.cashCollected,
     ptoDays: row.ptoDays,
     piNp: row.piNp,
@@ -3239,6 +3265,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
     callVolume: regions.reduce((sum, r) => sum + normalizeNumber(r.callVolume), 0),
     newPatients: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatients), 0),
     surgeries: regions.reduce((sum, r) => sum + normalizeNumber(r.surgeries), 0),
+    imaging: regions.reduce((sum, r) => sum + normalizeNumber(r.imaging), 0),
     cashCollected: regions.reduce((sum, r) => sum + normalizeNumber(r.cashCollected), 0),
     ptoDays: regions.reduce((sum, r) => sum + normalizeNumber(r.ptoDays), 0),
     piNp: regions.reduce((sum, r) => sum + normalizeNumber(r.piNp), 0),
