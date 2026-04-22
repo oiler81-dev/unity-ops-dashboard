@@ -1797,6 +1797,7 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
     window.visitsChartInstance.destroy();
   }
 
+  // Series palette matches design tokens: visits=blue, PT=green, calls=amber, NP=purple
   window.visitsChartInstance = new Chart(ctx, {
     type: "line",
     data: {
@@ -1805,46 +1806,46 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
         {
           label: "Visits",
           data: visitData,
-          tension: 0.35,
-          borderColor: "#6cb6ff",
-          backgroundColor: "rgba(108, 182, 255, 0.16)",
-          borderWidth: 3,
-          pointRadius: 3,
-          pointHoverRadius: 5,
+          tension: 0.3,
+          borderColor: "#2D4BA3",
+          backgroundColor: "rgba(45,75,163,0.04)",
+          borderWidth: 1.8,
+          pointRadius: 2,
+          pointHoverRadius: 4,
           fill: false
         },
         {
           label: "PT Visits",
           data: ptData,
-          tension: 0.35,
-          borderColor: "#b49cff",
-          backgroundColor: "rgba(180, 156, 255, 0.16)",
-          borderWidth: 3,
-          pointRadius: 3,
-          pointHoverRadius: 5,
+          tension: 0.3,
+          borderColor: "#1E6B4F",
+          backgroundColor: "rgba(30,107,79,0.04)",
+          borderWidth: 1.8,
+          pointRadius: 2,
+          pointHoverRadius: 4,
           fill: false
         },
         {
           label: "Calls",
           data: callData,
-          tension: 0.35,
-          borderColor: "#f7c62f",
-          backgroundColor: "rgba(247, 198, 47, 0.16)",
-          borderWidth: 3,
-          pointRadius: 3,
-          pointHoverRadius: 5,
+          tension: 0.3,
+          borderColor: "#B8893D",
+          backgroundColor: "rgba(184,137,61,0.04)",
+          borderWidth: 1.8,
+          pointRadius: 2,
+          pointHoverRadius: 4,
           fill: false,
           hidden: true
         },
         {
           label: "New Patients",
           data: npData,
-          tension: 0.35,
-          borderColor: "#7cfc98",
-          backgroundColor: "rgba(124, 252, 152, 0.16)",
-          borderWidth: 3,
-          pointRadius: 3,
-          pointHoverRadius: 5,
+          tension: 0.3,
+          borderColor: "#8B5CF6",
+          backgroundColor: "rgba(139,92,246,0.04)",
+          borderWidth: 1.8,
+          pointRadius: 2,
+          pointHoverRadius: 4,
           fill: false
         },
         ...(compareAgainst === "budget"
@@ -1852,11 +1853,11 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
               {
                 label: "Visit Budget",
                 data: budgetData,
-                tension: 0.35,
-                borderColor: "#ff7d7d",
-                backgroundColor: "rgba(255, 125, 125, 0.12)",
+                tension: 0.3,
+                borderColor: "#B23A3A",
+                backgroundColor: "rgba(178,58,58,0.04)",
                 borderDash: [6, 6],
-                borderWidth: 2,
+                borderWidth: 1.6,
                 pointRadius: 2,
                 pointHoverRadius: 4,
                 fill: false
@@ -1868,27 +1869,25 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      interaction: {
-        mode: "index",
-        intersect: false
-      },
+      interaction: { mode: "index", intersect: false },
       plugins: {
         legend: {
           labels: {
-            color: "#b8d3e6",
-            boxWidth: 14,
-            boxHeight: 14
+            color: "#6B7280",
+            boxWidth: 10,
+            boxHeight: 10,
+            font: { size: 11.5, family: "Geist, 'Inter Tight', sans-serif" }
           }
         }
       },
       scales: {
         x: {
-          ticks: { color: "#8eb2c9" },
-          grid: { color: "rgba(255,255,255,0.06)" }
+          ticks: { color: "#6B7280", font: { size: 10, family: "Geist Mono, monospace" } },
+          grid: { color: "#ECEAE3", drawBorder: false }
         },
         y: {
-          ticks: { color: "#8eb2c9" },
-          grid: { color: "rgba(255,255,255,0.06)" }
+          ticks: { color: "#6B7280", font: { size: 10, family: "Geist Mono, monospace" } },
+          grid: { color: "#ECEAE3", drawBorder: false }
         }
       }
     }
@@ -3940,8 +3939,8 @@ function renderSpineOnePiChart(items) {
         {
           label: "PI New Patients",
           data: piNpData,
-          backgroundColor: "rgba(93,232,240,0.55)",
-          borderColor: "rgba(93,232,240,0.9)",
+          backgroundColor: "rgba(139,92,246,0.5)",
+          borderColor: "#8B5CF6",
           borderWidth: 1,
           borderRadius: 3,
           yAxisID: "yNp"
@@ -3950,10 +3949,10 @@ function renderSpineOnePiChart(items) {
           label: "PI Cash ($)",
           data: piCashData,
           type: "line",
-          borderColor: "rgba(247,198,47,0.9)",
-          backgroundColor: "rgba(247,198,47,0.08)",
-          borderWidth: 2,
-          pointRadius: 3,
+          borderColor: "#1E6B4F",
+          backgroundColor: "rgba(30,107,79,0.05)",
+          borderWidth: 1.8,
+          pointRadius: 2,
           tension: 0.3,
           fill: true,
           yAxisID: "yCash"
@@ -3964,7 +3963,7 @@ function renderSpineOnePiChart(items) {
       responsive: true,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { labels: { color: "#93b4cc", font: { size: 11 } } },
+        legend: { labels: { color: "#6B7280", font: { size: 11, family: "Geist, sans-serif" } } },
         tooltip: {
           callbacks: {
             label: (ctx) => {
@@ -3975,9 +3974,9 @@ function renderSpineOnePiChart(items) {
         }
       },
       scales: {
-        x: { ticks: { color: "#506a7e", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" } },
-        yNp:   { position: "left",  ticks: { color: "#5de8f0", font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.04)" }, title: { display: true, text: "PI NP", color: "#5de8f0", font: { size: 10 } } },
-        yCash: { position: "right", ticks: { color: "#f7c62f", font: { size: 10 }, callback: v => formatCurrency(v) }, grid: { display: false }, title: { display: true, text: "PI Cash", color: "#f7c62f", font: { size: 10 } } }
+        x: { ticks: { color: "#6B7280", font: { size: 10, family: "Geist Mono, monospace" } }, grid: { color: "#ECEAE3", drawBorder: false } },
+        yNp:   { position: "left",  ticks: { color: "#8B5CF6", font: { size: 10, family: "Geist Mono, monospace" } }, grid: { color: "#ECEAE3", drawBorder: false }, title: { display: true, text: "PI NP", color: "#8B5CF6", font: { size: 10 } } },
+        yCash: { position: "right", ticks: { color: "#1E6B4F", font: { size: 10, family: "Geist Mono, monospace" }, callback: v => formatCurrency(v) }, grid: { display: false }, title: { display: true, text: "PI Cash", color: "#1E6B4F", font: { size: 10 } } }
       }
     }
   });
