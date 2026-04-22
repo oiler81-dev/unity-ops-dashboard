@@ -1053,167 +1053,9 @@ canvas { width:100% !important; max-height:252px; }
   padding-bottom: 20px;
 }
 
-/* ════════════════════════════════════════════════════════════════
-   COMMAND VIEW — alternate dark theme
-   Applied via body.commandView class toggle
-   ════════════════════════════════════════════════════════════════ */
-
-/* Scan-line overlay — visible only in command view */
-.scanlines {
-  display: none;
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0,0,0,0.022) 2px,
-    rgba(0,0,0,0.022) 4px
-  );
-}
-
-body.commandView .scanlines { display: block; }
-
-/* Command View CSS variable overrides */
-body.commandView {
-  --bg-main:         #060810;
-  --bg-sidebar:      #080b14;
-  --bg-panel:        #0b0f1a;
-  --bg-panel-soft:   #0f1520;
-  --bg-panel-inner:  #0d1322;
-  --bg-glass:        rgba(255,255,255,0.025);
-  --bg-glass-strong: rgba(255,255,255,0.045);
-
-  --border-soft:     rgba(255,255,255,0.055);
-  --border-med:      rgba(255,255,255,0.09);
-
-  --text:            #dce8f5;
-  --text-main:       #dce8f5;
-  --text-soft:       #7a96ba;
-  --text-muted:      #3a5070;
-
-  --accent:          #f7c62f;
-  --accent-dim:      rgba(247,198,47,0.13);
-  --accent-2:        #4d9fff;
-  --accent-3:        #00d4b4;
-
-  --font:            'Syne', system-ui, sans-serif;
-  --font-mono:       'JetBrains Mono', monospace;
-}
-
-/* Numbers and metrics get mono in command view */
-body.commandView .kpiValue,
-body.commandView .entityMetricHero strong,
-body.commandView .entityDetailValue,
-body.commandView .entityBudgetValue,
-body.commandView .entityMiniStat strong,
-body.commandView .entityAccessValue,
-body.commandView .entityHealthItem strong,
-body.commandView .movementValue,
-body.commandView .metricCardValue,
-body.commandView td,
-body.commandView .ptoImpactValue {
-  font-family: 'JetBrains Mono', monospace !important;
-  font-weight: 400;
-  letter-spacing: -0.02em;
-}
-
-/* Headings get Syne in command view */
-body.commandView h1,
-body.commandView h3,
-body.commandView h4,
-body.commandView .entityTitle,
-body.commandView .metricCardLabel,
-body.commandView .sectionHeader h3 {
-  font-family: 'Syne', sans-serif !important;
-  font-weight: 800;
-}
-
-/* Tighter KPI card accent line */
-body.commandView .metricCard {
-  border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: var(--bg-panel);
-}
-
-body.commandView .metricCard.kpi-good    { border-top: 2px solid #22d47a; }
-body.commandView .metricCard.kpi-bad     { border-top: 2px solid #ff4560; }
-body.commandView .metricCard.kpi-warning { border-top: 2px solid #f5c842; }
-body.commandView .metricCard.kpi-neutral { border-top: 2px solid var(--accent-2); }
-
-/* Entity cards — sharper in command view */
-body.commandView .entityCard {
-  border-radius: 8px;
-  background: var(--bg-panel);
-  border-color: var(--border-soft);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
-}
-
-body.commandView .entityCard:hover {
-  border-color: rgba(77,159,255,0.22);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-}
-
-/* Panel backgrounds deeper */
-body.commandView .panel,
-body.commandView .heroPanel,
-body.commandView .sectionPanel {
-  background: var(--bg-panel);
-  border-color: var(--border-soft);
-}
-
-/* Sidebar live chip pulse in command view */
-body.commandView .sidebarBrand::after {
-  content: '';
-  display: block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: cvPulse 2s infinite;
-  margin: 8px 0 0 2px;
-}
-
-@keyframes cvPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.35; transform: scale(0.65); }
-}
-
-/* Subtle green tint on good movement pills in command view */
-body.commandView .movementUp {
-  background: rgba(34,212,122,0.1);
-  color: #22d47a;
-}
-
-body.commandView .movementDown {
-  background: rgba(255,69,96,0.1);
-  color: #ff4560;
-}
-
-/* Alert items sharper severity bars */
-body.commandView #dashboardAlerts .alertItem {
-  background: rgba(255,69,96,0.04);
-  border-left-color: rgba(255,69,96,0.5);
-}
-
-body.commandView #dashboardAlerts .alertItem.alertWarning {
-  background: rgba(245,200,66,0.04);
-  border-left-color: rgba(245,200,66,0.5);
-}
-
-/* Table rows tighter alternating */
-body.commandView .regionTable tbody tr:nth-child(even) {
-  background: rgba(255,255,255,0.014);
-}
-
-body.commandView .regionTable tbody tr:hover td {
-  background: rgba(77,159,255,0.04);
-}
-
-/* ── Command View Toggle Button ───────────────────────────────── */
-.commandViewBtn {
+/* ── Theme toggle button (Light View) ───────────────────────── */
+/* Command View has been removed; only default (dark) and Light remain. */
+.themeToggleBtn {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1230,36 +1072,23 @@ body.commandView .regionTable tbody tr:hover td {
   letter-spacing: 0.02em;
 }
 
-.commandViewBtn:hover {
+.themeToggleBtn:hover {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-dim);
 }
 
-.commandViewIcon {
+.themeToggleIcon {
   font-size: 13px;
   transition: transform 0.2s ease;
 }
 
-.commandViewBtn.active {
+.themeToggleBtn.active {
   border-color: var(--accent);
   background: var(--accent-dim);
   color: var(--accent);
 }
 
-.commandViewBtn.active .commandViewIcon {
-  transform: rotate(15deg);
-}
-
-body.commandView .commandViewBtn {
-  border-color: var(--accent);
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-body.commandView .commandViewLabel::before {
-  content: 'Exit ';
-}
 
 /* ════════════════════════════════════════════════════════════════
    LIGHT VIEW — warm minimalist theme
@@ -2255,8 +2084,8 @@ body.lightView .changelogNavBadge { background: #c49a1a; color: #fff; }
     flex-wrap: wrap;
   }
 
-  .commandViewBtn { font-size: 10px; padding: 5px 9px; }
-  .commandViewLabel, .lightViewLabel { display: none; }
+  .themeToggleBtn { font-size: 10px; padding: 5px 9px; }
+  .lightViewLabel { display: none; }
 
   main { padding: 0; }
 

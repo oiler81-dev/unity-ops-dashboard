@@ -181,19 +181,15 @@ function resetThresholds() {
 }
 
 // ── View mode toggles ─────────────────────────────────────────
+// Two themes supported: default (dark) and light. Command View was
+// removed — it was a novelty theme nobody used and added drag to CSS
+// maintenance.
 function setViewMode(mode) {
-  // Clear all modes first
   document.body.classList.remove("commandView", "lightView");
-  const cvBtn = byId("commandViewToggle");
   const lvBtn = byId("lightViewToggle");
-  if (cvBtn) cvBtn.classList.remove("active");
   if (lvBtn) lvBtn.classList.remove("active");
 
-  if (mode === "command") {
-    document.body.classList.add("commandView");
-    if (cvBtn) cvBtn.classList.add("active");
-    localStorage.setItem("viewMode", "command");
-  } else if (mode === "light") {
+  if (mode === "light") {
     document.body.classList.add("lightView");
     if (lvBtn) lvBtn.classList.add("active");
     localStorage.setItem("viewMode", "light");
@@ -201,12 +197,6 @@ function setViewMode(mode) {
     localStorage.setItem("viewMode", "default");
   }
 }
-
-function toggleCommandView() {
-  const isCommand = document.body.classList.contains("commandView");
-  setViewMode(isCommand ? "default" : "command");
-}
-window.toggleCommandView = toggleCommandView;
 
 function toggleLightView() {
   const isLight = document.body.classList.contains("lightView");
@@ -216,11 +206,10 @@ window.toggleLightView = toggleLightView;
 
 function initCommandView() {
   const saved = localStorage.getItem("viewMode");
-  if (saved === "command") setViewMode("command");
-  else if (saved === "light") setViewMode("light");
+  // Migrate legacy "command" choice back to default.
+  if (saved === "light") setViewMode("light");
+  else if (saved === "command") setViewMode("default");
 
-  const cvBtn = byId("commandViewToggle");
-  if (cvBtn) cvBtn.addEventListener("click", toggleCommandView);
   const lvBtn = byId("lightViewToggle");
   if (lvBtn) lvBtn.addEventListener("click", toggleLightView);
 }
@@ -3399,11 +3388,11 @@ async function loadDashboardLanding() {
   renderDashboardSnapshot(current, entityScope, compareAgainst);
   renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
 
-  // Live call activity per entity card — pulled from Landis (LAOSS/NES) and
-  // RingCentral (MRO/SpineOne). Always shows the CURRENT week (the one
-  // containing today), regardless of the dashboard's selected period which
-  // is usually retrospective. Fires in parallel after the main render.
-  const livePhonesWeek = getCurrentWeekEnding();
+  // Live call activity per entity card — pulled from Landis (LAOSS/NES)
+  // and RingCentral (MRO/SpineOne). Follows the dashboard's selected week
+  // so the numbers change when the user picks a different period. Fires
+  // in parallel after the main render.
+  const livePhonesWeek = weekSets?.primaryWeeks?.[weekSets.primaryWeeks.length - 1] || getCurrentWeekEnding();
   const livePhonesEntities = entityScope === "ALL" ? ENTITIES : [entityScope];
   livePhonesEntities.forEach((e) => { populateEntityLivePhones(e, livePhonesWeek); });
 
