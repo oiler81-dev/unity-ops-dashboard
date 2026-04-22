@@ -1505,6 +1505,14 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
               </div>
             </div>
 
+            <div class="entityLivePhones" id="livePhones_${entity}" data-entity="${entity}">
+              <div class="entityLivePhonesHeader">
+                <span class="entityLivePhonesLabel">Live Phones (this week)</span>
+                <span class="entityLivePhonesState">loading…</span>
+              </div>
+              <div class="entityLivePhonesGrid"></div>
+            </div>
+
             <details class="entityDetailDrawer">
               <summary>More detail</summary>
               <div class="entityDetailGrid">
@@ -3428,6 +3436,15 @@ async function loadDashboardLanding() {
   renderDashboardSnapshot(current, entityScope, compareAgainst);
   renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
 
+  // Live call activity per entity card — pulled from Landis (LAOSS/NES) and
+  // RingCentral (MRO/SpineOne). Fires in parallel after the main render so
+  // dashboard appearance isn't delayed by the network calls.
+  const livePhonesWeek = weekSets.primaryWeeks?.[weekSets.primaryWeeks.length - 1];
+  if (livePhonesWeek) {
+    const livePhonesEntities = entityScope === "ALL" ? ENTITIES : [entityScope];
+    livePhonesEntities.forEach((e) => { populateEntityLivePhones(e, livePhonesWeek); });
+  }
+
   // Store for digest generator
   window._lastDashboardCurrent        = current;
   window._lastDashboardComparison     = comparison;
@@ -3536,6 +3553,61 @@ async function loadAndPopulateCallData(entity, weekEnding) {
     updateDerivedDisplays();
   } catch (e) {
     if (banner) { banner.textContent = "Could not load phone system data."; banner.className = "callDataBanner callDataBannerMissing"; }
+  }
+}
+
+// Populate the live phones strip on a dashboard entity card with data pulled
+// directly from Landis/RingCentral (via /api/call-data). Runs after the main
+// dashboard render so the primary KPIs show immediately and the phones strip
+// fills in progressively.
+async function populateEntityLivePhones(entity, weekEnding) {
+  const container = byId(`livePhones_${entity}`);
+  if (!container) return;
+
+  const stateEl = container.querySelector(".entityLivePhonesState");
+  const gridEl  = container.querySelector(".entityLivePhonesGrid");
+
+  try {
+    const callData = await apiGet(
+      `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
+    );
+
+    if (!callData?.ok || !callData.hasData) {
+      if (stateEl) stateEl.textContent = callData?.source ? "no data this week" : "not connected";
+      if (gridEl) gridEl.innerHTML = "";
+      return;
+    }
+
+    const sourceLabel = callData.source === "ringcentral" ? "RingCentral" : callData.source === "landis" ? "Landis" : callData.source;
+    const daysLabel = callData.datesFound?.length ? `${callData.datesFound.length}/5 days` : "";
+    if (stateEl) stateEl.textContent = [sourceLabel, daysLabel].filter(Boolean).join(" · ");
+
+    const abandonedBad = normalizeNumber(callData.abandonedRate) >= getThreshold("abandonedCallRate", 10);
+    const waitBad = normalizeNumber(callData.avgWaitSeconds) >= 60;
+
+    if (gridEl) {
+      gridEl.innerHTML = `
+        <div class="entityLivePhonesTile">
+          <span class="entityLivePhonesTileLabel">Calls</span>
+          <strong class="entityLivePhonesTileValue">${formatWhole(callData.totalCalls)}</strong>
+        </div>
+        <div class="entityLivePhonesTile">
+          <span class="entityLivePhonesTileLabel">Answered</span>
+          <strong class="entityLivePhonesTileValue">${formatWhole(callData.answeredCalls)}<span class="entityLivePhonesPct">&nbsp;${callData.answerRate}%</span></strong>
+        </div>
+        <div class="entityLivePhonesTile ${abandonedBad ? "entityLivePhonesTileBad" : ""}">
+          <span class="entityLivePhonesTileLabel">Abandoned</span>
+          <strong class="entityLivePhonesTileValue">${formatWhole(callData.abandonedCalls)}<span class="entityLivePhonesPct">&nbsp;${callData.abandonedRate}%</span></strong>
+        </div>
+        <div class="entityLivePhonesTile ${waitBad ? "entityLivePhonesTileBad" : ""}">
+          <span class="entityLivePhonesTileLabel">Avg Wait</span>
+          <strong class="entityLivePhonesTileValue">${escapeHtml(callData.avgWaitFormatted || "0:00")}</strong>
+        </div>
+      `;
+    }
+  } catch {
+    if (stateEl) stateEl.textContent = "error";
+    if (gridEl) gridEl.innerHTML = "";
   }
 }
 

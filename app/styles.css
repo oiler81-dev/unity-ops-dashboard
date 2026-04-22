@@ -622,6 +622,24 @@ button:disabled { opacity:0.4; cursor:not-allowed; transform:none; box-shadow:no
 .entityMetricHero strong { font-family:var(--font-mono); font-size:22px; font-weight:500; letter-spacing:-0.02em; color:var(--text); line-height:1.1; }
 .entityCurrencyValue { font-family:var(--font-mono); font-size:18px !important; letter-spacing:-0.02em; }
 
+/* Live phones strip on entity cards — populated from /api/call-data after the main render */
+.entityLivePhones { margin-top:10px; padding:10px 12px; border:1px solid rgba(91,168,255,0.14); border-radius:var(--radius-md); background:rgba(91,168,255,0.05); }
+.entityLivePhonesHeader { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+.entityLivePhonesLabel { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--accent-2); }
+.entityLivePhonesState { font-size:10.5px; color:var(--text-muted); font-family:var(--font-mono); }
+.entityLivePhonesGrid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.entityLivePhonesTile { display:flex; flex-direction:column; gap:2px; padding:6px 8px; border-right:1px solid rgba(91,168,255,0.08); }
+.entityLivePhonesTile:last-child { border-right:none; }
+.entityLivePhonesTileLabel { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted); }
+.entityLivePhonesTileValue { font-family:var(--font-mono); font-size:15px; font-weight:500; color:var(--text); line-height:1.1; }
+.entityLivePhonesPct { font-size:11px; color:var(--text-muted); font-weight:400; }
+.entityLivePhonesTileBad .entityLivePhonesTileValue { color:var(--bad); }
+
+body.lightView .entityLivePhones { background:rgba(44,99,166,0.05); border-color:rgba(44,99,166,0.15); }
+body.lightView .entityLivePhonesLabel { color:#2c63a6; }
+body.lightView .entityLivePhonesTileValue { color:var(--text); }
+body.lightView .entityLivePhonesTileBad .entityLivePhonesTileValue { color:#c0303b; }
+
 /* ── Alerts / Wins ── */
 #dashboardAlerts .good,#dashboardAlerts .warning,#dashboardAlerts .bad { display:block; border-radius:var(--radius-md); }
 #dashboardAlerts > div { background:rgba(10,25,40,0.7); transition:transform var(--transition-fast),border-color var(--transition-fast); }
