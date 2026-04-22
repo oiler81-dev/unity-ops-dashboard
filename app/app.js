@@ -180,36 +180,24 @@ function resetThresholds() {
   Object.keys(THRESHOLD_DEFAULTS).forEach(k => localStorage.removeItem("threshold_" + k));
 }
 
-// ── View mode toggles ─────────────────────────────────────────
-// Two themes supported: default (dark) and light. Command View was
-// removed — it was a novelty theme nobody used and added drag to CSS
-// maintenance.
+// ── View mode ─────────────────────────────────────────────────
+// The app only ships one theme now — a light SaaS console inspired by
+// Ramp / Linear / Retool. The legacy Command and Default (dark) themes
+// have been retired. The `lightView` class is applied on every load so
+// every `body.lightView` CSS rule acts as the base style.
 function setViewMode(mode) {
-  document.body.classList.remove("commandView", "lightView");
-  const lvBtn = byId("lightViewToggle");
-  if (lvBtn) lvBtn.classList.remove("active");
-
-  if (mode === "light") {
-    document.body.classList.add("lightView");
-    if (lvBtn) lvBtn.classList.add("active");
-    localStorage.setItem("viewMode", "light");
-  } else {
-    localStorage.setItem("viewMode", "default");
-  }
+  // Legacy signature kept for any callers; unconditionally applies light.
+  document.body.classList.remove("commandView");
+  document.body.classList.add("lightView");
+  localStorage.setItem("viewMode", "light");
 }
 
-function toggleLightView() {
-  const isLight = document.body.classList.contains("lightView");
-  setViewMode(isLight ? "default" : "light");
-}
+function toggleLightView() { setViewMode("light"); }
 window.toggleLightView = toggleLightView;
 
 function initCommandView() {
-  const saved = localStorage.getItem("viewMode");
-  // Migrate legacy "command" choice back to default.
-  if (saved === "light") setViewMode("light");
-  else if (saved === "command") setViewMode("default");
-
+  // Ensure light is applied even when localStorage has a legacy value.
+  setViewMode("light");
   const lvBtn = byId("lightViewToggle");
   if (lvBtn) lvBtn.addEventListener("click", toggleLightView);
 }
