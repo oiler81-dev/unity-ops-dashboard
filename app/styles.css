@@ -1694,6 +1694,7 @@ body.lightView .lightViewLabel::before { content: 'Exit '; }
 .clTagFeature  { background: rgba(93,232,240,0.12);  color: var(--accent-3); }
 .clTagFix      { background: rgba(255,107,107,0.12); color: #ff6b6b; }
 .clTagImprove  { background: rgba(247,198,47,0.12);  color: var(--accent); }
+.clTagSecurity { background: rgba(140,92,232,0.14);  color: #a98cff; }
 
 .clSectionTitle {
   font-size: 12px;

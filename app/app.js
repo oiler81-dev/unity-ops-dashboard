@@ -5156,9 +5156,61 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
 
 const CHANGELOG = [
   {
+    version: "2.1.0",
+    date: "2026-04-22",
+    label: "Latest",
+    sections: [
+      {
+        type: "feature",
+        title: "New Features",
+        items: [
+          "Live phone activity strip on every dashboard entity card — pulls real-time call volume, answer rate, abandoned calls, and average wait time directly from Landis (LAOSS + NES) and RingCentral (MRO + SpineOne). Follows the selected dashboard week so numbers change when you change the period.",
+          "Ops Notes panel — the weekly narrative each regional lead writes is now a first-class section on the dashboard (was previously buried inside an entity card drawer). One card per entity, pre-scoped 'Add one →' link for entities without a note yet.",
+          "Autosave for the Weekly Entry form — every change is saved to your browser every two seconds with a timestamp indicator next to the Save button. Close the tab mid-entry and you'll be prompted to restore on reload.",
+          "Diff-before-save confirmation — saving a record that would overwrite any non-zero field with zero (or clear a non-empty Operator Notes) now triggers a modal listing each change before committing. Intended to prevent the kind of accidental wipe we saw on 4/17.",
+          "RingCentral server-to-server JWT integration for MRO and SpineOne — replaces the deprecated password-grant flow and pulls Call Log hourly into the dashboard's CallData store.",
+          "New Azure Function App 'ops-unitymsk-timers' handles the hourly RingCentral sync; Landis webhook now lands events directly in the SWA Managed API."
+        ]
+      },
+      {
+        type: "fix",
+        title: "Bug Fixes",
+        items: [
+          "Imaging field not sticking on reload — the SpineOne imaging input was missing from the form's populate list so saved values never reappeared.",
+          "SpineOne total visit count discrepancy — the executive-summary backend was reading a stale '{entity}-PT' partition and clobbering the correct PT values on the base partition.",
+          "PTO provider breakdown disappearing for Annette/NES — the breakdown array was sent to the backend but never persisted. Now stored as JSON on the forecast record.",
+          "Reschedules field not populating on load — same root cause as the imaging issue; both were missed when the fields were first added.",
+          "Landis webhook entity resolver now matches actual Landis naming ('Landis-LAOSS-*', 'Landis-NES-*', agent UPNs at laorthos.com / nespecialists.com) with word-boundary safety so short tokens like 'NES' can't accidentally match inside unrelated words.",
+          "Phone-data strip now reflects the selected dashboard period instead of always showing the current week — fixes the 'numbers don't change when I pick a different week' complaint.",
+          "Aggregate imaging field initialized to zero so totals can't start as NaN."
+        ]
+      },
+      {
+        type: "improvement",
+        title: "Improvements",
+        items: [
+          "Weekly Entry form refactored to a single field registry — adding or renaming a tracked field is now a one-line change instead of touching 7+ places. Long-term, this kills the class of bugs that caused the imaging + reschedules + PT zero-out incidents.",
+          "Executive Summary is now properly scoped to the caller's entity — regional leads see only their own data; admins still see everything.",
+          "Command View theme retired — removed ~200 lines of alternate-theme CSS that nobody used. Default (dark) and Light View remain. Anyone previously on Command View migrates back to default automatically.",
+          "staticwebapp.config.json hardened with X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, and HSTS headers; Landis webhook route explicitly opened for anonymous POSTs."
+        ]
+      },
+      {
+        type: "security",
+        title: "Security",
+        items: [
+          "/api/call-data endpoint now requires Azure AD auth, validates the entity + weekEnding inputs, and blocks cross-tenant reads (regionals can only query their own entity).",
+          "Landis webhook fails closed when the shared secret env var is missing, uses a timing-safe comparison, and no longer logs full event payloads (which could include caller identifiers).",
+          "Stored XSS protections — escapeHtml helper now applied to every free-text field rendered via innerHTML (ops narrative, status, savedBy, updatedBy, created-by, etc.). Weekly digest textarea populated via .value instead of template interpolation so a stored '</textarea>' payload can no longer break out.",
+          "/api/pto-forecast POST whitelists the entity against the known four and validates monthKey as YYYY-MM before writing.",
+          "RingCentral integration moved from the deprecated password-grant flow to per-tenant JWT so user credentials are no longer stored in app settings."
+        ]
+      }
+    ]
+  },
+  {
     version: "2.0.0",
     date: "2026-04-14",
-    label: "Latest",
     sections: [
       {
         type: "feature",
@@ -5349,7 +5401,8 @@ function renderChangelogEntries(entries, container) {
   const typeConfig = {
     feature:     { label: "New",      cls: "clTagFeature"  },
     fix:         { label: "Fixed",    cls: "clTagFix"      },
-    improvement: { label: "Improved", cls: "clTagImprove"  }
+    improvement: { label: "Improved", cls: "clTagImprove"  },
+    security:    { label: "Security", cls: "clTagSecurity" }
   };
 
   container.innerHTML = entries.map((release, idx) => `
