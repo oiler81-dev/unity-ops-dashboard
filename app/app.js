@@ -296,6 +296,19 @@ function getDefaultWeekEnding() {
   return d.toISOString().slice(0, 10);
 }
 
+// Friday of the week that CONTAINS today. Used for the live phones strip —
+// which always shows current week data regardless of the dashboard's
+// selected (usually retrospective) period.
+function getCurrentWeekEnding() {
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun, 5=Fri, 6=Sat
+  // Days forward to reach this week's Friday. Sat rolls to next week's Fri
+  // (matches how weekEnding is stored as the following Friday).
+  const daysForward = day <= 5 ? 5 - day : 6;
+  d.setDate(d.getDate() + daysForward);
+  return d.toISOString().slice(0, 10);
+}
+
 function nearestPriorFriday(isoDate) {
   const d = new Date(isoDate + "T12:00:00Z");
   const day = d.getUTCDay();
@@ -3329,13 +3342,12 @@ async function loadDashboardLanding() {
   renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
 
   // Live call activity per entity card — pulled from Landis (LAOSS/NES) and
-  // RingCentral (MRO/SpineOne). Fires in parallel after the main render so
-  // dashboard appearance isn't delayed by the network calls.
-  const livePhonesWeek = weekSets.primaryWeeks?.[weekSets.primaryWeeks.length - 1];
-  if (livePhonesWeek) {
-    const livePhonesEntities = entityScope === "ALL" ? ENTITIES : [entityScope];
-    livePhonesEntities.forEach((e) => { populateEntityLivePhones(e, livePhonesWeek); });
-  }
+  // RingCentral (MRO/SpineOne). Always shows the CURRENT week (the one
+  // containing today), regardless of the dashboard's selected period which
+  // is usually retrospective. Fires in parallel after the main render.
+  const livePhonesWeek = getCurrentWeekEnding();
+  const livePhonesEntities = entityScope === "ALL" ? ENTITIES : [entityScope];
+  livePhonesEntities.forEach((e) => { populateEntityLivePhones(e, livePhonesWeek); });
 
   // Store for digest generator
   window._lastDashboardCurrent        = current;
