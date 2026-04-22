@@ -742,6 +742,51 @@ body.lightView .diffTo { color:#c0303b; }
 body.lightView .diffConfirmCancel { color:var(--text-soft); border-color:rgba(0,0,0,0.15); }
 body.lightView .diffConfirmOk { color:#8a1521; background:rgba(220,53,69,0.12); border-color:rgba(220,53,69,0.3); }
 
+/* ── Dashboard: Ops Notes panel (cross-entity weekly narrative feed) ── */
+.opsNotesGrid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+  gap:12px;
+}
+.opsNotesCard {
+  background:rgba(255,255,255,0.02);
+  border:1px solid rgba(91,168,255,0.12);
+  border-radius:var(--radius-md);
+  padding:14px 16px;
+  transition:transform var(--transition-fast), border-color var(--transition-fast);
+}
+.opsNotesCard:hover { transform:translateY(-1px); border-color:rgba(91,168,255,0.2); }
+.opsNotesHeader { margin-bottom:10px; }
+.opsNotesEntity {
+  font-size:14px; font-weight:700; color:var(--text);
+  font-family:var(--font-mono); letter-spacing:-0.01em;
+}
+.opsNotesSubtitle {
+  font-size:11px; color:var(--text-muted);
+  text-transform:uppercase; letter-spacing:0.08em; margin-top:2px;
+}
+.opsNotesBody {
+  font-size:13px; color:var(--text-soft); line-height:1.55;
+  white-space:pre-wrap; word-break:break-word;
+}
+.opsNotesEmpty {
+  font-size:12.5px; color:var(--text-muted); font-style:italic;
+  padding:6px 0;
+}
+.opsNotesAction {
+  color:var(--accent); cursor:pointer; font-weight:600; font-style:normal;
+  margin-left:4px;
+}
+.opsNotesAction:hover { text-decoration:underline; }
+
+body.lightView .opsNotesCard {
+  background:var(--bg-panel);
+  border-color:var(--border-soft);
+}
+body.lightView .opsNotesCard:hover { border-color:rgba(0,0,0,0.14); }
+body.lightView .opsNotesEntity { color:var(--text); }
+body.lightView .opsNotesBody { color:var(--text-soft); }
+
 /* ── Alerts / Wins ── */
 #dashboardAlerts .good,#dashboardAlerts .warning,#dashboardAlerts .bad { display:block; border-radius:var(--radius-md); }
 #dashboardAlerts > div { background:rgba(10,25,40,0.7); transition:transform var(--transition-fast),border-color var(--transition-fast); }

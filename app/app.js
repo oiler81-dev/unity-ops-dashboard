@@ -1444,11 +1444,9 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
                   <div class="entityDetailValue">${formatWhole(row.ptoDays || 0)}</div>
                 </div>
               </div>
-              ${row.operationsNarrative ? `
-              <div class="entityNarrativeBlock">
-                <div class="entityNarrativeLabel">Ops Notes</div>
-                <div class="entityNarrativeText">${escapeHtml(row.operationsNarrative)}</div>
-              </div>` : ""}
+              <!-- Ops narrative is now rendered in the dashboard-wide Ops Notes
+                   panel below the entity grid, not duplicated per-card. -->
+              ${""}
             </details>
           </div>
         `;
@@ -1521,6 +1519,55 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
     }
     return `<div class="alertItem ${cls}"><span class="alertIcon">${icon}</span><span>${alert.text}</span></div>`;
   }).join("");
+}
+
+// Show each entity's weekly narrative as a stand-alone panel on the dashboard.
+// The ops narrative is the highest-signal qualitative field in the system
+// (regional leads explain *why* the numbers moved) and used to be buried
+// behind an entity card drawer — promoting it makes cross-entity context
+// easy to skim like a Slack channel.
+function renderDashboardOpsNotes(current, entityScope, weekSets) {
+  const container = byId("dashboardOpsNotes");
+  const panel = byId("dashboardOpsNotesPanel");
+  if (!container) return;
+
+  const entities = entityScope === "ALL" ? ENTITIES : (isPtScope(entityScope) ? [] : [entityScope]);
+  if (!entities.length) {
+    if (panel) panel.style.display = "none";
+    return;
+  }
+  if (panel) panel.style.display = "";
+
+  const currentMap = getEntityMap(current);
+  const weekLabel = weekSets?.primaryWeeks?.length === 1
+    ? `week ending ${weekSets.primaryWeeks[0]}`
+    : `selected period`;
+
+  const cards = entities.map((entity) => {
+    const row = currentMap[entity];
+    const brand = getBranding(entity);
+    const rawNarrative = String(row?.operationsNarrative || "").trim();
+    const hasNote = !!rawNarrative;
+
+    const body = hasNote
+      ? `<div class="opsNotesBody">${escapeHtml(rawNarrative).replace(/\n/g, "<br />")}</div>`
+      : `<div class="opsNotesEmpty">
+          No note for ${escapeHtml(weekLabel)}.
+          <span class="opsNotesAction" onclick="showEntryViewForMissing('${escapeHtml(entity)}')">Add one →</span>
+        </div>`;
+
+    return `
+      <div class="opsNotesCard" style="border-top:3px solid ${brand.accent};">
+        <div class="opsNotesHeader">
+          <div class="opsNotesEntity">${escapeHtml(entity)}</div>
+          <div class="opsNotesSubtitle">${escapeHtml(brand.fullName)}</div>
+        </div>
+        ${body}
+      </div>
+    `;
+  }).join("");
+
+  container.innerHTML = `<div class="opsNotesGrid">${cards}</div>`;
 }
 
 function renderDashboardWins(current, comparison, entityScope, compareAgainst) {
@@ -3346,6 +3393,7 @@ async function loadDashboardLanding() {
   renderDashboardCards(current, comparison, compareAgainst, entityScope, weekSets);
   renderDataCompletenessBanner(current, entityScope, weekSets);
   renderDashboardEntities(current, comparison, compareAgainst, entityScope);
+  renderDashboardOpsNotes(current, entityScope, weekSets);
   renderDashboardAlerts(current, comparison, entityScope, compareAgainst);
   renderDashboardWins(current, comparison, entityScope, compareAgainst);
   renderDashboardSnapshot(current, entityScope, compareAgainst);
