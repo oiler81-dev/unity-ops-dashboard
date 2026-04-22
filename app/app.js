@@ -941,13 +941,13 @@ function renderEntityBrand(containerId, entity) {
 
   const brand = getBranding(entity);
   container.innerHTML = `
-    <div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid #1d435b; border-radius:10px; background:#0a2233;">
-      <div style="width:110px; height:48px; background:#fff; border-radius:8px; padding:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-        <img src="${brand.logo}" alt="${brand.label}" style="max-width:100%; max-height:100%; object-fit:contain;" />
+    <div class="entryBrandCard">
+      <div class="entryBrandLogo">
+        <img src="${brand.logo}" alt="${brand.label}" />
       </div>
       <div>
-        <div style="font-weight:bold; color:${brand.accent};">${brand.label}</div>
-        <div style="font-size:12px; opacity:0.9;">${brand.fullName}</div>
+        <div class="entryBrandLabel" style="color:${brand.accent};">${brand.label}</div>
+        <div class="entryBrandFullName">${brand.fullName}</div>
       </div>
     </div>
   `;
@@ -4071,49 +4071,54 @@ function injectUiPolishStyles() {
   style.textContent = `
     textarea {
       width: 100%;
-      padding: 11px 12px;
+      padding: 10px 12px;
       box-sizing: border-box;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      background: rgba(255,255,255,0.06);
-      color: #ffffff;
+      border: 1px solid var(--border-mid);
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      color: var(--text);
       resize: vertical;
       line-height: 1.5;
+      font-family: var(--font);
+      font-size: 13px;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
     }
+    textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
     .narrativeFieldBlock { margin-top: 10px; }
 
     .notesShell {
-      padding: 18px;
-      border-radius: 18px;
-      background: linear-gradient(180deg, rgba(17,63,93,0.42) 0%, rgba(11,42,63,0.42) 100%);
-      border: 1px solid rgba(108,182,255,0.16);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+      padding: 20px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-panel);
+      border: 1px solid var(--border-soft);
+      box-shadow: var(--shadow-sm);
     }
 
-    .notesHeader { margin-bottom: 14px; }
+    .notesHeader { margin-bottom: 16px; }
 
     .notesEyebrow {
-      font-size: 11px;
+      font-size: 10.5px;
       text-transform: uppercase;
       letter-spacing: 0.12em;
-      color: #6cb6ff;
-      font-weight: 800;
+      color: var(--accent);
+      font-weight: 600;
       margin-bottom: 6px;
     }
 
     .notesTitle {
-      font-size: 22px;
-      font-weight: 900;
-      line-height: 1.05;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.15;
       margin-bottom: 6px;
-      color: #f4f8fc;
+      color: var(--text);
+      letter-spacing: -0.01em;
     }
 
     .notesSubtext {
       font-size: 13px;
-      color: #b8d3e6;
-      line-height: 1.5;
+      color: var(--text-soft);
+      line-height: 1.55;
     }
 
     .notesPromptGrid {
@@ -4127,27 +4132,27 @@ function injectUiPolishStyles() {
       display: flex;
       gap: 10px;
       align-items: flex-start;
-      padding: 12px;
-      border-radius: 14px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.06);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel-soft);
+      border: 1px solid var(--border-soft);
     }
 
     .notesPromptBullet {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 999px;
-      background: linear-gradient(180deg, #6cb6ff 0%, #74f0ff 100%);
-      margin-top: 5px;
+      background: var(--accent);
+      margin-top: 6px;
       flex-shrink: 0;
-      box-shadow: 0 0 0 4px rgba(108,182,255,0.12);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
 
     .notesPromptText {
-      color: #dcebf8;
-      font-size: 13px;
-      line-height: 1.45;
-      font-weight: 700;
+      color: var(--text-soft);
+      font-size: 12.5px;
+      line-height: 1.5;
+      font-weight: 500;
     }
 
     .summaryCard { min-width: 0; overflow: hidden; }
@@ -4183,18 +4188,17 @@ function injectUiPolishStyles() {
     }
 
     .entityCard {
-      background:rgba(10,22,36,0.98);
-      border:1px solid rgba(255,255,255,0.07);
-      border-radius:10px;
-      padding:13px 14px;
-      box-shadow:0 4px 16px rgba(0,0,0,0.18);
-      transition:transform .15s ease, box-shadow .2s ease, border-color .15s ease;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .18s ease, border-color .15s ease;
     }
 
     .entityCard:hover {
-      transform:translateY(-1px);
-      box-shadow:0 10px 28px rgba(0,0,0,0.26);
-      border-color:rgba(91,168,255,0.18);
+      box-shadow: var(--shadow-md);
+      border-color: var(--border-mid);
     }
 
     .entityCardHeader {
@@ -4220,9 +4224,9 @@ function injectUiPolishStyles() {
       align-items:center;
       padding:3px 8px;
       border-radius:4px;
-      background:rgba(77,217,138,0.12);
-      color:#4dd98a;
-      font-family:'DM Mono','Fira Mono',monospace;
+      background: var(--good-soft);
+      color: var(--good);
+      font-family: var(--font-mono);
       font-size:10px;
       font-weight:500;
       text-transform:uppercase;
@@ -4234,24 +4238,25 @@ function injectUiPolishStyles() {
       align-items:center;
       padding:3px 8px;
       border-radius:4px;
-      background:rgba(255,255,255,0.06);
-      color:#93b4cc;
-      font-family:'DM Mono','Fira Mono',monospace;
+      background: var(--bg-panel-soft);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
       font-size:10px;
       font-weight:500;
       letter-spacing:.04em;
     }
 
-    .metricChipGood    { background:rgba(77,217,138,0.1);   color:#4dd98a; }
-    .metricChipWarning { background:rgba(247,198,47,0.12);  color:#f7c62f; }
-    .metricChipBad     { background:rgba(240,100,112,0.12); color:#f06470; }
+    .metricChipGood    { background: var(--good-soft);    color: var(--good); }
+    .metricChipWarning { background: var(--warning-soft); color: var(--warning); }
+    .metricChipBad     { background: var(--bad-soft);     color: var(--bad); }
 
-    .entityTitle    { font-size:17px; font-weight:700; line-height:1.05; margin-bottom:3px; letter-spacing:-0.02em; }
-    .entitySubtitle { font-size:11px; color:#506a7e; line-height:1.35; }
+    .entityTitle    { font-size:16px; font-weight:600; line-height:1.1; margin-bottom:3px; letter-spacing:-0.01em; color: var(--text); }
+    .entitySubtitle { font-size:11px; color: var(--text-muted); line-height:1.35; }
 
     .entityLogoWrap {
       width:64px; height:34px; background:#fff; border-radius:6px; padding:4px;
       display:flex; align-items:center; justify-content:center; flex-shrink:0;
+      border: 1px solid var(--border-soft);
     }
 
     .entityLogo { max-width:100%; max-height:100%; object-fit:contain; }
@@ -4259,41 +4264,40 @@ function injectUiPolishStyles() {
     .entityTopMetrics {
       display:grid;
       grid-template-columns:repeat(3,1fr);
-      gap:0;
+      gap: 1px;
       margin-bottom:10px;
-      border:1px solid rgba(255,255,255,0.06);
-      border-radius:8px;
+      border:1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
       overflow:hidden;
+      background: var(--border-soft);
     }
 
     .entityMetricHero {
       padding:9px 10px;
-      border-right:1px solid rgba(255,255,255,0.06);
       min-width:0;
-      background:rgba(255,255,255,0.02);
+      background: var(--bg-panel);
     }
-
-    .entityMetricHero:last-child { border-right:none; }
 
     .entityMetricLabel {
       display:block;
       font-size:9px;
       text-transform:uppercase;
       letter-spacing:.1em;
-      color:#506a7e;
+      color: var(--text-muted);
       margin-bottom:3px;
-      font-weight:700;
+      font-weight:600;
     }
 
     .entityMetricHero strong {
-      font-family:'DM Mono','Fira Mono',monospace;
-      font-size:18px;
-      font-weight:500;
-      line-height:1;
-      letter-spacing:-.02em;
+      font-family: var(--font);
+      font-variant-numeric: tabular-nums;
+      font-size:16px;
+      font-weight:600;
+      line-height:1.1;
+      letter-spacing:-.01em;
       display:block;
       min-width:0;
-      color:#eaf1f8;
+      color: var(--text);
     }
 
     .entityBudgetGrid, .entityCompareGrid { display:grid; gap:8px; margin-bottom:12px; }
@@ -4301,10 +4305,10 @@ function injectUiPolishStyles() {
     .entityCompareGrid { grid-template-columns:repeat(3,1fr); }
 
     .entityBudgetTile, .entityMiniStat {
-      background:rgba(91,168,255,0.06);
-      border:1px solid rgba(91,168,255,0.1);
-      border-radius:10px;
-      padding:10px 11px;
+      background: var(--bg-panel-soft);
+      border:1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      padding:10px 12px;
     }
 
     .entityBudgetLabel, .entityMiniLabel {
@@ -4312,49 +4316,52 @@ function injectUiPolishStyles() {
       font-size:9.5px;
       text-transform:uppercase;
       letter-spacing:.1em;
-      color:#506a7e;
+      color: var(--text-muted);
       margin-bottom:5px;
-      font-weight:700;
+      font-weight:600;
     }
 
     .entityBudgetValue, .entityMiniStat strong {
-      font-family:'DM Mono','Fira Mono',monospace;
-      font-size:20px; font-weight:500; line-height:1; margin-bottom:6px; display:block;
-      letter-spacing:-.02em;
+      font-family: var(--font);
+      font-variant-numeric: tabular-nums;
+      font-size:18px; font-weight:600; line-height:1.1; margin-bottom:6px; display:block;
+      letter-spacing:-.01em;
+      color: var(--text);
     }
 
-    .entityBudgetMeta { margin-top:5px; font-size:11.5px; color:#506a7e; }
+    .entityBudgetMeta { margin-top:5px; font-size:11.5px; color: var(--text-muted); }
     .entityProgressWrap { margin-top:8px; }
 
     .entityProgressLabelRow {
       display:flex; justify-content:space-between; gap:8px; align-items:center;
-      font-size:11.5px; color:#506a7e; margin-bottom:5px;
+      font-size:11.5px; color: var(--text-muted); margin-bottom:5px;
     }
 
-    .entityProgressLabelRow strong { color:#93b4cc; font-size:11.5px; font-family:'DM Mono','Fira Mono',monospace; }
+    .entityProgressLabelRow strong { color: var(--text-soft); font-size:11.5px; font-family: var(--font); font-variant-numeric: tabular-nums; font-weight: 600; }
 
     .entityProgressTrack {
-      width:100%; height:5px; border-radius:999px;
-      background:rgba(255,255,255,0.07); overflow:hidden; position:relative;
+      width:100%; height:6px; border-radius:999px;
+      background: var(--border-soft); overflow:hidden; position:relative;
     }
 
     .entityProgressBar {
       height:100%; border-radius:999px; transition:width .32s ease;
-      background:rgba(91,168,255,0.6);
+      background: var(--accent);
     }
 
-    .entityProgressGood    { background:#4dd98a; }
-    .entityProgressWarning { background:#f7c62f; }
-    .entityProgressBad     { background:#f06470; }
+    .entityProgressGood    { background: var(--good); }
+    .entityProgressWarning { background: var(--warning); }
+    .entityProgressBad     { background: var(--bad); }
 
     /* Health stats — three inline pills in a row */
     .entityHealthRow {
       display:flex;
-      gap:0;
+      gap: 1px;
       margin-bottom:8px;
-      border:1px solid rgba(255,255,255,0.06);
-      border-radius:8px;
+      border:1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
       overflow:hidden;
+      background: var(--border-soft);
     }
 
     .entityHealthItem {
@@ -4363,41 +4370,39 @@ function injectUiPolishStyles() {
       flex-direction:column;
       gap:2px;
       padding:7px 9px;
-      border-right:1px solid rgba(255,255,255,0.06);
-      background:rgba(255,255,255,0.015);
+      background: var(--bg-panel);
       min-width:0;
     }
-
-    .entityHealthItem:last-child { border-right:none; }
 
     .entityHealthLabel {
       font-size:9px;
       text-transform:uppercase;
       letter-spacing:.1em;
-      color:#506a7e;
-      font-weight:700;
+      color: var(--text-muted);
+      font-weight:600;
       white-space:nowrap;
     }
 
     .entityHealthItem strong {
-      font-family:'DM Mono','Fira Mono',monospace;
-      font-size:14px;
-      font-weight:500;
-      line-height:1;
-      color:var(--text-soft);
+      font-family: var(--font);
+      font-variant-numeric: tabular-nums;
+      font-size:13px;
+      font-weight:600;
+      line-height:1.1;
+      color: var(--text);
     }
 
-    .entityHealthItem strong.good    { color:#22d47a; }
-    .entityHealthItem strong.warning { color:#f7c62f; }
-    .entityHealthItem strong.bad     { color:#ff6b6b; }
+    .entityHealthItem strong.good    { color: var(--good); }
+    .entityHealthItem strong.warning { color: var(--warning); }
+    .entityHealthItem strong.bad     { color: var(--bad); }
 
     /* Access health bar */
     .entityAccessPanel {
       margin-bottom:8px;
-      padding:7px 10px;
-      border-radius:7px;
-      background:rgba(255,255,255,0.02);
-      border:1px solid rgba(255,255,255,0.05);
+      padding:8px 10px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel-soft);
+      border:1px solid var(--border-soft);
     }
 
     .entityAccessLabelRow {
@@ -4411,26 +4416,30 @@ function injectUiPolishStyles() {
       font-size:9.5px;
       text-transform:uppercase;
       letter-spacing:.1em;
-      color:#506a7e;
-      font-weight:700;
+      color: var(--text-muted);
+      font-weight:600;
     }
 
     .entityAccessValue {
-      font-family:'DM Mono','Fira Mono',monospace;
+      font-family: var(--font);
+      font-variant-numeric: tabular-nums;
       font-size:13px;
-      font-weight:500;
-      color:#eaf1f8;
+      font-weight:600;
+      color: var(--text);
     }
 
     .entityDetailDrawer {
-      border:1px solid rgba(255,255,255,0.05); border-radius:10px;
-      background:rgba(4,9,15,0.4); overflow:hidden;
+      border:1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      background: var(--bg-panel);
+      overflow:hidden;
     }
 
     .entityDetailDrawer summary {
       cursor:pointer; list-style:none; padding:10px 13px;
-      font-weight:600; font-size:12.5px; color:#93b4cc;
+      font-weight:600; font-size:12.5px; color: var(--text-soft);
       display:flex; align-items:center; gap:6px;
+      background: var(--bg-panel-soft);
     }
 
     .entityDetailDrawer summary::before {
@@ -4438,30 +4447,52 @@ function injectUiPolishStyles() {
       font-size:14px;
       transition:transform .15s ease;
       display:inline-block;
+      color: var(--text-muted);
     }
 
     details[open] .entityDetailDrawer summary::before { transform:rotate(90deg); }
     .entityDetailDrawer summary::-webkit-details-marker { display:none; }
 
     .entityDetailGrid {
-      display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:0 13px 13px;
+      display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding: 10px 13px 13px;
     }
 
     .entityDetailTile {
-      padding:10px; border-radius:9px;
-      background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.05);
+      padding:10px; border-radius: var(--radius-sm);
+      background: var(--bg-panel-soft); border:1px solid var(--border-soft);
     }
 
     .entityDetailLabel {
       font-size:9.5px; text-transform:uppercase; letter-spacing:.08em;
-      color:#506a7e; margin-bottom:4px; font-weight:700;
+      color: var(--text-muted); margin-bottom:4px; font-weight:600;
     }
 
     .entityDetailValue {
-      font-family:'DM Mono','Fira Mono',monospace;
-      font-size:17px; font-weight:500; line-height:1.1;
-      letter-spacing:-.01em;
+      font-family: var(--font);
+      font-variant-numeric: tabular-nums;
+      font-size:16px; font-weight:600; line-height:1.1;
+      letter-spacing:-.01em; color: var(--text);
     }
+
+    /* Entry-page brand/entity context card */
+    .entryBrandCard {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 16px;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-lg);
+      background: var(--bg-panel);
+      box-shadow: var(--shadow-sm);
+    }
+    .entryBrandLogo {
+      width: 108px; height: 48px; background: var(--bg-panel-soft);
+      border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+      padding: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .entryBrandLogo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .entryBrandLabel { font-weight: 600; font-size: 13px; letter-spacing: 0.02em; color: var(--accent); text-transform: uppercase; }
+    .entryBrandFullName { font-size: 12.5px; color: var(--text-soft); margin-top: 2px; }
 
     @media (max-width: 820px) {
       .entityTopMetrics, .entityCompareGrid, .entityDetailGrid { grid-template-columns:1fr; }
@@ -4469,7 +4500,7 @@ function injectUiPolishStyles() {
     }
 
     @media (max-width: 768px) {
-      .notesTitle { font-size: 18px; }
+      .notesTitle { font-size: 16px; }
       .notesPromptGrid { grid-template-columns: 1fr; }
     }
   `;
@@ -4771,6 +4802,11 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
 }
 
 (async function init() {
+  // Inject design tokens/polish before any async work so the shell renders
+  // correctly even if /api/me is slow or fails.
+  injectUiPolishStyles();
+  initCommandView();
+
   try {
     currentUser = await apiGet("/api/me");
 
@@ -4779,8 +4815,6 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
     setupTrendsEntityDropdown();
     renderForm();
     syncEntryModeVisibility();
-    injectUiPolishStyles();
-    initCommandView();
 
     const defaultWeek = getDefaultWeekEnding();
 

@@ -711,7 +711,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow
 .regionTable { width:100%; border-collapse:collapse; margin-top:10px; }
 
 .regionTable th,
-.regionTable td { padding:10px 11px; text-align:left; vertical-align:top; border-bottom:1px solid rgba(255,255,255,0.055); }
+.regionTable td { padding:10px 11px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border-soft); }
 
 .regionTable th {
   font-size: 10.5px;
@@ -719,20 +719,20 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-muted);
-  background: rgba(255,255,255,0.025);
+  background: var(--bg-panel-soft);
   white-space: nowrap;
 }
 
 .regionTable tbody tr { transition:background var(--transition-fast); }
-.regionTable tbody tr:hover { background:rgba(255,255,255,0.025); }
+.regionTable tbody tr:hover { background:var(--bg-panel-soft); }
 .regionTable tbody tr:last-child td { border-bottom:none; }
 .regionTable td:not(:first-child) { font-family:var(--font-mono); font-size:13px; }
 
 #executivePtRegions .regionTable th,
-#trendsPtTableWrap  .regionTable th { background:rgba(155,135,255,0.08); color:rgba(200,190,255,0.7); }
+#trendsPtTableWrap  .regionTable th { background:rgba(30,107,79,0.08); color:var(--pt-accent); }
 
 #executivePtRegions .regionTable tbody tr:hover,
-#trendsPtTableWrap  .regionTable tbody tr:hover { background:rgba(155,135,255,0.05); }
+#trendsPtTableWrap  .regionTable tbody tr:hover { background:rgba(30,107,79,0.05); }
 
 .good    { color:var(--good);    }
 .warning { color:var(--warning); }
@@ -741,9 +741,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow
 .statusMessage { margin-top:14px; font-weight:600; font-size:13px; min-height:20px; }
 
 /* ── Debug ── */
-.debugPanel { margin-top:16px; border:1px solid rgba(91,168,255,0.1); border-radius:var(--radius-md); background:rgba(4,9,15,0.7); overflow:hidden; }
-.debugPanel summary { cursor:pointer; padding:10px 14px; font-size:12px; font-weight:600; color:var(--text-muted); background:rgba(255,255,255,0.02); border-bottom:1px solid rgba(91,168,255,0.08); user-select:none; }
-.debugOutput { margin:0; white-space:pre-wrap; background:transparent; padding:14px; overflow-x:auto; max-height:400px; font-family:var(--font-mono); font-size:11.5px; line-height:1.6; color:rgba(148,180,204,0.9); }
+.debugPanel { margin-top:16px; border:1px solid var(--border-soft); border-radius:var(--radius-md); background:var(--bg-panel-soft); overflow:hidden; box-shadow: var(--shadow-xs); }
+.debugPanel summary { cursor:pointer; padding:10px 14px; font-size:12px; font-weight:600; color:var(--text-muted); background:var(--bg-panel); border-bottom:1px solid var(--border-soft); user-select:none; }
+.debugOutput { margin:0; white-space:pre-wrap; background:transparent; padding:14px; overflow-x:auto; max-height:400px; font-family:var(--font-mono); font-size:11.5px; line-height:1.6; color:var(--text-soft); }
 
 .subtleBanner {
   margin-top: 4px;
@@ -844,11 +844,12 @@ body.lightView .entityLivePhonesTileBad .entityLivePhonesTileValue { color: var(
   gap:10px;
   margin:10px 0;
   padding:10px 14px;
-  border:1px solid rgba(247,198,47,0.3);
-  background:rgba(247,198,47,0.08);
+  border:1px solid var(--border-soft);
+  background:var(--bg-panel-soft);
   border-radius:var(--radius-md);
   color:var(--text);
   font-size:12.5px;
+  box-shadow: var(--shadow-xs);
 }
 .draftRestoreIcon { color:var(--accent); font-size:15px; }
 .draftRestoreText { flex:1; }
@@ -856,17 +857,17 @@ body.lightView .entityLivePhonesTileBad .entityLivePhonesTileValue { color: var(
   padding:5px 12px;
   font-size:11.5px;
   font-weight:600;
-  border-radius:var(--radius-md);
+  border-radius:var(--radius-sm);
   cursor:pointer;
 }
-.draftRestoreBtn { background:var(--accent); color:#1a1400; border:1px solid rgba(0,0,0,0.1); }
-.draftRestoreBtn:hover { filter:brightness(1.1); }
-.draftDiscardBtn { background:transparent; border:1px solid rgba(255,255,255,0.18); color:var(--text-soft); }
+.draftRestoreBtn { background:var(--accent); color:#fff; border:1px solid var(--accent); }
+.draftRestoreBtn:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+.draftDiscardBtn { background:transparent; border:1px solid var(--border-mid); color:var(--text-soft); }
 .draftDiscardBtn:hover { border-color:var(--bad); color:var(--bad); }
 
 .diffConfirmOverlay {
   position:fixed; top:0; left:0; right:0; bottom:0;
-  background:rgba(0,0,0,0.7);
+  background:rgba(11,18,32,0.45);
   z-index:9000;
   display:none;
   align-items:center;
@@ -874,25 +875,25 @@ body.lightView .entityLivePhonesTileBad .entityLivePhonesTileValue { color: var(
   padding:20px;
 }
 .diffConfirmBox {
-  background:var(--bg-panel, #0b1420);
-  border:1px solid rgba(220,53,69,0.35);
-  border-radius:var(--radius-md);
+  background:var(--bg-panel);
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-lg);
   max-width:620px;
   width:100%;
   max-height:85vh;
   overflow-y:auto;
-  box-shadow:0 24px 72px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-xl);
 }
-.diffConfirmHeader { padding:20px 24px 12px; border-bottom:1px solid rgba(255,255,255,0.06); }
+.diffConfirmHeader { padding:20px 24px 12px; border-bottom:1px solid var(--border-soft); }
 .diffConfirmTag {
   display:inline-block;
   font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em;
   color:var(--bad);
-  background:rgba(220,53,69,0.12);
+  background:var(--bad-soft);
   padding:3px 10px; border-radius:999px;
   margin-bottom:8px;
 }
-.diffConfirmHeader h2 { margin:0 0 6px; font-size:18px; color:var(--text); }
+.diffConfirmHeader h2 { margin:0 0 6px; font-size:18px; color:var(--text); font-weight:600; letter-spacing:-0.01em; }
 .diffConfirmHeader p { margin:0; color:var(--text-soft); font-size:13px; line-height:1.5; }
 .diffConfirmBody { padding:16px 24px; }
 .diffTable { width:100%; border-collapse:collapse; font-size:13px; }
@@ -900,9 +901,9 @@ body.lightView .entityLivePhonesTileBad .entityLivePhonesTileValue { color: var(
   text-align:left; padding:8px 10px;
   font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em;
   color:var(--text-muted); font-weight:700;
-  border-bottom:1px solid rgba(255,255,255,0.08);
+  border-bottom:1px solid var(--border-soft);
 }
-.diffTable td { padding:10px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:top; }
+.diffTable td { padding:10px; border-bottom:1px solid var(--border-soft); vertical-align:top; }
 .diffRowDestructive td { color:var(--text); }
 .diffFrom { font-family:var(--font-mono); color:var(--text-soft); }
 .diffArrow { color:var(--text-muted); text-align:center; width:30px; }
@@ -910,25 +911,18 @@ body.lightView .entityLivePhonesTileBad .entityLivePhonesTileValue { color: var(
 .diffConfirmFooter {
   display:flex; justify-content:flex-end; gap:10px;
   padding:12px 24px 20px;
-  border-top:1px solid rgba(255,255,255,0.06);
+  border-top:1px solid var(--border-soft);
+  background: var(--bg-panel-soft);
 }
 .diffConfirmCancel, .diffConfirmOk {
   padding:8px 16px; font-size:13px; font-weight:600;
-  border-radius:var(--radius-md); cursor:pointer;
+  border-radius:var(--radius-sm); cursor:pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
-.diffConfirmCancel { background:transparent; border:1px solid rgba(255,255,255,0.18); color:var(--text-soft); }
-.diffConfirmCancel:hover { border-color:var(--accent-2); color:var(--accent-2); }
-.diffConfirmOk { background:rgba(220,53,69,0.18); border:1px solid rgba(220,53,69,0.4); color:#ffb5b5; }
-.diffConfirmOk:hover { background:rgba(220,53,69,0.3); }
-
-body.lightView .draftRestoreBanner { background:rgba(247,198,47,0.1); border-color:rgba(247,198,47,0.35); color:var(--text); }
-body.lightView .diffConfirmBox { background:#fff; color:var(--text); }
-body.lightView .diffConfirmHeader h2 { color:var(--text); }
-body.lightView .diffConfirmHeader p { color:var(--text-soft); }
-body.lightView .diffFrom { color:var(--text-soft); }
-body.lightView .diffTo { color:#c0303b; }
-body.lightView .diffConfirmCancel { color:var(--text-soft); border-color:rgba(0,0,0,0.15); }
-body.lightView .diffConfirmOk { color:#8a1521; background:rgba(220,53,69,0.12); border-color:rgba(220,53,69,0.3); }
+.diffConfirmCancel { background:var(--bg-panel); border:1px solid var(--border-mid); color:var(--text-soft); }
+.diffConfirmCancel:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+.diffConfirmOk { background:var(--bad); border:1px solid var(--bad); color:#fff; }
+.diffConfirmOk:hover { filter: brightness(0.95); }
 
 /* ── Dashboard: Ops Notes panel (cross-entity weekly narrative feed) ── */
 .opsNotesGrid {
@@ -1070,9 +1064,9 @@ body.lightView .opsNotesBody { color: var(--text-soft); }
 
 /* ── Activity ── */
 .activityStatusPill { display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; font-family:var(--font-mono); font-size:10.5px; font-weight:500; text-transform:uppercase; letter-spacing:0.06em; }
-.activityStatusSaved     { background:rgba(91,168,255,0.1);  color:var(--accent-2); }
-.activityStatusSubmitted { background:rgba(247,198,47,0.1);  color:var(--warning);  }
-.activityStatusApproved  { background:rgba(77,217,138,0.1);  color:var(--good);     }
+.activityStatusSaved     { background:var(--accent-soft);  color:var(--accent); }
+.activityStatusSubmitted { background:var(--warning-soft); color:var(--warning); }
+.activityStatusApproved  { background:var(--good-soft);    color:var(--good); }
 .activityMeta { font-size:11.5px; color:var(--text-muted); margin-top:2px; }
 
 #dashboardSnapshot { overflow-x:auto; }
@@ -1087,16 +1081,16 @@ canvas { width:100% !important; max-height:252px; }
 
 /* ── Help ── */
 .helpNavBar { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
-.helpNavPill { padding:5px 12px; border-radius:999px; background:rgba(247,198,47,0.06); border:1px solid rgba(247,198,47,0.2); color:var(--accent); font-size:11.5px; font-weight:600; text-decoration:none; transition:all var(--transition-fast); }
-.helpNavPill:hover { background:rgba(247,198,47,0.12); border-color:rgba(247,198,47,0.4); }
-.helpSubsection { margin-top:20px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06); }
+.helpNavPill { padding:5px 12px; border-radius:999px; background:var(--accent-soft); border:1px solid var(--border-soft); color:var(--accent); font-size:11.5px; font-weight:600; text-decoration:none; transition:all var(--transition-fast); }
+.helpNavPill:hover { background:var(--accent-soft); border-color:var(--accent); color:var(--accent-hover); }
+.helpSubsection { margin-top:20px; padding-top:16px; border-top:1px solid var(--border-soft); }
 .helpSubsection:first-child { border-top:none; padding-top:0; }
-.helpSubhead { margin:0 0 8px; font-size:11px; font-weight:700; color:var(--accent-2); text-transform:uppercase; letter-spacing:0.1em; }
+.helpSubhead { margin:0 0 8px; font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:0.1em; }
 .helpBody { margin:0 0 10px; font-size:13.5px; color:var(--text-soft); line-height:1.65; }
 .helpList { margin:0 0 10px; padding-left:18px; color:var(--text-soft); font-size:13.5px; line-height:1.7; }
 .helpList li { margin-bottom:5px; }
 .helpTable td,.helpTable th { font-size:13px; vertical-align:top; }
-.helpTable td:first-child { white-space:nowrap; color:var(--accent-2); width:200px; }
+.helpTable td:first-child { white-space:nowrap; color:var(--accent); width:200px; font-weight:600; }
 
 /* ── PTO Forecast ── */
 .ptoEntityPanel { margin-bottom: 18px; }
@@ -1172,7 +1166,7 @@ canvas { width:100% !important; max-height:252px; }
 @media (max-width:1200px){ #sidebar{width:210px;} #mainContent{padding:20px 22px;} .summaryCard .value{font-size:30px;} }
 @media (max-width:980px){
   #appShell{flex-direction:column;}
-  #sidebar{width:100%;min-height:auto;position:relative;padding:16px;border-right:none;border-bottom:1px solid rgba(255,255,255,0.05);flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;}
+  #sidebar{width:100%;min-height:auto;position:relative;padding:16px;border-right:none;border-bottom:1px solid var(--border-soft);flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;}
   .sidebarBrand{margin-bottom:0;padding-bottom:0;border-bottom:none;}
   #sidebar button{margin-bottom:0;}
   #mainContent{padding:16px;}
@@ -1200,31 +1194,33 @@ canvas { width:100% !important; max-height:252px; }
   align-items: flex-start;
   gap: 10px;
   padding: 10px 13px;
-  border-radius: 9px;
-  border: 1px solid rgba(240,100,112,0.18);
-  background: rgba(240,100,112,0.05);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--bad-soft);
   margin-bottom: 7px;
   font-size: 13px;
-  color: #f5c0c4;
+  color: var(--text-soft);
   position: relative;
-  border-left: 3px solid rgba(240,100,112,0.55);
+  border-left: 3px solid var(--bad);
 }
 
 #dashboardAlerts .alertItem:last-child { margin-bottom: 0; }
 
 #dashboardAlerts .alertItem.alertWarning {
-  border-color: rgba(247,198,47,0.18);
-  border-left-color: rgba(247,198,47,0.55);
-  background: rgba(247,198,47,0.04);
-  color: #f5e4b0;
+  border-color: var(--border-soft);
+  border-left-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--text-soft);
 }
 
 #dashboardAlerts .alertIcon {
   font-size: 12px;
   margin-top: 1px;
   flex-shrink: 0;
-  opacity: 0.8;
+  opacity: 0.85;
+  color: var(--bad);
 }
+#dashboardAlerts .alertItem.alertWarning .alertIcon { color: var(--warning); }
 
 /* Snapshot table tighter for inline view */
 #dashboardSnapshot .regionTable td,
@@ -1255,7 +1251,7 @@ canvas { width:100% !important; max-height:252px; }
 .segmentTabs {
   display: flex;
   gap: 2px;
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-panel-soft);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   padding: 3px;
@@ -1277,7 +1273,7 @@ canvas { width:100% !important; max-height:252px; }
 }
 
 .segmentTab:hover {
-  background: rgba(255,255,255,0.05);
+  background: var(--bg-panel);
   color: var(--text-soft);
   transform: none;
   filter: none;
@@ -1285,10 +1281,10 @@ canvas { width:100% !important; max-height:252px; }
 }
 
 .segmentTabActive {
-  background: rgba(91,168,255,0.14) !important;
-  color: var(--text) !important;
+  background: var(--bg-panel) !important;
+  color: var(--accent) !important;
   font-weight: 700 !important;
-  box-shadow: none !important;
+  box-shadow: var(--shadow-sm) !important;
   filter: none !important;
   transform: none !important;
 }
@@ -1306,7 +1302,7 @@ canvas { width:100% !important; max-height:252px; }
 }
 
 .regionTable tbody tr:nth-child(even) {
-  background: rgba(255,255,255,0.018);
+  background: var(--bg-panel-soft);
 }
 
 /* ── Sidebar layout fix for bottom pinning ───────────────────── */
@@ -1335,27 +1331,28 @@ canvas { width:100% !important; max-height:252px; }
   padding: 16px 20px;
   cursor: pointer;
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent);
   letter-spacing: 0.01em;
   list-style: none;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--border-soft);
   transition: background var(--transition-fast);
 }
 
 .ptoHelpPanel > .ptoHelpSummary::-webkit-details-marker { display: none; }
 
 .ptoHelpPanel > .ptoHelpSummary:hover {
-  background: rgba(247,198,47,0.04);
+  background: var(--accent-soft);
 }
 
 .ptoHelpIcon {
   font-size: 16px;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .ptoHelpPanel[open] > .ptoHelpSummary {
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--accent-soft);
 }
 
 .ptoHelpPanel .helpSubsection {
@@ -1603,19 +1600,11 @@ body.lightView .entityAccessValue {
 
 body.lightView .entityProgressTrack { background: rgba(0,0,0,0.07); }
 
-body.lightView .entityStatusPill {
-  background: rgba(13,156,126,0.1);
-  color: #0d9c7e;
-}
-
-body.lightView .metricChip {
-  background: rgba(0,0,0,0.05);
-  color: var(--text-soft);
-}
-
-body.lightView .metricChipGood    { background: rgba(13,156,126,0.1);  color: #0d9c7e; }
-body.lightView .metricChipWarning { background: rgba(196,154,26,0.12); color: #c49a1a; }
-body.lightView .metricChipBad     { background: rgba(220,53,69,0.1);   color: #dc3545; }
+body.lightView .entityStatusPill { background: var(--good-soft);    color: var(--good); }
+body.lightView .metricChip       { background: var(--bg-panel-soft); color: var(--text-soft); }
+body.lightView .metricChipGood    { background: var(--good-soft);    color: var(--good); }
+body.lightView .metricChipWarning { background: var(--warning-soft); color: var(--warning); }
+body.lightView .metricChipBad     { background: var(--bad-soft);     color: var(--bad); }
 
 body.lightView .entityBudgetTile,
 body.lightView .entityMiniStat {
@@ -1653,13 +1642,8 @@ body.lightView .regionTable td {
   border-bottom-color: var(--border-soft);
 }
 
-body.lightView .regionTable tbody tr:nth-child(even) {
-  background: rgba(0,0,0,0.018);
-}
-
-body.lightView .regionTable tbody tr:hover td {
-  background: rgba(42,109,217,0.04);
-}
+body.lightView .regionTable tbody tr:nth-child(even) { background: var(--bg-panel-soft); }
+body.lightView .regionTable tbody tr:hover td { background: var(--accent-soft); }
 
 /* ── Filters & Controls ──────────────────────────────────────── */
 body.lightView .filterShell { background: var(--bg-panel-soft); border-color: var(--border-soft); }
@@ -1690,19 +1674,17 @@ body.lightView .quickPresetPill {
 body.lightView .quickPresetPill:hover { border-color: var(--accent-2); color: var(--accent-2); }
 body.lightView .quickPresetActive { background: var(--accent-dim) !important; border-color: var(--accent) !important; color: var(--accent) !important; }
 
-/* ── Alert items ─────────────────────────────────────────────── */
 body.lightView #dashboardAlerts .alertItem {
-  background: rgba(220,53,69,0.04);
-  border: 1px solid rgba(220,53,69,0.15);
-  border-left: 3px solid rgba(220,53,69,0.5);
-  color: #5a1a22;
+  background: var(--bad-soft);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--bad);
+  color: var(--text-soft);
 }
-
 body.lightView #dashboardAlerts .alertItem.alertWarning {
-  background: rgba(196,154,26,0.05);
-  border-color: rgba(196,154,26,0.2);
-  border-left-color: rgba(196,154,26,0.6);
-  color: #5a4208;
+  background: var(--warning-soft);
+  border-color: var(--border-soft);
+  border-left-color: var(--warning);
+  color: var(--text-soft);
 }
 
 /* ── Subtlety banner ─────────────────────────────────────────── */
@@ -1782,10 +1764,7 @@ body.lightView .lightViewLabel::before { content: 'Exit '; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow:
-    0 4px 24px rgba(0,0,0,0.4),
-    0 0 0 1px rgba(255,255,255,0.04),
-    0 24px 64px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-xl);
   animation: clBoxIn 0.28s cubic-bezier(0.16,1,0.3,1);
 }
 
@@ -1800,7 +1779,7 @@ body.lightView .lightViewLabel::before { content: 'Exit '; }
   border-bottom: 1px solid var(--border-soft);
   background: linear-gradient(
     135deg,
-    rgba(247,198,47,0.04) 0%,
+    var(--accent-soft) 0%,
     transparent 60%
   );
 }
@@ -1982,10 +1961,10 @@ body.lightView .lightViewLabel::before { content: 'Exit '; }
   flex-shrink: 0;
 }
 
-.clTagFeature  { background: rgba(93,232,240,0.12);  color: var(--accent-3); }
-.clTagFix      { background: rgba(255,107,107,0.12); color: #ff6b6b; }
-.clTagImprove  { background: rgba(247,198,47,0.12);  color: var(--accent); }
-.clTagSecurity { background: rgba(140,92,232,0.14);  color: #a98cff; }
+.clTagFeature  { background: var(--good-soft);    color: var(--good); }
+.clTagFix      { background: var(--bad-soft);     color: var(--bad); }
+.clTagImprove  { background: var(--accent-soft); color: var(--accent); }
+.clTagSecurity { background: rgba(139,92,246,0.12); color: #7C3AED; }
 
 .clSectionTitle {
   font-size: 12px;
@@ -2042,48 +2021,27 @@ body.lightView .lightViewLabel::before { content: 'Exit '; }
 #changelogViewEntries .clReleaseCurrent {
   border-color: var(--accent);
   border-width: 1px;
-  box-shadow: 0 0 0 1px rgba(247,198,47,0.12), 0 4px 16px rgba(0,0,0,0.15);
+  box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow-md);
 }
 
 #changelogViewEntries .clVersion { font-size: 18px; }
 
-/* ── Light View overrides for changelog ──────────────────────── */
-body.lightView .changelogModalBox {
-  background: #fff;
-  border-color: rgba(0,0,0,0.1);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1);
-}
-
-body.lightView .changelogModalHeader {
-  background: linear-gradient(135deg, rgba(196,154,26,0.05) 0%, transparent 60%);
-}
-
-body.lightView .changelogModalTitle { color: #1a2332; }
-body.lightView .changelogModalSub   { color: #4a607a; }
-body.lightView .changelogModalFooter { background: #f9f8f6; border-top-color: rgba(0,0,0,0.07); }
-
-body.lightView .changelogViewAllBtn { border-color: rgba(0,0,0,0.12); color: #4a607a; }
-body.lightView .changelogViewAllBtn:hover { border-color: #c49a1a; color: #c49a1a; }
-
-body.lightView .clRelease { border-bottom-color: rgba(0,0,0,0.07); }
-body.lightView .clVersion { color: #1a2332; }
-body.lightView .clDate    { color: #8fa3b8; }
-body.lightView .clSectionTitle { color: #4a607a; }
-body.lightView .clItem    { color: #4a607a; }
-body.lightView .clItem::before { color: #8fa3b8; }
-
-body.lightView #changelogViewEntries .clRelease {
-  background: #fff;
-  border-color: rgba(0,0,0,0.08);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-}
-
-body.lightView #changelogViewEntries .clReleaseCurrent {
-  border-color: #c49a1a;
-  box-shadow: 0 0 0 1px rgba(196,154,26,0.15), 0 4px 16px rgba(0,0,0,0.08);
-}
-
-body.lightView .changelogNavBadge { background: #c49a1a; color: #fff; }
+body.lightView .changelogModalBox { background: var(--bg-panel); border-color: var(--border-soft); box-shadow: var(--shadow-xl); }
+body.lightView .changelogModalHeader { background: linear-gradient(135deg, var(--accent-soft) 0%, transparent 60%); }
+body.lightView .changelogModalTitle { color: var(--text); }
+body.lightView .changelogModalSub   { color: var(--text-soft); }
+body.lightView .changelogModalFooter { background: var(--bg-panel-soft); border-top-color: var(--border-soft); }
+body.lightView .changelogViewAllBtn { border-color: var(--border-mid); color: var(--text-soft); }
+body.lightView .changelogViewAllBtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+body.lightView .clRelease { border-bottom-color: var(--border-soft); }
+body.lightView .clVersion { color: var(--text); }
+body.lightView .clDate    { color: var(--text-muted); }
+body.lightView .clSectionTitle { color: var(--text-soft); }
+body.lightView .clItem    { color: var(--text-soft); }
+body.lightView .clItem::before { color: var(--text-muted); }
+body.lightView #changelogViewEntries .clRelease { background: var(--bg-panel); border-color: var(--border-soft); box-shadow: var(--shadow-sm); }
+body.lightView #changelogViewEntries .clReleaseCurrent { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft), var(--shadow-md); }
+body.lightView .changelogNavBadge { background: var(--accent); color: #fff; }
 
 /* ════════════════════════════════════════════════════════════════
    ENHANCEMENTS: Completeness, Narrative, Goals, Thresholds,
@@ -2820,7 +2778,7 @@ body.lightView .ptoReadonlyNotice { background: #f2f1ee; color: #8fa3b8; }
 .ptoModeToggle {
   display: flex;
   gap: 2px;
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-panel-soft);
   border: 1px solid var(--border-soft);
   border-radius: 6px;
   padding: 2px;
@@ -2845,15 +2803,15 @@ body.lightView .ptoReadonlyNotice { background: #f2f1ee; color: #8fa3b8; }
 
 .ptoModeBtn:hover {
   color: var(--text-soft);
-  background: rgba(255,255,255,0.05);
+  background: var(--bg-panel);
   transform: none;
   filter: none;
 }
 
 .ptoModeBtnActive {
-  background: rgba(247,198,47,0.15) !important;
+  background: var(--bg-panel) !important;
   color: var(--accent) !important;
-  box-shadow: none !important;
+  box-shadow: var(--shadow-xs) !important;
 }
 
 /* ── Weekly table ─────────────────────────────────────────────── */
@@ -2877,7 +2835,7 @@ body.lightView .ptoReadonlyNotice { background: #f2f1ee; color: #8fa3b8; }
   gap: 6px;
   align-items: center;
   padding: 3px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .ptoWeeklyRow:last-child { border-bottom: none; }
@@ -2905,21 +2863,23 @@ body.lightView .ptoReadonlyNotice { background: #f2f1ee; color: #8fa3b8; }
   flex: 1;
   width: 100%;
   padding: 5px 7px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-mid);
   border-radius: 5px;
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   min-width: 0;
   box-sizing: border-box;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .ptoWeekInput:focus {
   outline: none;
   border-color: var(--accent);
-  background: rgba(255,255,255,0.06);
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .ptoWeeklyTotalsRow {
@@ -2941,15 +2901,10 @@ body.lightView .ptoReadonlyNotice { background: #f2f1ee; color: #8fa3b8; }
   min-width: 0;
 }
 
-/* Light view */
-body.lightView .ptoModeToggle {
-  background: #f2f1ee;
-  border-color: rgba(0,0,0,0.1);
-}
-
-body.lightView .ptoModeBtn { color: #8fa3b8; }
-body.lightView .ptoModeBtn:hover { color: #4a607a; background: rgba(0,0,0,0.04); }
-body.lightView .ptoModeBtnActive { background: rgba(196,154,26,0.12) !important; color: #b07d10 !important; }
+body.lightView .ptoModeToggle { background: var(--bg-panel-soft); border-color: var(--border-soft); }
+body.lightView .ptoModeBtn { color: var(--text-muted); }
+body.lightView .ptoModeBtn:hover { color: var(--text-soft); background: var(--bg-panel); }
+body.lightView .ptoModeBtnActive { background: var(--bg-panel) !important; color: var(--accent) !important; box-shadow: var(--shadow-xs) !important; }
 
 body.lightView .ptoWeeklyHeader { border-bottom-color: rgba(0,0,0,0.08); }
 body.lightView .ptoWeeklyRow { border-bottom-color: rgba(0,0,0,0.04); }
