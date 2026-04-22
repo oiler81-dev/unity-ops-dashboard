@@ -471,6 +471,102 @@ function getSelectedTrendsEntity() {
   return el ? el.value : "LAOSS";
 }
 
+// ── Entry form field registry ──────────────────────────────────────────
+//
+// Single source of truth for every field on the Weekly Entry form. Every
+// add/rename/retype of a field is a one-line change here — the form HTML,
+// save/load path, input listener wiring, and derived-metric recompute all
+// read from this array. Historically each field had to be added in 7+
+// places which is where bugs like the imaging+reschedules "not sticking"
+// came from.
+//
+// Field shape:
+//   key             — DOM id and storage key (required for input fields)
+//   label           — user-visible label (required for input fields)
+//   section         — "team" | "pt" | "spineOnePI" | "calculated" | "ptCalculated"
+//                     (used to emit section headers)
+//   sectionHeader   — true on entries that are ONLY a header, no input
+//   mode            — "ortho" | "pt" | "all"  (controls show/hide)
+//   entities        — "all" (default) | "spineone" | "non-laoss"
+//   step, min       — passed through to the <input>
+//   defaultValue    — initial value if none stored
+//   readonly        — true for derived/calculated fields
+//   derived         — true if value is computed by calculateDerivedMetrics
+//                     (save/load reads it as output, not user input)
+//   aliases         — alternate storage keys to read from on load
+//                     (for legacy records; e.g. visitVolume had "totalVisits")
+//   preserveOnOppositeMode — default true; false for ptoDays which is shared
+//
+const ENTRY_FIELDS = [
+  { section: "team", sectionHeader: true, mode: "ortho", label: "Team Inputs" },
+
+  { key: "newPatients",     label: "New Patients",        mode: "ortho", step: "1",    min: "0", aliases: ["npActual"] },
+  { key: "surgeries",       label: "Surgeries",           mode: "ortho", step: "1",    min: "0", aliases: ["surgeryActual"] },
+  { key: "imaging",         label: "Imaging",             mode: "ortho", step: "1",    min: "0", entities: "spineone" },
+  { key: "established",     label: "Established",         mode: "ortho", step: "1",    min: "0", aliases: ["establishedActual"] },
+  { key: "noShows",         label: "No Shows",            mode: "ortho", step: "1",    min: "0" },
+  { key: "cancelled",       label: "Cancelled",           mode: "ortho", step: "1",    min: "0" },
+  { key: "reschedules",     label: "Rescheduled",         mode: "ortho", step: "1",    min: "0", entities: "non-laoss" },
+  { key: "totalCalls",      label: "Total Calls",         mode: "ortho", step: "1",    min: "0", aliases: ["callVolume", "totalCallsActual"] },
+  { key: "abandonedCalls",  label: "Abandoned Calls",     mode: "ortho", step: "1",    min: "0" },
+  { key: "cashCollected",   label: "Cash Collected",      mode: "ortho", step: "0.01", min: "0", aliases: ["cashActual"] },
+  { key: "ptoDays",         label: "PTO Days",            mode: "all",   step: "0.5",  min: "0", preserveOnOppositeMode: false },
+
+  { section: "pt", sectionHeader: true, mode: "pt", label: "PT Inputs" },
+
+  { key: "ptScheduledVisits",  label: "PT Scheduled Visits",   mode: "pt", step: "1", min: "0" },
+  { key: "ptCancellations",    label: "PT Cancellations",      mode: "pt", step: "1", min: "0" },
+  { key: "ptNoShows",          label: "PT No Shows",           mode: "pt", step: "1", min: "0" },
+  { key: "ptReschedules",      label: "PT Reschedules",        mode: "pt", step: "1", min: "0" },
+  { key: "ptTotalUnitsBilled", label: "PT Total Units Billed", mode: "pt", step: "1", min: "0" },
+  { key: "ptVisitsSeen",       label: "PT Visits Seen (wk)",   mode: "pt", step: "1", min: "0" },
+  { key: "ptWorkingDays",      label: "PT Working Days",       mode: "pt", step: "1", min: "1", defaultValue: () => String(getEntityWorkingDays(getSelectedEntity())) },
+
+  { section: "spineOnePI", sectionHeader: true, mode: "ortho", entities: "spineone", label: "SpineOne PI" },
+
+  { key: "piNp",             label: "PI NP",              mode: "ortho", step: "1",    min: "0", entities: "spineone" },
+  { key: "piCashCollection", label: "PI Cash Collection", mode: "ortho", step: "0.01", min: "0", entities: "spineone" },
+
+  { section: "calculated", sectionHeader: true, mode: "ortho", label: "Calculated" },
+
+  { key: "visitVolume",       label: "Visit Volume",     mode: "ortho", step: "1",   readonly: true, derived: true, aliases: ["totalVisits"] },
+  { key: "noShowRate",        label: "No Show %",        mode: "ortho", step: "0.1", readonly: true, derived: true },
+  { key: "cancellationRate",  label: "Cancellation %",   mode: "ortho", step: "0.1", readonly: true, derived: true },
+  { key: "abandonedCallRate", label: "Abandoned Call %", mode: "ortho", step: "0.1", readonly: true, derived: true, aliases: ["abandonmentRate"] },
+
+  { section: "ptCalculated", sectionHeader: true, mode: "pt", label: "PT Calculated" },
+
+  { key: "ptUnitsPerVisit", label: "PT Units/Visit",     mode: "pt", step: "0.01", readonly: true, derived: true },
+  { key: "ptVisitsPerDay",  label: "PT Visits/Day (wk)", mode: "pt", step: "0.01", readonly: true, derived: true }
+];
+
+// Fields the user actually types into (not headers, not derived).
+const ENTRY_INPUT_FIELDS = ENTRY_FIELDS.filter((f) => f.key && !f.derived && !f.sectionHeader);
+
+// All fields with a storage key (input + derived, but not headers).
+const ENTRY_STORED_FIELDS = ENTRY_FIELDS.filter((f) => f.key && !f.sectionHeader);
+
+function fieldWrapperClass(f) {
+  if (f.mode === "all") return "allEntryField";
+  if (f.mode === "pt") return "ptField";
+  // ortho mode
+  if (f.entities === "spineone") return "spineOnlyField";
+  if (f.entities === "non-laoss") return "nonPtField nonLaossField";
+  return "nonPtField";
+}
+
+// Read a stored value from a weekly record, honoring the field's aliases.
+function readStoredValue(values, field) {
+  if (!values) return undefined;
+  if (values[field.key] !== undefined) return values[field.key];
+  if (field.aliases) {
+    for (const a of field.aliases) {
+      if (values[a] !== undefined) return values[a];
+    }
+  }
+  return undefined;
+}
+
 function calculateDerivedMetrics(values = {}) {
   const newPatients = normalizeNumber(values.newPatients);
   const surgeries = normalizeNumber(values.surgeries);
@@ -533,34 +629,27 @@ function calculateDerivedMetrics(values = {}) {
 }
 
 function updateDerivedDisplays() {
-  const currentValues = {
-    newPatients: byId("newPatients")?.value || "",
-    surgeries: byId("surgeries")?.value || "",
-    established: byId("established")?.value || "",
-    noShows: byId("noShows")?.value || "",
-    cancelled: byId("cancelled")?.value || "",
-    totalCalls: byId("totalCalls")?.value || "",
-    abandonedCalls: byId("abandonedCalls")?.value || "",
-
-    ptScheduledVisits: byId("ptScheduledVisits")?.value || "",
-    ptCancellations: byId("ptCancellations")?.value || "",
-    ptNoShows: byId("ptNoShows")?.value || "",
-    ptReschedules: byId("ptReschedules")?.value || "",
-    reschedules: byId("reschedules")?.value || "",
-    ptTotalUnitsBilled: byId("ptTotalUnitsBilled")?.value || "",
-    ptVisitsSeen: byId("ptVisitsSeen")?.value || "",
-    ptWorkingDays: byId("ptWorkingDays")?.value || "5"
-  };
+  // Read every input field's current value and recompute derived metrics.
+  const currentValues = {};
+  ENTRY_INPUT_FIELDS.forEach((f) => {
+    const input = byId(f.key);
+    currentValues[f.key] = input ? (input.value || "") : "";
+  });
+  if (!currentValues.ptWorkingDays) currentValues.ptWorkingDays = "5";
 
   const derived = calculateDerivedMetrics(currentValues);
 
-  if (byId("visitVolume")) byId("visitVolume").value = derived.visitVolume ? String(derived.visitVolume) : "0";
-  if (byId("noShowRate")) byId("noShowRate").value = derived.noShowRate.toFixed(1);
-  if (byId("cancellationRate")) byId("cancellationRate").value = derived.cancellationRate.toFixed(1);
-  if (byId("abandonedCallRate")) byId("abandonedCallRate").value = derived.abandonedCallRate.toFixed(1);
-
-  if (byId("ptUnitsPerVisit")) byId("ptUnitsPerVisit").value = derived.ptUnitsPerVisit.toFixed(2);
-  if (byId("ptVisitsPerDay")) byId("ptVisitsPerDay").value = derived.ptVisitsPerDay.toFixed(2);
+  // Write derived values back to their read-only inputs.
+  const writeDerived = (key, value) => {
+    const el = byId(key);
+    if (el) el.value = value;
+  };
+  writeDerived("visitVolume", derived.visitVolume ? String(derived.visitVolume) : "0");
+  writeDerived("noShowRate", derived.noShowRate.toFixed(1));
+  writeDerived("cancellationRate", derived.cancellationRate.toFixed(1));
+  writeDerived("abandonedCallRate", derived.abandonedCallRate.toFixed(1));
+  writeDerived("ptUnitsPerVisit", derived.ptUnitsPerVisit.toFixed(2));
+  writeDerived("ptVisitsPerDay", derived.ptVisitsPerDay.toFixed(2));
 }
 
 function renderUser(userData) {
@@ -629,198 +718,41 @@ function renderForm() {
   const container = byId("kpiForm");
   if (!container) return;
 
-  container.innerHTML = `
-    <div class="nonPtField">
+  // Render from ENTRY_FIELDS registry. Every field on this form (HTML input,
+  // save/load mapping, derived-metric recompute) reads from the same list so
+  // adding a field is a single-line change to the registry.
+  let html = "";
+  for (const f of ENTRY_FIELDS) {
+    const cls = fieldWrapperClass(f);
+    const hidden = (f.mode !== "all") ? ' style="display:none;"' : "";
+    if (f.sectionHeader) {
+      html += `
+    <div class="${cls}"${hidden}>
       <div class="formSectionBreak">
-        <h4>Team Inputs</h4>
+        <h4>${escapeHtml(f.label)}</h4>
       </div>
-    </div>
+    </div>`;
+      continue;
+    }
+    const readonlyAttr = f.readonly ? " readonly" : "";
+    const stepAttr = f.step ? ` step="${escapeHtml(f.step)}"` : "";
+    const minAttr = f.min !== undefined ? ` min="${escapeHtml(f.min)}"` : "";
+    const defaultAttr = typeof f.defaultValue === "string" ? ` value="${escapeHtml(f.defaultValue)}"` : "";
+    html += `
+    <div class="${cls}"${hidden}>
+      <label for="${escapeHtml(f.key)}">${escapeHtml(f.label)}</label>
+      <input type="number" id="${escapeHtml(f.key)}"${stepAttr}${minAttr}${readonlyAttr}${defaultAttr} />
+    </div>`;
+  }
+  html += `\n    ${renderNarrativePromptBox()}`;
+  container.innerHTML = html;
 
-    <div class="nonPtField">
-      <label for="newPatients">New Patients</label>
-      <input type="number" id="newPatients" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <label for="surgeries">Surgeries</label>
-      <input type="number" id="surgeries" step="1" min="0" />
-    </div>
-
-    <div class="spineOnlyField" style="display:none;">
-      <label for="imaging">Imaging</label>
-      <input type="number" id="imaging" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <label for="established">Established</label>
-      <input type="number" id="established" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <label for="noShows">No Shows</label>
-      <input type="number" id="noShows" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <label for="cancelled">Cancelled</label>
-      <input type="number" id="cancelled" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField nonLaossField" style="display:none;">
-      <label for="reschedules">Rescheduled</label>
-      <input type="number" id="reschedules" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <label for="totalCalls">Total Calls</label>
-      <input type="number" id="totalCalls" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <label for="abandonedCalls">Abandoned Calls</label>
-      <input type="number" id="abandonedCalls" step="1" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <label for="cashCollected">Cash Collected</label>
-      <input type="number" id="cashCollected" step="0.01" min="0" />
-    </div>
-
-    <div class="allEntryField">
-      <label for="ptoDays">PTO Days</label>
-      <input type="number" id="ptoDays" step="0.5" min="0" />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <div class="formSectionBreak">
-        <h4>PT Inputs</h4>
-      </div>
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptScheduledVisits">PT Scheduled Visits</label>
-      <input type="number" id="ptScheduledVisits" step="1" min="0" />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptCancellations">PT Cancellations</label>
-      <input type="number" id="ptCancellations" step="1" min="0" />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptNoShows">PT No Shows</label>
-      <input type="number" id="ptNoShows" step="1" min="0" />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptReschedules">PT Reschedules</label>
-      <input type="number" id="ptReschedules" step="1" min="0" />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptTotalUnitsBilled">PT Total Units Billed</label>
-      <input type="number" id="ptTotalUnitsBilled" step="1" min="0" />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptVisitsSeen">PT Visits Seen (wk)</label>
-      <input type="number" id="ptVisitsSeen" step="1" min="0" />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptWorkingDays">PT Working Days</label>
-      <input type="number" id="ptWorkingDays" step="1" min="1" value="5" />
-    </div>
-
-    <div class="spineOnlyField" style="display:none;">
-      <div class="formSectionBreak">
-        <h4>SpineOne PI</h4>
-      </div>
-    </div>
-
-    <div class="spineOnlyField" style="display:none;">
-      <label for="piNp">PI NP</label>
-      <input type="number" id="piNp" step="1" min="0" />
-    </div>
-
-    <div class="spineOnlyField" style="display:none;">
-      <label for="piCashCollection">PI Cash Collection</label>
-      <input type="number" id="piCashCollection" step="0.01" min="0" />
-    </div>
-
-    <div class="nonPtField">
-      <div class="formSectionBreak">
-        <h4>Calculated</h4>
-      </div>
-    </div>
-
-    <div class="nonPtField">
-      <label for="visitVolume">Visit Volume</label>
-      <input type="number" id="visitVolume" step="1" readonly />
-    </div>
-
-    <div class="nonPtField">
-      <label for="noShowRate">No Show %</label>
-      <input type="number" id="noShowRate" step="0.1" readonly />
-    </div>
-
-    <div class="nonPtField">
-      <label for="cancellationRate">Cancellation %</label>
-      <input type="number" id="cancellationRate" step="0.1" readonly />
-    </div>
-
-    <div class="nonPtField">
-      <label for="abandonedCallRate">Abandoned Call %</label>
-      <input type="number" id="abandonedCallRate" step="0.1" readonly />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <div class="formSectionBreak">
-        <h4>PT Calculated</h4>
-      </div>
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptUnitsPerVisit">PT Units/Visit</label>
-      <input type="number" id="ptUnitsPerVisit" step="0.01" readonly />
-    </div>
-
-    <div class="ptField" style="display:none;">
-      <label for="ptVisitsPerDay">PT Visits/Day (wk)</label>
-      <input type="number" id="ptVisitsPerDay" step="0.01" readonly />
-    </div>
-
-    ${renderNarrativePromptBox()}
-  `;
-
-  [
-    "newPatients",
-    "surgeries",
-    "imaging",
-    "established",
-    "noShows",
-    "cancelled",
-    "totalCalls",
-    "abandonedCalls",
-    "cashCollected",
-    "ptoDays",
-    "piNp",
-    "piCashCollection",
-    "ptScheduledVisits",
-    "ptCancellations",
-    "ptNoShows",
-    "ptReschedules",
-    "reschedules",
-    "ptTotalUnitsBilled",
-    "ptVisitsSeen",
-    "ptWorkingDays"
-  ].forEach((id) => {
-    const input = byId(id);
+  // Wire the input listeners for every editable field.
+  ENTRY_INPUT_FIELDS.forEach((f) => {
+    const input = byId(f.key);
     if (input) input.addEventListener("input", updateDerivedDisplays);
   });
 
-  syncEntryModeVisibility();
-  updateDerivedDisplays();
 }
 
 function syncEntryModeVisibility() {
@@ -859,152 +791,112 @@ function syncEntryModeVisibility() {
   }
 }
 
+// Map a stored Azure Table record into the shape the form expects.
+// Honors each field's legacy aliases (e.g. `totalVisits` → `visitVolume`),
+// then overwrites derived fields with freshly-computed values.
 function mapWeeklyValuesToFormData(values) {
-  const mapped = {
-    newPatients: values?.newPatients ?? values?.npActual ?? "",
-    surgeries: values?.surgeries ?? "",
-    imaging: values?.imaging ?? "",
-    established: values?.established ?? "",
-    noShows: values?.noShows ?? "",
-    cancelled: values?.cancelled ?? "",
-    totalCalls: values?.totalCalls ?? values?.callVolume ?? values?.totalCallsActual ?? "",
-    abandonedCalls: values?.abandonedCalls ?? "",
-    visitVolume: values?.visitVolume ?? values?.totalVisits ?? "",
-    noShowRate: values?.noShowRate ?? "",
-    cancellationRate: values?.cancellationRate ?? "",
-    abandonedCallRate: values?.abandonedCallRate ?? values?.abandonmentRate ?? "",
-    cashCollected: values?.cashCollected ?? values?.cashActual ?? "",
-    ptoDays: values?.ptoDays ?? "",
-    piNp: values?.piNp ?? "",
-    piCashCollection: values?.piCashCollection ?? "",
-    operationsNarrative: values?.operationsNarrative ?? "",
-    reschedules: values?.reschedules ?? "",
-    ptScheduledVisits: values?.ptScheduledVisits ?? "",
-    ptCancellations: values?.ptCancellations ?? "",
-    ptNoShows: values?.ptNoShows ?? "",
-    ptReschedules: values?.ptReschedules ?? "",
-    ptTotalUnitsBilled: values?.ptTotalUnitsBilled ?? "",
-    ptVisitsSeen: values?.ptVisitsSeen ?? "",
-    ptWorkingDays: values?.ptWorkingDays ?? getEntityWorkingDays(getSelectedEntity()),
-    ptUnitsPerVisit: values?.ptUnitsPerVisit ?? "",
-    ptVisitsPerDay: values?.ptVisitsPerDay ?? ""
-  };
+  const mapped = {};
+  ENTRY_STORED_FIELDS.forEach((f) => {
+    const stored = readStoredValue(values, f);
+    if (stored !== undefined) {
+      mapped[f.key] = stored;
+    } else if (f.defaultValue !== undefined) {
+      mapped[f.key] = typeof f.defaultValue === "function" ? f.defaultValue() : f.defaultValue;
+    } else {
+      mapped[f.key] = "";
+    }
+  });
+  mapped.operationsNarrative = values?.operationsNarrative ?? "";
 
+  // Always recompute derived fields so stored stale values can't override the
+  // canonical formulas (e.g. visitVolume = NP + Surgeries + Established).
   const derived = calculateDerivedMetrics(mapped);
-
-  return {
-    ...mapped,
-    visitVolume: derived.visitVolume,
-    noShowRate: derived.noShowRate,
-    cancellationRate: derived.cancellationRate,
-    abandonedCallRate: derived.abandonedCallRate,
-    ptUnitsPerVisit: derived.ptUnitsPerVisit,
-    ptVisitsPerDay: derived.ptVisitsPerDay
-  };
+  ENTRY_STORED_FIELDS.filter((f) => f.derived).forEach((f) => {
+    if (derived[f.key] !== undefined) mapped[f.key] = derived[f.key];
+  });
+  return mapped;
 }
 
+// Populate all form inputs from a stored record. Both input and derived
+// fields get written so the user sees the full form state.
 function setFormValues(data) {
   const mapped = mapWeeklyValuesToFormData(data || {});
-  const keys = [
-    "newPatients",
-    "surgeries",
-    "imaging",
-    "established",
-    "noShows",
-    "cancelled",
-    "totalCalls",
-    "abandonedCalls",
-    "cashCollected",
-    "ptoDays",
-    "piNp",
-    "piCashCollection",
-    "reschedules",
-    "operationsNarrative",
-    "ptScheduledVisits",
-    "ptCancellations",
-    "ptNoShows",
-    "ptReschedules",
-    "ptTotalUnitsBilled",
-    "ptVisitsSeen",
-    "ptWorkingDays"
-  ];
-
-  keys.forEach((key) => {
-    const input = byId(key);
+  ENTRY_STORED_FIELDS.forEach((f) => {
+    const input = byId(f.key);
     if (!input) return;
-    input.value = mapped[key] !== null && mapped[key] !== undefined ? mapped[key] : "";
+    input.value = mapped[f.key] !== null && mapped[f.key] !== undefined ? mapped[f.key] : "";
   });
+
+  // Ops narrative lives outside the registry (textarea, not number input).
+  const notesEl = byId("operationsNarrative");
+  if (notesEl) notesEl.value = data?.operationsNarrative ?? "";
 
   syncEntryModeVisibility();
   updateDerivedDisplays();
 }
 
+// Collect values from the form + preserve the opposite mode's stored values.
+// Critical invariant: saving in PT mode MUST NOT wipe out the ortho fields
+// (and vice versa). Breaking this caused the 4/17 PT zero-out incident.
 function getFormValues() {
   const ptMode = entityHasPtEntry();
-
-  // Preserve the OTHER mode's existing saved values so saving PT doesn't wipe ortho and vice versa
-  // API may return data flat at top level (no values/data wrapper) — fall back to currentWeekData itself
+  // Azure Table records come back flat at top level (no `values` wrapper).
+  // Fall back to the record itself if the wrapped shape is absent.
   const existing = currentWeekData?.values || currentWeekData?.data ||
     (currentWeekData?.found && currentWeekData?.visitVolume != null ? currentWeekData : {});
 
-  const raw = {
-    // Ortho fields: use form value if in ortho mode, otherwise preserve existing saved value
-    reschedules:       ptMode ? (existing.reschedules       ?? 0) : (byId("reschedules")?.value || ""),
-    newPatients:       ptMode ? (existing.newPatients       ?? 0) : (byId("newPatients")?.value || ""),
-    surgeries:         ptMode ? (existing.surgeries         ?? 0) : (byId("surgeries")?.value || ""),
-    imaging:           ptMode ? (existing.imaging            ?? 0) : (byId("imaging")?.value   || ""),
-    established:       ptMode ? (existing.established       ?? 0) : (byId("established")?.value || ""),
-    noShows:           ptMode ? (existing.noShows           ?? 0) : (byId("noShows")?.value || ""),
-    cancelled:         ptMode ? (existing.cancelled         ?? 0) : (byId("cancelled")?.value || ""),
-    totalCalls:        ptMode ? (existing.totalCalls        ?? 0) : (byId("totalCalls")?.value || ""),
-    abandonedCalls:    ptMode ? (existing.abandonedCalls    ?? 0) : (byId("abandonedCalls")?.value || ""),
-    cashCollected:     ptMode ? (existing.cashCollected     ?? 0) : (byId("cashCollected")?.value || ""),
-    ptoDays: byId("ptoDays")?.value || "",
-    piNp:              ptMode ? (existing.piNp              ?? 0) : (byId("piNp")?.value || ""),
-    piCashCollection:  ptMode ? (existing.piCashCollection  ?? 0) : (byId("piCashCollection")?.value || ""),
-    operationsNarrative: byId("operationsNarrative")?.value || "",
-    // PT fields: use form value if in PT mode, otherwise preserve existing saved value
-    ptScheduledVisits:  ptMode ? (byId("ptScheduledVisits")?.value  || "") : (existing.ptScheduledVisits  ?? 0),
-    ptCancellations:    ptMode ? (byId("ptCancellations")?.value    || "") : (existing.ptCancellations    ?? 0),
-    ptNoShows:          ptMode ? (byId("ptNoShows")?.value          || "") : (existing.ptNoShows          ?? 0),
-    ptReschedules:      ptMode ? (byId("ptReschedules")?.value      || "") : (existing.ptReschedules      ?? 0),
-    ptTotalUnitsBilled: ptMode ? (byId("ptTotalUnitsBilled")?.value || "") : (existing.ptTotalUnitsBilled ?? 0),
-    ptVisitsSeen:       ptMode ? (byId("ptVisitsSeen")?.value       || "") : (existing.ptVisitsSeen       ?? 0),
-    ptWorkingDays:      ptMode ? (byId("ptWorkingDays")?.value      || String(getEntityWorkingDays(getSelectedEntity()))) : (existing.ptWorkingDays     ?? getEntityWorkingDays(getSelectedEntity()))
-  };
+  const raw = {};
+  ENTRY_INPUT_FIELDS.forEach((f) => {
+    // Is this field live in the current mode?
+    const fieldLive = f.mode === "all" || (f.mode === "pt" && ptMode) || (f.mode === "ortho" && !ptMode);
+    const preserve = f.preserveOnOppositeMode !== false;
+
+    if (fieldLive) {
+      // Read from form. Fall back to default if empty and a default is defined.
+      const inputVal = byId(f.key)?.value;
+      if (inputVal !== undefined && inputVal !== "") {
+        raw[f.key] = inputVal;
+      } else if (f.defaultValue !== undefined) {
+        raw[f.key] = typeof f.defaultValue === "function" ? f.defaultValue() : f.defaultValue;
+      } else {
+        raw[f.key] = "";
+      }
+    } else if (preserve) {
+      // Opposite mode — keep whatever's on the existing record so we don't wipe it.
+      // If no stored value, fall back to the field's defaultValue (e.g. ptWorkingDays)
+      // or 0 so downstream calculations don't divide by zero unexpectedly.
+      const stored = readStoredValue(existing, f);
+      if (stored !== undefined) {
+        raw[f.key] = stored;
+      } else if (f.defaultValue !== undefined) {
+        raw[f.key] = typeof f.defaultValue === "function" ? f.defaultValue() : f.defaultValue;
+      } else {
+        raw[f.key] = 0;
+      }
+    } else {
+      // Field is mode=all but not live (shouldn't happen) — fall through to form read.
+      raw[f.key] = byId(f.key)?.value || "";
+    }
+  });
+
+  raw.operationsNarrative = byId("operationsNarrative")?.value || "";
 
   const derived = calculateDerivedMetrics(raw);
 
-  return {
-    newPatients: derived.newPatients,
-    surgeries: derived.surgeries,
-    established: derived.established,
-    noShows: derived.noShows,
-    cancelled: derived.cancelled,
-    totalCalls: derived.totalCalls,
-    abandonedCalls: derived.abandonedCalls,
-    visitVolume: derived.visitVolume,
-    callVolume: derived.callVolume,
-    noShowRate: Number(derived.noShowRate.toFixed(2)),
-    cancellationRate: Number(derived.cancellationRate.toFixed(2)),
-    abandonedCallRate: Number(derived.abandonedCallRate.toFixed(2)),
-    cashCollected: derived.cashCollected,
-    ptoDays: derived.ptoDays,
-    piNp: derived.piNp,
-    piCashCollection: derived.piCashCollection,
-    imaging: derived.imaging,
-    operationsNarrative: derived.operationsNarrative,
-    ptScheduledVisits: derived.ptScheduledVisits,
-    ptCancellations: derived.ptCancellations,
-    ptNoShows: derived.ptNoShows,
-    reschedules: derived.reschedules ?? 0,
-    ptReschedules: derived.ptReschedules,
-    ptTotalUnitsBilled: derived.ptTotalUnitsBilled,
-    ptVisitsSeen: derived.ptVisitsSeen,
-    ptWorkingDays: derived.ptWorkingDays,
-    ptUnitsPerVisit: Number(derived.ptUnitsPerVisit.toFixed(2)),
-    ptVisitsPerDay: Number(derived.ptVisitsPerDay.toFixed(2))
-  };
+  // Build the save payload: every stored field, with derived values recomputed
+  // and rates rounded to 2 decimals.
+  const payload = {};
+  ENTRY_STORED_FIELDS.forEach((f) => {
+    const v = derived[f.key] !== undefined ? derived[f.key] : raw[f.key];
+    if (f.derived && typeof v === "number" && !Number.isInteger(v)) {
+      payload[f.key] = Number(v.toFixed(2));
+    } else {
+      payload[f.key] = v;
+    }
+  });
+  payload.operationsNarrative = derived.operationsNarrative;
+  payload.callVolume = derived.callVolume;
+  return payload;
 }
 
 function renderEntryAuditSummary(data) {
