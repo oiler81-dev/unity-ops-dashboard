@@ -760,12 +760,22 @@ function renderForm() {
   html += `\n    ${renderNarrativePromptBox()}`;
   container.innerHTML = html;
 
-  // Wire the input listeners for every editable field.
+  // Wire the input listeners for every editable field: recompute derived
+  // values on change, and schedule a localStorage draft autosave.
   ENTRY_INPUT_FIELDS.forEach((f) => {
     const input = byId(f.key);
-    if (input) input.addEventListener("input", updateDerivedDisplays);
+    if (!input) return;
+    input.addEventListener("input", () => {
+      updateDerivedDisplays();
+      scheduleDraftAutosave();
+    });
   });
+  // Ops narrative is outside the registry but we still want to autosave it.
+  const notesEl = byId("operationsNarrative");
+  if (notesEl) notesEl.addEventListener("input", scheduleDraftAutosave);
 
+  syncEntryModeVisibility();
+  updateDerivedDisplays();
 }
 
 function syncEntryModeVisibility() {
@@ -3380,6 +3390,11 @@ async function loadWeek() {
   renderEntityBrand("entryBrandWrap", entity);
   setStatus("Loading...");
 
+  // Pause autosave while we overwrite the form with the server record so
+  // we don't immediately write our loaded values back on top of any
+  // newer local draft we're about to offer the user.
+  _draftAutosaveSuspended = true;
+
   const result = await apiGet(
     `/api/weekly?weekEnding=${encodeURIComponent(weekEnding)}&entity=${encodeURIComponent(entity)}`
   );
@@ -3393,6 +3408,12 @@ async function loadWeek() {
     (result.found && result.visitVolume != null ? result : {});
   setFormValues(formData);
   renderEntryAuditSummary(result);
+
+  // If there's a local autosaved draft newer than the server record,
+  // offer to restore it. Draft is cleared on successful save so this
+  // only triggers when the user left the form mid-entry.
+  offerDraftRestoreIfNewer(entity, weekEnding, result);
+  _draftAutosaveSuspended = false;
 
   // Auto-populate call metrics from phone system if not already entered
   const existingValues = result.values || result.data || {};
@@ -3538,17 +3559,217 @@ async function loadCallDataBadge(entity, weekEnding) {
   } catch (e) { /* silent */ }
 }
 
-async function saveWeek() {
-  const payload = {
-    weekEnding: byId("weekEnding")?.value || "",
-    entity: getSelectedEntity(),
-    data: getFormValues()
+// ── Entry-form draft autosave + destructive-change confirmation ────────
+//
+// Two safety rails that would have caught the 4/17 PT zero-out before it
+// hit the database:
+//   1. Every change to the form is autosaved to localStorage every 2s so
+//      closing the tab mid-entry doesn't lose work.
+//   2. On save, we diff the form values against the stored record and
+//      block the submit if any non-zero field is being set to zero unless
+//      the user explicitly confirms.
+//
+const DRAFT_KEY = (entity, weekEnding) => `entryDraft_${entity}_${weekEnding}`;
+const DRAFT_AUTOSAVE_MS = 2000;
+let _draftAutosaveTimer = null;
+let _draftAutosaveSuspended = false;
+
+function scheduleDraftAutosave() {
+  if (_draftAutosaveSuspended) return;
+  clearTimeout(_draftAutosaveTimer);
+  _draftAutosaveTimer = setTimeout(() => {
+    persistEntryDraft();
+    _draftAutosaveTimer = null;
+  }, DRAFT_AUTOSAVE_MS);
+}
+
+function persistEntryDraft() {
+  try {
+    const entity = getSelectedEntity();
+    const weekEnding = byId("weekEnding")?.value;
+    if (!entity || !weekEnding) return;
+    const values = getFormValues();
+    localStorage.setItem(DRAFT_KEY(entity, weekEnding), JSON.stringify({
+      values,
+      savedAt: new Date().toISOString()
+    }));
+    const indicator = byId("draftAutosaveIndicator");
+    if (indicator) {
+      indicator.textContent = `Draft autosaved ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      indicator.classList.remove("draftIndicatorError");
+    }
+  } catch (e) {
+    const indicator = byId("draftAutosaveIndicator");
+    if (indicator) {
+      indicator.textContent = "Draft autosave failed (storage full?)";
+      indicator.classList.add("draftIndicatorError");
+    }
+  }
+}
+
+function loadEntryDraft(entity, weekEnding) {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY(entity, weekEnding));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function clearEntryDraft(entity, weekEnding) {
+  try { localStorage.removeItem(DRAFT_KEY(entity, weekEnding)); } catch {}
+}
+
+// After loading a server record, check for a local autosaved draft that
+// post-dates the server. If one exists, render an inline banner offering
+// to restore or discard — don't auto-apply in case the draft is stale.
+function offerDraftRestoreIfNewer(entity, weekEnding, serverRecord) {
+  const existing = byId("draftRestoreBanner");
+  if (existing) existing.remove();
+  const draft = loadEntryDraft(entity, weekEnding);
+  if (!draft?.savedAt) return;
+
+  const serverUpdatedAt = serverRecord?.updatedAt || serverRecord?.createdAt;
+  if (serverUpdatedAt && new Date(draft.savedAt) <= new Date(serverUpdatedAt)) {
+    // Server record is newer than the draft — draft is stale, drop it.
+    clearEntryDraft(entity, weekEnding);
+    return;
+  }
+
+  const container = byId("callDataBanner")?.parentElement || byId("kpiForm")?.parentElement;
+  if (!container) return;
+
+  const banner = document.createElement("div");
+  banner.id = "draftRestoreBanner";
+  banner.className = "draftRestoreBanner";
+  banner.innerHTML = `
+    <span class="draftRestoreIcon">✎</span>
+    <span class="draftRestoreText">
+      You have unsaved changes for this week (autosaved ${escapeHtml(new Date(draft.savedAt).toLocaleString())}).
+    </span>
+    <button type="button" class="draftRestoreBtn" id="draftRestoreApplyBtn">Restore</button>
+    <button type="button" class="draftDiscardBtn" id="draftRestoreDiscardBtn">Discard</button>
+  `;
+  const after = byId("callDataBanner");
+  if (after) after.insertAdjacentElement("afterend", banner);
+  else container.insertBefore(banner, container.firstChild);
+
+  byId("draftRestoreApplyBtn").onclick = () => {
+    _draftAutosaveSuspended = true;
+    setFormValues(draft.values);
+    _draftAutosaveSuspended = false;
+    banner.remove();
+    setStatus("Draft restored — review and save to commit.");
   };
+  byId("draftRestoreDiscardBtn").onclick = () => {
+    clearEntryDraft(entity, weekEnding);
+    banner.remove();
+  };
+}
+
+// Compare stored record against the new values we're about to save.
+// Returns a list of changes; each flagged destructive if it zeros out a
+// previously non-zero numeric field or clears a non-empty narrative.
+function computeEntrySaveDiff(existing, nextValues) {
+  const changes = [];
+  for (const f of ENTRY_STORED_FIELDS) {
+    const prevRaw = readStoredValue(existing, f);
+    const prev = normalizeNumber(prevRaw);
+    const next = normalizeNumber(nextValues[f.key]);
+    if (prev === next) continue;
+    const destructive = prev > 0 && next === 0;
+    changes.push({ key: f.key, label: f.label, prev, next, destructive });
+  }
+  const prevNotes = String(existing?.operationsNarrative || "").trim();
+  const nextNotes = String(nextValues?.operationsNarrative || "").trim();
+  if (prevNotes !== nextNotes) {
+    const destructive = prevNotes.length > 0 && nextNotes.length === 0;
+    changes.push({
+      key: "operationsNarrative", label: "Operator Notes",
+      prev: prevNotes, next: nextNotes, destructive, isText: true
+    });
+  }
+  return changes;
+}
+
+function confirmDestructiveSave(changes) {
+  const destructive = changes.filter((c) => c.destructive);
+  if (destructive.length === 0) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const existing = byId("diffConfirmModal");
+    if (existing) existing.remove();
+
+    const modal = document.createElement("div");
+    modal.id = "diffConfirmModal";
+    modal.className = "diffConfirmOverlay";
+    modal.innerHTML = `
+      <div class="diffConfirmBox">
+        <div class="diffConfirmHeader">
+          <span class="diffConfirmTag">Confirm save</span>
+          <h2>${destructive.length} non-zero field${destructive.length === 1 ? "" : "s"} will be cleared</h2>
+          <p>Review the changes below. If anything looks wrong, cancel and re-enter — saving will overwrite the existing record.</p>
+        </div>
+        <div class="diffConfirmBody">
+          <table class="diffTable">
+            <thead>
+              <tr><th>Field</th><th>Before</th><th></th><th>After</th></tr>
+            </thead>
+            <tbody>
+              ${destructive.map((c) => `
+                <tr class="diffRowDestructive">
+                  <td><strong>${escapeHtml(c.label)}</strong></td>
+                  <td class="diffFrom">${escapeHtml(c.isText ? (c.prev.length > 60 ? c.prev.slice(0, 60) + "…" : c.prev) : String(c.prev))}</td>
+                  <td class="diffArrow">→</td>
+                  <td class="diffTo">${c.isText ? "(cleared)" : "0"}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div class="diffConfirmFooter">
+          <button type="button" class="diffConfirmCancel" id="diffConfirmCancelBtn">Cancel — let me review</button>
+          <button type="button" class="diffConfirmOk" id="diffConfirmOkBtn">Save anyway</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = "flex";
+
+    const cleanup = (answer) => {
+      modal.remove();
+      document.body.style.overflow = "";
+      resolve(answer);
+    };
+    byId("diffConfirmCancelBtn").onclick = () => cleanup(false);
+    byId("diffConfirmOkBtn").onclick = () => cleanup(true);
+    modal.onclick = (e) => { if (e.target === modal) cleanup(false); };
+    document.body.style.overflow = "hidden";
+  });
+}
+
+async function saveWeek() {
+  const weekEnding = byId("weekEnding")?.value || "";
+  const entity = getSelectedEntity();
+  const nextValues = getFormValues();
+
+  // Diff against the record currently loaded in the form and require
+  // explicit confirmation for any destructive changes.
+  const existing = currentWeekData?.values || currentWeekData?.data ||
+    (currentWeekData?.found && currentWeekData?.visitVolume != null ? currentWeekData : null);
+  if (existing) {
+    const diff = computeEntrySaveDiff(existing, nextValues);
+    const ok = await confirmDestructiveSave(diff);
+    if (!ok) {
+      setStatus("Save cancelled — no changes written.");
+      return;
+    }
+  }
+
+  const payload = { weekEnding, entity, data: nextValues };
 
   setStatus("Saving...");
   setDebug({
     selectedEntry: getSelectedEntryLabel(),
-    baseEntity: getSelectedEntity(),
+    baseEntity: entity,
     payload
   });
 
@@ -3557,14 +3778,17 @@ async function saveWeek() {
   setStatus(result.message || "Saved successfully");
   setDebug({
     selectedEntry: getSelectedEntryLabel(),
-    baseEntity: getSelectedEntity(),
+    baseEntity: entity,
     result
   });
+
+  // Save succeeded — clear the autosaved draft so we don't nag the user on reload.
+  clearEntryDraft(entity, weekEnding);
 
   await loadWeek();
 
   // Check if all entities now have data — if so prompt digest
-  checkAndPromptDigest(payload.weekEnding);
+  checkAndPromptDigest(weekEnding);
 }
 
 async function checkAndPromptDigest(weekEnding) {
