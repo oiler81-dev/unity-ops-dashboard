@@ -448,28 +448,33 @@ label {
 
 input, select {
   width: 100%;
-  padding: 7px 28px 7px 10px;
+  padding: 8px 28px 8px 11px;
   box-sizing: border-box;
   border: 1px solid var(--border-mid);
   border-radius: var(--radius-sm);
-  background: var(--bg-panel);
+  background: var(--bg-panel-soft);
   color: var(--text);
   font-family: var(--font);
   font-size: 12.5px;
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
   appearance: none;
+  -webkit-appearance: none;
 }
 
 select {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
   background-repeat: no-repeat;
   background-position: right 8px center;
+  cursor: pointer;
 }
 
-input { padding: 7px 10px; }
+input { padding: 8px 11px; }
 
-input:hover, select:hover { border-color: var(--text-mutedest); }
+input:hover, select:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-panel);
+}
 
 input:focus, select:focus {
   border-color: var(--accent);
@@ -477,7 +482,8 @@ input:focus, select:focus {
   background: var(--bg-panel);
 }
 
-input[readonly] { background: var(--bg-panel-soft); color: var(--text-soft); border-color: var(--border-soft); }
+input[readonly] { background: var(--bg-panel-soft); color: var(--text-soft); border-color: var(--border-soft); cursor: default; }
+input[readonly]:hover { border-color: var(--border-soft); background: var(--bg-panel-soft); }
 select option { color: var(--text); }
 
 /* ── Quick presets (segmented control) ── */
@@ -1652,26 +1658,42 @@ body.lightView select,
 body.lightView input[type="date"],
 body.lightView input[type="number"],
 body.lightView input[type="text"] {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-med);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-mid);
   color: var(--text);
+}
+
+body.lightView select:hover,
+body.lightView input[type="date"]:hover,
+body.lightView input[type="number"]:hover,
+body.lightView input[type="text"]:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-panel);
 }
 
 body.lightView select:focus,
 body.lightView input:focus {
-  border-color: var(--accent-2);
-  box-shadow: 0 0 0 3px rgba(42,109,217,0.08);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--bg-panel);
   outline: none;
+}
+
+body.lightView input[readonly],
+body.lightView input[readonly]:hover {
+  background: var(--bg-panel-soft);
+  border-color: var(--border-soft);
+  color: var(--text-soft);
 }
 
 /* ── Quick preset pills ──────────────────────────────────────── */
 body.lightView .quickPresetPill {
   background: var(--bg-panel);
-  border: 1px solid var(--border-med);
+  border: 1px solid var(--border-mid);
   color: var(--text-soft);
 }
 
-body.lightView .quickPresetPill:hover { border-color: var(--accent-2); color: var(--accent-2); }
+body.lightView .quickPresetPill:hover { border-color: var(--accent); color: var(--accent); }
 body.lightView .quickPresetActive { background: var(--accent-dim) !important; border-color: var(--accent) !important; color: var(--accent) !important; }
 
 body.lightView #dashboardAlerts .alertItem {
