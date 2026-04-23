@@ -20,28 +20,109 @@ function resolveAccess(user) {
       authenticated: true,
       email,
       role: mapped.role,
-      entity: mapped.entity,
+      entity: mapped.role === "admin" ? null : mapped.entity,
       allowed: true,
       isAdmin: mapped.role === "admin"
     };
   }
 
+  // Unknown authenticated user (passed Azure AD but not in region map).
+  // Do NOT treat as "allowed" — unmapped users have no entity and no data access.
   return {
     authenticated: true,
     email,
     role: "user",
     entity: null,
-    allowed: true,
+    allowed: false,
     isAdmin: false
   };
 }
 
+// Returns true only if the caller is an admin, or the requested entity
+// matches the caller's own entity. Every function that reads or writes
+// entity-scoped data MUST call this before the data operation.
 function canAccessEntity(access, entity) {
   if (!access?.allowed) return false;
-  return true;
+  if (access.isAdmin) return true;
+  if (!entity) return false;
+  return String(entity).toLowerCase() === String(access.entity || "").toLowerCase();
+}
+
+// Filter an explicit list of entities down to the ones the caller may access.
+// Admins keep the whole list; regional users get only their own entity.
+// Used by endpoints that default to "all four practices" when the request
+// omits an entity parameter.
+function scopeEntitiesToAccess(access, entities) {
+  const list = Array.isArray(entities) ? entities : [];
+  if (!access?.allowed) return [];
+  if (access.isAdmin) return list.slice();
+  if (!access.entity) return [];
+  const match = String(access.entity).toLowerCase();
+  return list.filter((e) => String(e || "").toLowerCase() === match);
+}
+
+// Standard 401/403 response builder. Use on every function right after
+// resolveAccess() to reject unauthenticated or unmapped callers.
+function requireAccess(access) {
+  if (!access?.authenticated) {
+    return {
+      status: 401,
+      body: { ok: false, error: "Unauthorized" }
+    };
+  }
+  if (!access.allowed) {
+    return {
+      status: 403,
+      body: { ok: false, error: "Forbidden" }
+    };
+  }
+  return null;
+}
+
+// Standard 403 response for an authenticated user trying to access an entity
+// outside their scope. Returns 404 to avoid leaking whether the entity exists
+// at all — standard IDOR prevention.
+function requireEntityAccess(access, entity) {
+  if (!canAccessEntity(access, entity)) {
+    return {
+      status: 404,
+      body: { ok: false, error: "Not found" }
+    };
+  }
+  return null;
+}
+
+// Safely log the full error server-side but return a body that doesn't leak
+// stack traces, internal paths, or exception messages to the client.
+function safeErrorResponse(context, error, publicMessage = "Internal server error") {
+  try {
+    context?.log?.error?.(publicMessage, error);
+  } catch (_) {
+    // If logging itself fails, swallow — never rethrow from the error path.
+  }
+  return {
+    status: 500,
+    body: { ok: false, error: publicMessage }
+  };
+}
+
+// Number coercion that rejects negative values and non-finite inputs.
+// Use for any user-supplied numeric form field (surgeries, visits, etc.).
+function toSafeNumber(value, fallback = 0, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (value == null || value === "") return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  if (n < min) return fallback;
+  if (n > max) return fallback;
+  return n;
 }
 
 module.exports = {
   resolveAccess,
-  canAccessEntity
+  canAccessEntity,
+  scopeEntitiesToAccess,
+  requireAccess,
+  requireEntityAccess,
+  safeErrorResponse,
+  toSafeNumber
 };

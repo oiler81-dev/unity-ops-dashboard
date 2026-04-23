@@ -28,10 +28,12 @@ function forbidden(message = "Forbidden") {
 }
 
 function serverError(error, message = "Server error") {
+  // Intentionally omit error.message / stack from the client response so we
+  // don't leak implementation details. Callers are responsible for logging
+  // the raw error (typically context.log.error(...)).
   return json(500, {
     ok: false,
-    error: message,
-    details: error && error.message ? error.message : String(error)
+    error: message
   });
 }
 

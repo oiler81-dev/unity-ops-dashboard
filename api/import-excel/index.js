@@ -1,7 +1,17 @@
 const XLSX = require("xlsx");
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  safeErrorResponse
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
+
+// Uploaded workbook size cap. Base64 adds ~33% overhead so the raw body can be
+// larger; we also cap the decoded buffer below. 10 MB of raw Excel is plenty
+// for weekly operator data — anything bigger is almost certainly accidental
+// or an attack trying to OOM the function worker.
+const MAX_DECODED_BYTES = 10 * 1024 * 1024;
 const {
   monthLabelToMonthKey,
   getWorkingDaysForMonth,
@@ -1279,6 +1289,9 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
+    const authError = requireAccess(access);
+    if (authError) return authError;
+
     if (!access.isAdmin) {
       return {
         status: 403,
@@ -1303,7 +1316,31 @@ module.exports = async function (context, req) {
       };
     }
 
+    // Rough size check on the base64 string first to short-circuit obvious
+    // giant uploads before we allocate a decode buffer.
+    if (typeof fileBase64 !== "string" || fileBase64.length > Math.ceil((MAX_DECODED_BYTES * 4) / 3)) {
+      return {
+        status: 413,
+        body: { ok: false, error: "File too large" }
+      };
+    }
+
     const buffer = Buffer.from(fileBase64, "base64");
+    if (buffer.length > MAX_DECODED_BYTES) {
+      return {
+        status: 413,
+        body: { ok: false, error: "File too large" }
+      };
+    }
+
+    // Magic-byte check: XLSX files are ZIP archives and must start with "PK\x03\x04".
+    if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
+      return {
+        status: 400,
+        body: { ok: false, error: "Invalid file type (expected .xlsx)" }
+      };
+    }
+
     const workbook = XLSX.read(buffer, {
       type: "buffer",
       cellDates: true,
@@ -1335,15 +1372,6 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("import-excel failed", error);
-
-    return {
-      status: 500,
-      body: {
-        ok: false,
-        error: "Failed to import workbook",
-        details: error.message
-      }
-    };
+    return safeErrorResponse(context, error, "Failed to import workbook");
   }
 };

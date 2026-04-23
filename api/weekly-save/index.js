@@ -1,14 +1,17 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  requireEntityAccess,
+  safeErrorResponse,
+  toSafeNumber
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
 const TABLE_NAME = "WeeklyRegionData";
 
-function toNumber(value, fallback = 0) {
-  if (value == null || value === "") return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
+// Negative values and NaN are always invalid for these operational counters.
+const toNumber = (value, fallback = 0) => toSafeNumber(value, fallback);
 
 function toText(value, fallback = "") {
   if (value == null) return fallback;
@@ -94,6 +97,9 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
+    const authError = requireAccess(access);
+    if (authError) return authError;
+
     const entity = String(req.body?.entity || "").trim();
     const weekEnding = String(req.body?.weekEnding || "").trim();
     const input =
@@ -112,6 +118,9 @@ module.exports = async function (context, req) {
         }
       };
     }
+
+    const entityError = requireEntityAccess(access, entity);
+    if (entityError) return entityError;
 
     const table = getTableClient(TABLE_NAME);
 
@@ -182,15 +191,6 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("weekly-save failed", error);
-
-    return {
-      status: 500,
-      body: {
-        ok: false,
-        error: "Failed to save weekly region data.",
-        details: error.message
-      }
-    };
+    return safeErrorResponse(context, error, "Failed to save weekly region data.");
   }
 };

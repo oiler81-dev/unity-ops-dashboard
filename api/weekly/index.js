@@ -1,5 +1,10 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  requireEntityAccess,
+  safeErrorResponse
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
 const TABLE_NAME = "WeeklyRegionData";
@@ -64,7 +69,10 @@ function normalizeWeeklyValues(values = {}, record = null) {
 module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
-    resolveAccess(user);
+    const access = resolveAccess(user);
+
+    const authError = requireAccess(access);
+    if (authError) return authError;
 
     const entity = String(req.query.entity || "").trim();
     const weekEnding = String(req.query.weekEnding || "").trim();
@@ -78,6 +86,9 @@ module.exports = async function (context, req) {
         }
       };
     }
+
+    const entityError = requireEntityAccess(access, entity);
+    if (entityError) return entityError;
 
     const table = getTableClient(TABLE_NAME);
 
@@ -112,15 +123,6 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("weekly GET failed", error);
-
-    return {
-      status: 500,
-      body: {
-        ok: false,
-        error: "Failed to load weekly region data",
-        details: error.message
-      }
-    };
+    return safeErrorResponse(context, error, "Failed to load weekly region data");
   }
 };

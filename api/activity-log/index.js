@@ -1,5 +1,11 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  scopeEntitiesToAccess,
+  canAccessEntity,
+  safeErrorResponse
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 const { parseJsonSafe } = require("../shared/audit");
 
@@ -14,24 +20,32 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access.allowed) {
-      return {
-        status: 403,
-        body: {
-          ok: false,
-          error: "Forbidden"
-        }
-      };
-    }
+    const authError = requireAccess(access);
+    if (authError) return authError;
 
     const entity = safeString(req.query.entity).trim();
     const weekEnding = safeString(req.query.weekEnding).trim();
     const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
 
+    // If the caller named a specific entity, enforce that they can see it.
+    // If they didn't, scope the set of partitions to what they're allowed to read.
+    const allEntities = ["LAOSS", "NES", "SpineOne", "MRO"];
+    let entitiesToQuery;
+    if (entity) {
+      if (!canAccessEntity(access, entity)) {
+        return { status: 404, body: { ok: false, error: "Not found" } };
+      }
+      entitiesToQuery = [entity];
+    } else {
+      entitiesToQuery = scopeEntitiesToAccess(access, allEntities);
+      if (entitiesToQuery.length === 0) {
+        return { status: 200, body: { ok: true, count: 0, items: [] } };
+      }
+    }
+
     const client = getTableClient(TABLE_NAME);
 
     const results = [];
-    const entitiesToQuery = entity ? [entity] : ["LAOSS", "NES", "SpineOne", "MRO"];
 
     for (const partition of entitiesToQuery) {
       const filter = `PartitionKey eq '${partition}'`;
@@ -76,15 +90,6 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("activity-log failed", error);
-
-    return {
-      status: 500,
-      body: {
-        ok: false,
-        error: "Failed to load activity log",
-        details: error.message
-      }
-    };
+    return safeErrorResponse(context, error, "Failed to load activity log");
   }
 };

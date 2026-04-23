@@ -1,5 +1,10 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  requireEntityAccess,
+  scopeEntitiesToAccess
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
 const REGION_TABLE = "WeeklyRegionData";
@@ -212,9 +217,8 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access?.authenticated) {
-      return respond(401, { ok: false, error: "Unauthorized" });
-    }
+    const authError = requireAccess(access);
+    if (authError) return respond(authError.status, authError.body);
 
     const regionTable = getTableClient(REGION_TABLE);
     const forecastTable = getTableClient(FORECAST_TABLE);
@@ -245,9 +249,8 @@ module.exports = async function (context, req) {
       }
 
       // Operators can only save for their own entity; admins can save any
-      if (!access.isAdmin && access.entity !== entity) {
-        return respond(403, { ok: false, error: "Forbidden" });
-      }
+      const entityError = requireEntityAccess(access, entity);
+      if (entityError) return respond(entityError.status, entityError.body);
 
       const rates = await computeEntityRates(regionTable, entity);
       const providerSettings = await getProviderSettings(settingsTable, entity);
@@ -305,9 +308,7 @@ module.exports = async function (context, req) {
     const monthKeys = getRollingMonthKeys();
 
     // Determine which entities to return
-    const scopeEntities = access.isAdmin
-      ? ENTITIES
-      : ENTITIES.filter((e) => e === access.entity);
+    const scopeEntities = scopeEntitiesToAccess(access, ENTITIES);
 
     const results = await Promise.all(
       scopeEntities.map(async (entity) => {
@@ -387,6 +388,7 @@ module.exports = async function (context, req) {
     });
   } catch (error) {
     context.log.error("pto-forecast failed", error);
-    return respond(500, { ok: false, error: "Failed to process PTO forecast", details: error.message });
+    try { context?.log?.error?.("pto-forecast failed", error); } catch (_) {}
+    return respond(500, { ok: false, error: "Failed to process PTO forecast" });
   }
 };

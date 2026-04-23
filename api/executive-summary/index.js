@@ -1,5 +1,10 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  scopeEntitiesToAccess,
+  safeErrorResponse
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 const { monthLabelToMonthKey, getWorkingDaysForMonth } = require("../shared/budget");
 
@@ -85,15 +90,8 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access?.authenticated) {
-      return {
-        status: 401,
-        body: {
-          ok: false,
-          error: "Unauthorized"
-        }
-      };
-    }
+    const authError = requireAccess(access);
+    if (authError) return authError;
 
     const weekEnding = String(req.query.weekEnding || "").trim();
     if (!weekEnding) {
@@ -116,9 +114,7 @@ module.exports = async function (context, req) {
     const regions = [];
 
     // Scope to the caller's entity — admins see all four, regionals only their own.
-    const scopeEntities = access.isAdmin
-      ? ENTITIES
-      : ENTITIES.filter((e) => e === access.entity);
+    const scopeEntities = scopeEntitiesToAccess(access, ENTITIES);
 
     for (const entity of scopeEntities) {
       const record = await getEntityRecord(regionTable, entity, weekEnding);
@@ -331,14 +327,6 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("executive-summary failed", error);
-    return {
-      status: 500,
-      body: {
-        ok: false,
-        error: "Failed to build executive summary",
-        details: error.message
-      }
-    };
+    return safeErrorResponse(context, error, "Failed to build executive summary");
   }
 };

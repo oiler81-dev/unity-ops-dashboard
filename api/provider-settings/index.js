@@ -1,5 +1,9 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  scopeEntitiesToAccess
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
 const SETTINGS_TABLE = "ProviderSettingsData";
@@ -45,9 +49,8 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
-    if (!access?.authenticated) {
-      return respond(401, { ok: false, error: "Unauthorized" });
-    }
+    const authError = requireAccess(access);
+    if (authError) return respond(authError.status, authError.body);
 
     const table = getTableClient(SETTINGS_TABLE);
     await ensureTable(table);
@@ -90,9 +93,10 @@ module.exports = async function (context, req) {
       });
     }
 
-    // ── GET: return all entity settings ──────────────────────────────────────
+    // ── GET: return entity settings scoped to caller's access ──────────────
+    const visibleEntities = scopeEntitiesToAccess(access, ENTITIES);
     const results = await Promise.all(
-      ENTITIES.map(async (entity) => {
+      visibleEntities.map(async (entity) => {
         try {
           const saved = await getEntitySettings(table, entity);
           const defaults = DEFAULTS[entity];
@@ -116,7 +120,7 @@ module.exports = async function (context, req) {
     return respond(200, { ok: true, entities: results });
 
   } catch (error) {
-    context.log.error("provider-settings failed", error);
-    return respond(500, { ok: false, error: "Failed to process provider settings", details: error.message });
+    try { context?.log?.error?.("provider-settings failed", error); } catch (_) {}
+    return respond(500, { ok: false, error: "Failed to process provider settings" });
   }
 };

@@ -8,7 +8,11 @@
 
 const { TableClient } = require("@azure/data-tables");
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  requireEntityAccess
+} = require("../shared/permissions");
 
 const TABLE_NAME = "CallData";
 const ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
@@ -41,9 +45,8 @@ module.exports = async function (context, req) {
   const user = getUserFromRequest(req);
   const access = resolveAccess(user);
 
-  if (!access?.authenticated) {
-    return respond(401, { ok: false, error: "Unauthorized" });
-  }
+  const authError = requireAccess(access);
+  if (authError) return respond(authError.status, authError.body);
 
   const entity     = String(req.query.entity     || "").trim();
   const weekEnding = String(req.query.weekEnding || "").trim();
@@ -60,10 +63,8 @@ module.exports = async function (context, req) {
     return respond(400, { ok: false, error: "Invalid weekEnding format (expected YYYY-MM-DD)" });
   }
 
-  // Regional users can only query their own entity
-  if (!access.isAdmin && access.entity !== entity) {
-    return respond(403, { ok: false, error: "Forbidden" });
-  }
+  const entityError = requireEntityAccess(access, entity);
+  if (entityError) return respond(entityError.status, entityError.body);
 
   try {
     const client = getTableClient();

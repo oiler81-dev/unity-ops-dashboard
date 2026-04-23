@@ -1,5 +1,10 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  requireEntityAccess,
+  safeErrorResponse
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 
 const TABLE_NAME = "WeeklyRegionData";
@@ -108,6 +113,9 @@ module.exports = async function (context, req) {
     const user = getUserFromRequest(req);
     const access = resolveAccess(user);
 
+    const authError = requireAccess(access);
+    if (authError) return authError;
+
     const entity = String(req.query.entity || "").trim();
     const mode = String(req.query.mode || "recent").trim();
     const weeks = Math.max(1, Math.min(52, toNumber(req.query.weeks, 12)));
@@ -124,15 +132,8 @@ module.exports = async function (context, req) {
       };
     }
 
-    if (!access.isAdmin && access.entity !== entity) {
-      return {
-        status: 403,
-        body: {
-          ok: false,
-          error: "Forbidden"
-        }
-      };
-    }
+    const entityError = requireEntityAccess(access, entity);
+    if (entityError) return entityError;
 
     const table = getTableClient(TABLE_NAME);
     const rows = await table.listByPartitionKey(entity);
@@ -166,15 +167,6 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("trends failed", error);
-
-    return {
-      status: 500,
-      body: {
-        ok: false,
-        error: "Failed to load trends data",
-        details: error.message
-      }
-    };
+    return safeErrorResponse(context, error, "Failed to load trends data");
   }
 };

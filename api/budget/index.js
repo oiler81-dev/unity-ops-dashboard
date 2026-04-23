@@ -1,6 +1,15 @@
 const { getTableClient } = require("../shared/table");
+const { getUserFromRequest } = require("../shared/auth");
+const {
+  resolveAccess,
+  requireAccess,
+  canAccessEntity,
+  scopeEntitiesToAccess,
+  safeErrorResponse
+} = require("../shared/permissions");
 
 const BUDGET_TABLE = "BudgetData";
+const ALL_ENTITIES = ["LAOSS", "NES", "SpineOne", "MRO"];
 
 function safeText(value) {
   return value == null ? "" : String(value).trim();
@@ -33,10 +42,28 @@ function toBudgetItem(row) {
 
 module.exports = async function (context, req) {
   try {
+    const user = getUserFromRequest(req);
+    const access = resolveAccess(user);
+    const authError = requireAccess(access);
+    if (authError) {
+      context.res = { status: authError.status, headers: { "Content-Type": "application/json" }, body: authError.body };
+      return;
+    }
+
     const entity = safeText(req.query?.entity);
     const monthKeyQuery = safeText(req.query?.monthKey);
     const weekEnding = safeText(req.query?.weekEnding);
     const includeAll = safeText(req.query?.all).toLowerCase() === "true";
+
+    // Scope entity queries to what the caller may read.
+    if (entity && !canAccessEntity(access, entity)) {
+      context.res = {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+        body: { ok: false, error: "Not found" }
+      };
+      return;
+    }
 
     const derivedMonthKey = monthKeyQuery || monthKeyFromWeekEnding(weekEnding);
     const table = getTableClient(BUDGET_TABLE);
@@ -63,8 +90,10 @@ module.exports = async function (context, req) {
       const rows = await table.query(
         `RowKey eq '${derivedMonthKey.replace(/'/g, "''")}'`
       );
+      const allowed = new Set(scopeEntitiesToAccess(access, ALL_ENTITIES));
       items = rows
         .map(toBudgetItem)
+        .filter((item) => allowed.has(item.entity))
         .sort((a, b) => a.entity.localeCompare(b.entity));
     } else if (includeAll) {
       const rows = [];
@@ -72,8 +101,10 @@ module.exports = async function (context, req) {
         rows.push(row);
       }
 
+      const allowed = new Set(scopeEntitiesToAccess(access, ALL_ENTITIES));
       items = rows
         .map(toBudgetItem)
+        .filter((item) => allowed.has(item.entity))
         .sort((a, b) => {
           if (a.monthKey === b.monthKey) return a.entity.localeCompare(b.entity);
           return a.monthKey.localeCompare(b.monthKey);
@@ -103,16 +134,11 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("budget failed", error);
-
+    try { context?.log?.error?.("budget failed", error); } catch (_) {}
     context.res = {
       status: 500,
       headers: { "Content-Type": "application/json" },
-      body: {
-        ok: false,
-        error: "Failed to load budget data",
-        details: error.message
-      }
+      body: { ok: false, error: "Failed to load budget data" }
     };
   }
 };

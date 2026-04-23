@@ -1,5 +1,10 @@
 const { getUserFromRequest } = require("../shared/auth");
-const { resolveAccess } = require("../shared/permissions");
+const {
+  resolveAccess,
+  requireAccess,
+  scopeEntitiesToAccess,
+  safeErrorResponse
+} = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
 const {
   getWeekRangeFromWeekEnding,
@@ -452,7 +457,10 @@ function buildKpis(currentRows, compareAgainst, compareRows, benchmarkRows) {
 module.exports = async function (context, req) {
   try {
     const user = getUserFromRequest(req);
-    resolveAccess(user);
+    const access = resolveAccess(user);
+
+    const authError = requireAccess(access);
+    if (authError) return authError;
 
     const anchorWeek = String(req.query.anchorWeek || req.query.weekEnding || "").trim();
     if (!anchorWeek) {
@@ -477,10 +485,18 @@ module.exports = async function (context, req) {
     const targetsTable = getTableClient(TARGETS_TABLE);
     const budgetTable = getTableClient(BUDGET_TABLE);
 
-    const selectedEntities =
+    // Scope to what the caller is allowed to see. Admins get every requested
+    // entity; regional users always get only their own, even if they ask for
+    // "ALL" or another entity's scope.
+    const requestedEntities =
       entityScope && entityScope !== "ALL"
         ? ENTITIES.filter((e) => e === entityScope)
         : ENTITIES.slice();
+    const selectedEntities = scopeEntitiesToAccess(access, requestedEntities);
+
+    if (selectedEntities.length === 0) {
+      return { status: 404, body: { ok: false, error: "Not found" } };
+    }
 
     const currentRows = [];
     const compareRows = [];
@@ -580,15 +596,6 @@ module.exports = async function (context, req) {
       }
     };
   } catch (error) {
-    context.log.error("dashboard failed", error);
-
-    return {
-      status: 500,
-      body: {
-        ok: false,
-        error: "Failed to load dashboard",
-        details: error.message
-      }
-    };
+    return safeErrorResponse(context, error, "Failed to load dashboard");
   }
 };
