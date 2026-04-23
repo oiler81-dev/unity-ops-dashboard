@@ -599,11 +599,13 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow
    The grid gap (1px) + border color (--line) creates the dividers. */
 .cardGrid {
   display: grid;
-  /* auto-fit avoids the empty-slot-on-last-row problem you get with a fixed
-     column count whenever the card count isn't a multiple of the column count
-     (e.g. 9 cards in a 5-col grid = 1 forced empty slot). minmax(220px, 1fr)
-     keeps cards from ever getting narrower than readable. */
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  /* 8 KPI cards (ALL / PT entities): 2 rows of 4 = perfectly balanced.
+     7 cards (LAOSS, no PT): 4+3 with 1 empty slot at the end (acceptable).
+     10-11 cards (SpineOne with imaging/PI): 3 rows ending with 2-3 empty.
+     A fixed 4-col is the cleanest for the most common case. The earlier
+     auto-fit landed on 6 cols at desktop width which left 4 empty slots on
+     row 2 — much worse than the fixed approach. */
+  grid-template-columns: repeat(4, 1fr);
   gap: 1px;
   margin-top: 18px;
   background: var(--border-soft);
@@ -711,7 +713,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow
 
 /* Below 1280px let KPI row wrap into two rows of 5 */
 @media (max-width: 1280px) {
-  .cardGrid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  /* No change below 1280px — 4-col still works. Mobile fallback below 900px. */
+  .cardGrid { grid-template-columns: repeat(4, 1fr); }
 }
 @media (max-width: 900px) {
   .cardGrid { grid-template-columns: repeat(2, 1fr); }
