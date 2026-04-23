@@ -842,8 +842,11 @@ function getFormValues() {
   const ptMode = entityHasPtEntry();
   // Azure Table records come back flat at top level (no `values` wrapper).
   // Fall back to the record itself if the wrapped shape is absent.
+  // A PT-only record has visitVolume == null but PT fields populated; the old
+  // guard dropped it on the floor, letting the next ortho save wipe PT to 0.
+  // Trust any flat record marked `found: true`.
   const existing = currentWeekData?.values || currentWeekData?.data ||
-    (currentWeekData?.found && currentWeekData?.visitVolume != null ? currentWeekData : {});
+    (currentWeekData?.found ? currentWeekData : {});
 
   const raw = {};
   ENTRY_INPUT_FIELDS.forEach((f) => {
@@ -1154,12 +1157,7 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope, 
       meta: isVsBudget ? "Actual only" : "Across selected period",
       className: "kpi-neutral"
     },
-    {
-      label: "PTO Days",
-      value: formatWhole(current.totals?.ptoDays || 0),
-      meta: "Across selected scope",
-      className: "kpi-neutral"
-    },
+    // PTO Days removed 2026-04-23: PTO is tracked via PTO Forecast (not weekly entry).
     {
       label: "Total Surgeries",
       value: formatWhole(current.totals?.surgeries || 0),
@@ -1260,19 +1258,33 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           newPatientsBudget: 0
         };
 
-        const visitPct = buildVariancePct(row.visitVolume, prior.visitVolume);
+        // Tessa: lump PT visits into total visits for entities that have a PT line
+        // (NES, SpineOne, MRO). Entity cards previously showed ortho-only, which
+        // didn't match the top-line KPI card that already combines both.
+        const hasPt = entityHasPtData(entity);
+        const ptVisits = hasPt ? normalizeNumber(row.pt?.visitsSeen) : 0;
+        const priorPtVisits = hasPt ? normalizeNumber(prior.pt?.visitsSeen) : 0;
+        const totalVisits = normalizeNumber(row.visitVolume) + ptVisits;
+        const priorTotalVisits = normalizeNumber(prior.visitVolume) + priorPtVisits;
+        // PT budget not yet wired through the backend (2026 xlsx ingest is Phase 2).
+        const ptVisitsBudget = normalizeNumber(row.ptVisitsBudget);
+        const totalVisitsBudget = normalizeNumber(row.visitVolumeBudget) + ptVisitsBudget;
+
+        const visitPct = buildVariancePct(totalVisits, priorTotalVisits);
         const callPct = buildVariancePct(row.callVolume, prior.callVolume);
         const npPct = buildVariancePct(row.newPatients, prior.newPatients);
-        const ptPct = buildVariancePct(row.pt?.visitsSeen, prior.pt?.visitsSeen);
+        const ptPct = buildVariancePct(ptVisits, priorPtVisits);
+        const ptBudgetPct = buildVariancePct(ptVisits, ptVisitsBudget);
 
-        const visitBudgetStatus = getGoalStatus(row.visitVolume, row.visitVolumeBudget);
+        const visitBudgetStatus = getGoalStatus(totalVisits, totalVisitsBudget);
+        const ptBudgetStatus = ptVisitsBudget > 0 ? getGoalStatus(ptVisits, ptVisitsBudget) : "neutral";
         const npBudgetStatus = getGoalStatus(row.newPatients, row.newPatientsBudget);
         const callStatus    = getGoalStatus(row.abandonedCallRate, getThreshold("abandonedCallRate", 10), true);
         const noShowStatus  = getGoalStatus(row.noShowRate, getThreshold("noShowRate", 6), true);
         const cancelStatus  = getGoalStatus(row.cancellationRate, getThreshold("cancellationRate", 8), true);
         const summary = getPerformanceSummary(row, compareAgainst);
 
-        const visitGoalPct = progressPercent(row.visitVolume, row.visitVolumeBudget);
+        const visitGoalPct = progressPercent(totalVisits, totalVisitsBudget);
         const npGoalPct = progressPercent(row.newPatients, row.newPatientsBudget);
         const accessPct = accessPercentFromAbandoned(row.abandonedCallRate, 10);
 
@@ -1283,16 +1295,16 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
             <div class="entityBudgetGrid">
               <div class="entityBudgetTile">
                 <div class="entityBudgetLabel">Visit Budget</div>
-                <div class="entityBudgetValue">${formatWhole(row.visitVolumeBudget)}</div>
+                <div class="entityBudgetValue">${formatWhole(totalVisitsBudget)}</div>
                 <div class="${getMetricChipClass(visitBudgetStatus)}">
                   ${visitBudgetStatus === "good" ? "Above Goal" : visitBudgetStatus === "warning" ? "Near Goal" : "Below Goal"}
                 </div>
-                <div class="entityBudgetMeta">Variance ${formatVariance(row.visitVolume, row.visitVolumeBudget)}</div>
-                <div class="entityBudgetMeta">To Goal ${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</div>
+                <div class="entityBudgetMeta">Variance ${formatVariance(totalVisits, totalVisitsBudget)}</div>
+                <div class="entityBudgetMeta">To Goal ${formatToGoal(totalVisits, totalVisitsBudget)}</div>
                 <div class="entityProgressWrap">
                   <div class="entityProgressLabelRow">
                     <span>Goal Progress</span>
-                    <strong>${formatToGoal(row.visitVolume, row.visitVolumeBudget)}</strong>
+                    <strong>${formatToGoal(totalVisits, totalVisitsBudget)}</strong>
                   </div>
                   <div class="entityProgressTrack">
                     <div class="entityProgressBar ${visitBudgetStatus === "good" ? "entityProgressGood" : visitBudgetStatus === "warning" ? "entityProgressWarning" : "entityProgressBad"}" style="width:${visitGoalPct}%"></div>
@@ -1356,13 +1368,14 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
 
             <div class="entityTopMetrics">
               <div class="entityMetricHero">
-                <span class="entityMetricLabel">Visits</span>
-                <strong>${formatWhole(row.visitVolume)}</strong>
+                <span class="entityMetricLabel">Visits${hasPt ? " (incl. PT)" : ""}</span>
+                <strong>${formatWhole(totalVisits)}</strong>
+                ${hasPt ? `<span class="entityMetricSub">Ortho ${formatWhole(row.visitVolume)} · PT ${formatWhole(ptVisits)}</span>` : ""}
               </div>
-              ${entityHasPtData(entity) ? `
+              ${hasPt ? `
               <div class="entityMetricHero">
                 <span class="entityMetricLabel">PT Visits</span>
-                <strong>${formatWhole(row.pt?.visitsSeen || 0)}</strong>
+                <strong>${formatWhole(ptVisits)}</strong>
               </div>` : ""}
               <div class="entityMetricHero">
                 <span class="entityMetricLabel">Cash</span>
@@ -1410,15 +1423,16 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
               <div class="entityDetailGrid">
                 <div class="entityDetailTile">
                   <div class="entityDetailLabel">Visit Variance</div>
-                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(row.visitVolume, row.visitVolumeBudget) : fmtPct(visitPct)}</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? formatVariance(totalVisits, totalVisitsBudget) : fmtPct(visitPct)}</div>
                 </div>
+                ${hasPt ? `
                 <div class="entityDetailTile">
-                  <div class="entityDetailLabel">PT Variance</div>
-                  <div class="entityDetailValue">${fmtPct(ptPct)}</div>
-                </div>
+                  <div class="entityDetailLabel">PT Variance ${compareAgainst === "budget" ? "(vs Budget)" : "(vs Prior)"}</div>
+                  <div class="entityDetailValue">${compareAgainst === "budget" ? (ptVisitsBudget > 0 ? formatVariance(ptVisits, ptVisitsBudget) : "n/a") : fmtPct(ptPct)}</div>
+                </div>` : ""}
                 <div class="entityDetailTile">
-                  <div class="entityDetailLabel">PTO Days</div>
-                  <div class="entityDetailValue">${formatWhole(row.ptoDays || 0)}</div>
+                  <div class="entityDetailLabel">PTO</div>
+                  <div class="entityDetailValue"><a href="#" onclick="showPtoForecastView();return false;" class="entityDetailLink">View Forecast →</a></div>
                 </div>
               </div>
               <!-- Ops narrative is now rendered in the dashboard-wide Ops Notes
@@ -1906,7 +1920,7 @@ function renderExecutiveCards(summary) {
     { label: "Visit Volume", value: formatWhole(summary.totals?.visitVolume || 0), className: "kpi-neutral" },
     { label: "PT Visits", value: formatWhole(summary.ptTotals?.visitsSeen || 0), className: "kpi-neutral" },
     { label: "Cash Collected", value: formatCurrency(summary.totals?.cashCollected || 0), className: "kpi-neutral" },
-    { label: "PTO Days", value: formatWhole(summary.totals?.ptoDays || 0), className: "kpi-neutral" },
+    // PTO Days removed 2026-04-23: tracked in PTO Forecast, not weekly entry.
     { label: "Total Surgeries", value: formatWhole(summary.totals?.surgeries || 0), className: "kpi-neutral" },
     { label: "Call Volume", value: formatWhole(summary.totals?.callVolume || 0), className: "kpi-neutral" },
     { label: "New Patients", value: formatWhole(summary.totals?.newPatients || 0), className: "kpi-neutral" },
@@ -3427,9 +3441,9 @@ async function loadWeek() {
 
   // API may return data nested under result.values / result.data (manual entry path)
   // OR flat at the top level (Azure Table row returned directly).
-  // Fall back to result itself so saved data always repopulates the form.
+  // A PT-only record has visitVolume == null; trust any flat record that says found.
   const formData = result.values || result.data ||
-    (result.found && result.visitVolume != null ? result : {});
+    (result.found ? result : {});
   setFormValues(formData);
   renderEntryAuditSummary(result);
 
@@ -3777,8 +3791,10 @@ async function saveWeek() {
 
   // Diff against the record currently loaded in the form and require
   // explicit confirmation for any destructive changes.
+  // PT-only records have visitVolume == null; fall back to any flat record
+  // flagged found so the diff captures PT-side changes too.
   const existing = currentWeekData?.values || currentWeekData?.data ||
-    (currentWeekData?.found && currentWeekData?.visitVolume != null ? currentWeekData : null);
+    (currentWeekData?.found ? currentWeekData : null);
   if (existing) {
     const diff = computeEntrySaveDiff(existing, nextValues);
     const ok = await confirmDestructiveSave(diff);
