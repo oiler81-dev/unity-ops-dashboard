@@ -163,21 +163,87 @@ const THRESHOLD_DEFAULTS = {
   visitDropVsPrior:  100
 };
 
-function getThreshold(key, fallback) {
-  const stored = localStorage.getItem("threshold_" + key);
-  if (stored !== null) {
-    const n = parseFloat(stored);
+// Per-region, per-month thresholds.
+//
+// Lookup priority (returns first hit):
+//   1. region+month        e.g. threshold_v2_LAOSS_2026-04_noShowRate
+//   2. region+DEFAULT      e.g. threshold_v2_LAOSS_DEFAULT_noShowRate
+//   3. GLOBAL+month        e.g. threshold_v2_GLOBAL_2026-04_noShowRate
+//   4. GLOBAL+DEFAULT      e.g. threshold_v2_GLOBAL_DEFAULT_noShowRate
+//   5. legacy v1 key       e.g. threshold_noShowRate     (pre-2026-04 storage)
+//   6. caller-supplied fallback / THRESHOLD_DEFAULTS / 0
+//
+// Region values: "LAOSS" | "NES" | "MRO" | "SpineOne" | "GLOBAL"
+// MonthKey values: "YYYY-MM" | "DEFAULT"
+const THRESHOLD_REGIONS = ["GLOBAL", "LAOSS", "NES", "MRO", "SpineOne"];
+
+function thresholdStorageKey(region, monthKey, key) {
+  return `threshold_v2_${region}_${monthKey}_${key}`;
+}
+
+function getThreshold(key, fallback, ctx) {
+  const region = (ctx && ctx.region) || null;
+  const monthKey = (ctx && ctx.monthKey) || null;
+
+  const tries = [];
+  if (region && monthKey) tries.push(thresholdStorageKey(region, monthKey, key));
+  if (region) tries.push(thresholdStorageKey(region, "DEFAULT", key));
+  if (monthKey) tries.push(thresholdStorageKey("GLOBAL", monthKey, key));
+  tries.push(thresholdStorageKey("GLOBAL", "DEFAULT", key));
+
+  for (const k of tries) {
+    const v = localStorage.getItem(k);
+    if (v !== null) {
+      const n = parseFloat(v);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+
+  // Backwards compat with the original single-global key
+  const legacy = localStorage.getItem("threshold_" + key);
+  if (legacy !== null) {
+    const n = parseFloat(legacy);
     if (Number.isFinite(n)) return n;
   }
+
   return fallback ?? THRESHOLD_DEFAULTS[key] ?? 0;
 }
 
-function setThreshold(key, value) {
-  localStorage.setItem("threshold_" + key, String(value));
+function setThreshold(key, value, ctx) {
+  const region = (ctx && ctx.region) || "GLOBAL";
+  const monthKey = (ctx && ctx.monthKey) || "DEFAULT";
+  localStorage.setItem(thresholdStorageKey(region, monthKey, key), String(value));
+}
+
+function clearThreshold(key, ctx) {
+  const region = (ctx && ctx.region) || "GLOBAL";
+  const monthKey = (ctx && ctx.monthKey) || "DEFAULT";
+  localStorage.removeItem(thresholdStorageKey(region, monthKey, key));
 }
 
 function resetThresholds() {
-  Object.keys(THRESHOLD_DEFAULTS).forEach(k => localStorage.removeItem("threshold_" + k));
+  // Wipe every v1 + v2 threshold so we fall back to THRESHOLD_DEFAULTS.
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && (k.startsWith("threshold_v2_") || k.startsWith("threshold_"))) toRemove.push(k);
+  }
+  toRemove.forEach((k) => localStorage.removeItem(k));
+}
+
+function monthKeyFromWeekEnding(weekEnding) {
+  if (!weekEnding) return "";
+  const m = String(weekEnding).match(/^(\d{4}-\d{2})/);
+  return m ? m[1] : "";
+}
+
+// Most threshold lookups happen during dashboard renders; the active
+// anchor week defines which month's thresholds apply. Returns "" if the
+// dashboard week input isn't on screen yet (callers should treat as
+// "no month context — use DEFAULT").
+function currentDashboardMonthKey() {
+  const we = (typeof byId === "function" && byId("dashboardWeekEnding")?.value) || "";
+  return monthKeyFromWeekEnding(we);
 }
 
 // ── View mode ─────────────────────────────────────────────────
@@ -1285,9 +1351,10 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
         const visitBudgetStatus = getGoalStatus(totalVisits, totalVisitsBudget);
         const ptBudgetStatus = ptVisitsBudget > 0 ? getGoalStatus(ptVisits, ptVisitsBudget) : "neutral";
         const npBudgetStatus = getGoalStatus(row.newPatients, row.newPatientsBudget);
-        const callStatus    = getGoalStatus(row.abandonedCallRate, getThreshold("abandonedCallRate", 10), true);
-        const noShowStatus  = getGoalStatus(row.noShowRate, getThreshold("noShowRate", 6), true);
-        const cancelStatus  = getGoalStatus(row.cancellationRate, getThreshold("cancellationRate", 8), true);
+        const tCtx = { region: entity, monthKey: currentDashboardMonthKey() };
+        const callStatus    = getGoalStatus(row.abandonedCallRate, getThreshold("abandonedCallRate", 10, tCtx), true);
+        const noShowStatus  = getGoalStatus(row.noShowRate, getThreshold("noShowRate", 6, tCtx), true);
+        const cancelStatus  = getGoalStatus(row.cancellationRate, getThreshold("cancellationRate", 8, tCtx), true);
         const summary = getPerformanceSummary(row, compareAgainst);
 
         const visitGoalPct = progressPercent(totalVisits, totalVisitsBudget);
@@ -1470,9 +1537,10 @@ function renderDashboardAlerts(current, comparison, entityScope, compareAgainst)
       return;
     }
 
-    const noShowLimit    = getThreshold("noShowRate", 6);
-    const cancelLimit    = getThreshold("cancellationRate", 8);
-    const abandonedLimit = getThreshold("abandonedCallRate", 10);
+    const tCtx = { region: entity, monthKey: currentDashboardMonthKey() };
+    const noShowLimit    = getThreshold("noShowRate", 6, tCtx);
+    const cancelLimit    = getThreshold("cancellationRate", 8, tCtx);
+    const abandonedLimit = getThreshold("abandonedCallRate", 10, tCtx);
 
     if (normalizeNumber(row.noShowRate) >= noShowLimit) {
       alerts.push({ severity: "bad", text: `${entity} no show rate is elevated at ${normalizeNumber(row.noShowRate).toFixed(1)}% (threshold: ${noShowLimit}%).` });
@@ -3577,7 +3645,7 @@ async function populateEntityLivePhones(entity, weekEnding) {
     const daysLabel = callData.datesFound?.length ? `${callData.datesFound.length}/5 days` : "";
     if (stateEl) stateEl.textContent = [sourceLabel, daysLabel].filter(Boolean).join(" · ");
 
-    const abandonedBad = normalizeNumber(callData.abandonedRate) >= getThreshold("abandonedCallRate", 10);
+    const abandonedBad = normalizeNumber(callData.abandonedRate) >= getThreshold("abandonedCallRate", 10, { region: entity, monthKey: monthKeyFromWeekEnding(weekEnding) });
     const waitBad = normalizeNumber(callData.avgWaitSeconds) >= 60;
 
     if (gridEl) {
@@ -5750,61 +5818,166 @@ function showDigestModal(current, comparison, compareAgainst, weekSets) {
 
 
 // ── Threshold Settings View ───────────────────────────────────
+//
+// Per-region, per-month thresholds. The matrix below shows one column per
+// region (Global plus the 4 entities) and one row per metric. Each cell is
+// editable; an empty cell inherits from the next-higher level.
+//
+// Inheritance: region+month → region+default → global+month → global+default
+// → THRESHOLD_DEFAULTS. A cell shows the inherited value as placeholder
+// when blank, so operators can see what would apply if they don't override.
+
+const THRESHOLD_METRICS = [
+  { key: "noShowRate",        label: "No-Show Rate Alert",   unit: "%", step: "0.5", min: "0",
+    desc: "Alert fires when no-show rate exceeds this value." },
+  { key: "cancellationRate",  label: "Cancellation Alert",   unit: "%", step: "0.5", min: "0",
+    desc: "Alert fires when cancellation rate exceeds this value." },
+  { key: "abandonedCallRate", label: "Abandoned Calls Alert",unit: "%", step: "0.5", min: "0",
+    desc: "Alert fires when abandoned call rate exceeds this value." },
+  { key: "visitDropVsPrior",  label: "Visit Drop Alert",     unit: "visits", step: "5", min: "0",
+    desc: "Alert fires when visits drop more than this vs prior period." }
+];
+
+function buildThresholdMonthOptions() {
+  const months = [{ key: "DEFAULT", label: "All months (default)" }];
+  const year = new Date().getUTCFullYear();
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  for (let i = 0; i < 12; i++) {
+    const mk = `${year}-${String(i + 1).padStart(2, "0")}`;
+    months.push({ key: mk, label: `${monthNames[i]} ${year}` });
+  }
+  return months;
+}
+
 function renderThresholdSettingsView() {
   const container = byId("thresholdSettingsContent");
   if (!container) return;
 
-  const thresholds = [
-    { key: "noShowRate",        label: "No-Show Rate Alert (%)",        unit: "%", desc: "Alert fires when no-show rate exceeds this value" },
-    { key: "cancellationRate",  label: "Cancellation Rate Alert (%)",   unit: "%", desc: "Alert fires when cancellation rate exceeds this value" },
-    { key: "abandonedCallRate", label: "Abandoned Call Rate Alert (%)", unit: "%", desc: "Alert fires when abandoned call rate exceeds this value" },
-    { key: "visitDropVsPrior",  label: "Visit Drop Alert (visits)",     unit: "",  desc: "Alert fires when visits drop more than this vs prior period" }
-  ];
+  const months = buildThresholdMonthOptions();
+  // Persist the user's last-selected month across renders/reloads.
+  let selectedMonth = sessionStorage.getItem("thresholdEditorMonth") || "DEFAULT";
+  if (!months.find((m) => m.key === selectedMonth)) selectedMonth = "DEFAULT";
+
+  function metricRow(metric) {
+    const cells = THRESHOLD_REGIONS.map((region) => {
+      // Stored value at THIS exact (region, month) — empty if not set
+      const stored = localStorage.getItem(thresholdStorageKey(region, selectedMonth, metric.key));
+      const storedVal = stored !== null && Number.isFinite(parseFloat(stored)) ? parseFloat(stored) : "";
+      // What would apply if this cell is blank (inheritance)
+      // Build the same priority chain as getThreshold but skip THIS cell.
+      const ctx = { region, monthKey: selectedMonth };
+      const inheritedVal = (() => {
+        const tries = [];
+        if (region !== "GLOBAL" && selectedMonth !== "DEFAULT") tries.push(thresholdStorageKey(region, "DEFAULT", metric.key));
+        if (selectedMonth !== "DEFAULT") tries.push(thresholdStorageKey("GLOBAL", selectedMonth, metric.key));
+        tries.push(thresholdStorageKey("GLOBAL", "DEFAULT", metric.key));
+        for (const k of tries) {
+          const v = localStorage.getItem(k);
+          if (v !== null && Number.isFinite(parseFloat(v))) return parseFloat(v);
+        }
+        return THRESHOLD_DEFAULTS[metric.key];
+      })();
+      return `
+        <td class="thresholdCell">
+          <div class="thresholdCellInputWrap">
+            <input type="number"
+              class="thresholdInput thresholdMatrixInput"
+              data-region="${region}"
+              data-month="${selectedMonth}"
+              data-key="${metric.key}"
+              value="${storedVal}"
+              placeholder="${inheritedVal}"
+              min="${metric.min}"
+              step="${metric.step}"
+              title="${storedVal !== "" ? "Override" : `Inheriting ${inheritedVal}${metric.unit ? " " + metric.unit : ""}`}"
+            />
+            <span class="thresholdUnit">${metric.unit}</span>
+          </div>
+        </td>
+      `;
+    }).join("");
+    return `
+      <tr>
+        <th class="thresholdRowLabel">
+          <div class="thresholdLabel">${metric.label}</div>
+          <div class="thresholdDesc">${metric.desc}</div>
+        </th>
+        ${cells}
+      </tr>
+    `;
+  }
+
+  const monthOptions = months.map((m) => `<option value="${m.key}" ${m.key === selectedMonth ? "selected" : ""}>${m.label}</option>`).join("");
 
   container.innerHTML = `
-    <div class="thresholdGrid">
-      ${thresholds.map(t => `
-        <div class="thresholdRow">
-          <div class="thresholdInfo">
-            <div class="thresholdLabel">${t.label}</div>
-            <div class="thresholdDesc">${t.desc}</div>
-          </div>
-          <div class="thresholdInputWrap">
-            <input
-              type="number"
-              class="thresholdInput"
-              data-key="${t.key}"
-              value="${getThreshold(t.key, THRESHOLD_DEFAULTS[t.key])}"
-              min="0"
-              step="0.5"
-            />
-            ${t.unit ? `<span class="thresholdUnit">${t.unit}</span>` : ""}
-          </div>
-        </div>
-      `).join("")}
+    <div class="thresholdEditorHeader">
+      <label class="thresholdMonthSelectorWrap">
+        <span class="thresholdMonthSelectorLabel">Editing month:</span>
+        <select id="thresholdMonthSelector">${monthOptions}</select>
+      </label>
+      <div class="thresholdEditorHelp">
+        Empty cell &nbsp;=&nbsp; inherits from a higher level. Order: <em>region + month → region + default → global + month → global + default → built-in</em>.
+      </div>
     </div>
+
+    <table class="thresholdMatrix">
+      <thead>
+        <tr>
+          <th></th>
+          ${THRESHOLD_REGIONS.map((r) => `<th class="thresholdColLabel">${r === "GLOBAL" ? "All Regions" : r}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${THRESHOLD_METRICS.map(metricRow).join("")}
+      </tbody>
+    </table>
+
     <div class="goalActions">
-      <button type="button" class="primaryBtn" id="saveThresholdsBtn">Save Thresholds</button>
-      <button type="button" class="secondaryBtn" id="resetThresholdsBtn">Reset to Defaults</button>
+      <button type="button" class="primaryBtn" id="saveThresholdsBtn">Save</button>
+      <button type="button" class="secondaryBtn" id="resetThresholdsBtn">Reset everything to defaults</button>
     </div>
     <div id="thresholdStatusBanner" class="goalStatusBanner" style="display:none;"></div>
   `;
 
+  byId("thresholdMonthSelector").addEventListener("change", (e) => {
+    sessionStorage.setItem("thresholdEditorMonth", e.target.value);
+    renderThresholdSettingsView();
+  });
+
   byId("saveThresholdsBtn").addEventListener("click", () => {
-    container.querySelectorAll(".thresholdInput").forEach(input => {
+    container.querySelectorAll(".thresholdMatrixInput").forEach((input) => {
+      const region = input.dataset.region;
+      const month = input.dataset.month;
       const key = input.dataset.key;
-      const val = parseFloat(input.value);
-      if (Number.isFinite(val)) setThreshold(key, val);
+      const raw = input.value.trim();
+      if (raw === "") {
+        clearThreshold(key, { region, monthKey: month });
+      } else {
+        const val = parseFloat(raw);
+        if (Number.isFinite(val)) setThreshold(key, val, { region, monthKey: month });
+      }
     });
     const banner = byId("thresholdStatusBanner");
-    if (banner) { banner.textContent = "Thresholds saved."; banner.className = "goalStatusBanner goalStatusGood"; banner.style.display = ""; setTimeout(() => banner.style.display = "none", 3000); }
+    if (banner) {
+      banner.textContent = "Thresholds saved. Refresh the dashboard to see updated alerts.";
+      banner.className = "goalStatusBanner goalStatusGood";
+      banner.style.display = "";
+      setTimeout(() => banner.style.display = "none", 3500);
+    }
+    renderThresholdSettingsView();
   });
 
   byId("resetThresholdsBtn").addEventListener("click", () => {
+    if (!confirm("Wipe ALL custom thresholds (every region, every month) and revert to defaults?")) return;
     resetThresholds();
     renderThresholdSettingsView();
     const banner = byId("thresholdStatusBanner");
-    if (banner) { banner.textContent = "Reset to defaults."; banner.className = "goalStatusBanner goalStatusNeutral"; banner.style.display = ""; setTimeout(() => banner.style.display = "none", 3000); }
+    if (banner) {
+      banner.textContent = "Reset to defaults.";
+      banner.className = "goalStatusBanner goalStatusNeutral";
+      banner.style.display = "";
+      setTimeout(() => banner.style.display = "none", 3000);
+    }
   });
 }
 

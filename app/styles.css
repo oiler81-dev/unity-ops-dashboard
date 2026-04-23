@@ -2271,6 +2271,99 @@ body.lightView .changelogNavBadge { background: var(--accent); color: #fff; }
   width: 16px;
 }
 
+/* ── Per-region per-month threshold matrix (phase 5) ─────────── */
+.thresholdEditorHeader {
+  padding: 16px 20px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.thresholdMonthSelectorWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.thresholdMonthSelectorLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#thresholdMonthSelector {
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-mid);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text);
+}
+.thresholdEditorHelp {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1 1 320px;
+  line-height: 1.4;
+}
+.thresholdMatrix {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 20px 0;
+  width: calc(100% - 40px);
+}
+.thresholdMatrix th,
+.thresholdMatrix td {
+  padding: 12px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-soft);
+}
+.thresholdMatrix thead th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.thresholdRowLabel {
+  width: 220px;
+  padding-right: 16px;
+}
+.thresholdColLabel {
+  text-align: center !important;
+}
+.thresholdCell {
+  text-align: center;
+}
+.thresholdCellInputWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.thresholdMatrixInput {
+  width: 70px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-mid);
+  border-radius: 6px;
+  padding: 5px 6px;
+  color: var(--text);
+}
+.thresholdMatrixInput::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+  opacity: 0.55;
+}
+.thresholdMatrixInput:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--bg-panel);
+}
+
 /* ── Weekly Digest Modal ─────────────────────────────────────── */
 .digestTextarea {
   width: 100%;
