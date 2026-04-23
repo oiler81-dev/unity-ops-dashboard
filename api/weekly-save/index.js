@@ -135,6 +135,15 @@ module.exports = async function (context, req) {
 
     const values = calculateDerived(input);
 
+    // Capture the AMD OAK snapshot (if the client sent one) for drift
+    // analysis. Stored as JSON string so Azure Table stays flat.
+    const amdPreview = req.body?.amdPreview && typeof req.body.amdPreview === "object"
+      ? req.body.amdPreview
+      : null;
+    const amdPreviewFields = amdPreview?.fields && typeof amdPreview.fields === "object"
+      ? amdPreview.fields
+      : null;
+
     await table.upsertEntity({
       partitionKey: entity,
       rowKey: weekEnding,
@@ -142,6 +151,8 @@ module.exports = async function (context, req) {
       weekEnding,
       status: "saved",
       valuesJson: JSON.stringify(values),
+      amdPreviewJson: amdPreview ? JSON.stringify(amdPreview) : (existing?.amdPreviewJson || ""),
+      amdPreviewFetchedAt: amdPreview?.fetchedAt || existing?.amdPreviewFetchedAt || "",
 
       visitVolume: values.visitVolume,
       callVolume: values.callVolume,
