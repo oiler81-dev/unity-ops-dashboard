@@ -1119,16 +1119,19 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope, 
 
   const cards = [
     {
+      // Budget comparison uses totalVisitsBudget (ortho + PT + imaging) so it
+      // matches the PT-lumped actuals above. Falls back to visitVolumeBudget
+      // for pre-2026-xlsx data that only has the ortho total.
       label: "Visit Volume",
       value: formatWhole(visitCurrent),
       movement: isVsBudget
-        ? buildKpiMovement(visitCurrent, normalizeNumber(current.budgetTotals?.visitVolumeBudget), formatWhole)
+        ? buildKpiMovement(visitCurrent, normalizeNumber(current.budgetTotals?.totalVisitsBudget || current.budgetTotals?.visitVolumeBudget), formatWhole)
         : buildKpiMovement(visitCurrent, visitComparison, formatWhole),
       meta: isVsBudget
-        ? `Budget ${formatWhole(current.budgetTotals?.visitVolumeBudget || 0)} · ${visitPerDay}/day avg`
+        ? `Budget ${formatWhole(current.budgetTotals?.totalVisitsBudget || current.budgetTotals?.visitVolumeBudget || 0)} · ${visitPerDay}/day avg`
         : `${visitVariance >= 0 ? "+" : ""}${formatWhole(visitVariance)} vs prior · ${visitPerDay}/day avg`,
       className: isVsBudget
-        ? getTrendClass(visitCurrent, current.budgetTotals?.visitVolumeBudget)
+        ? getTrendClass(visitCurrent, current.budgetTotals?.totalVisitsBudget || current.budgetTotals?.visitVolumeBudget)
         : getTrendClass(visitCurrent, visitComparison)
     },
     {
@@ -1266,9 +1269,12 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
         const priorPtVisits = hasPt ? normalizeNumber(prior.pt?.visitsSeen) : 0;
         const totalVisits = normalizeNumber(row.visitVolume) + ptVisits;
         const priorTotalVisits = normalizeNumber(prior.visitVolume) + priorPtVisits;
-        // PT budget not yet wired through the backend (2026 xlsx ingest is Phase 2).
+        // Budget now carries PT + Surgery + Imaging + ortho totals (2026 xlsx ingest).
+        // totalVisitsBudget = ortho + PT + imaging; fall back to ortho + PT if the
+        // row somehow predates the xlsx ingest.
         const ptVisitsBudget = normalizeNumber(row.ptVisitsBudget);
-        const totalVisitsBudget = normalizeNumber(row.visitVolumeBudget) + ptVisitsBudget;
+        const totalVisitsBudget = normalizeNumber(row.totalVisitsBudget) ||
+          (normalizeNumber(row.visitVolumeBudget) + ptVisitsBudget + normalizeNumber(row.imagingBudget));
 
         const visitPct = buildVariancePct(totalVisits, priorTotalVisits);
         const callPct = buildVariancePct(row.callVolume, prior.callVolume);
@@ -3154,6 +3160,11 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
           weekCount: 0,
           visitVolumeBudget: 0,
           newPatientsBudget: 0,
+          emEstBudget: 0,
+          surgeryBudget: 0,
+          ptVisitsBudget: 0,
+          imagingBudget: 0,
+          totalVisitsBudget: 0,
           ptScheduledVisits: 0,
           ptCancellations: 0,
           ptNoShows: 0,
@@ -3184,6 +3195,11 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
       if (includeBudget) {
         row.visitVolumeBudget += normalizeNumber(region.budget?.visitVolumeBudget);
         row.newPatientsBudget += normalizeNumber(region.budget?.newPatientsBudget);
+        row.emEstBudget += normalizeNumber(region.budget?.emEstBudget);
+        row.surgeryBudget += normalizeNumber(region.budget?.surgeryBudget);
+        row.ptVisitsBudget += normalizeNumber(region.budget?.ptVisitsBudget);
+        row.imagingBudget += normalizeNumber(region.budget?.imagingBudget);
+        row.totalVisitsBudget += normalizeNumber(region.budget?.totalVisitsBudget);
       }
 
       row.ptScheduledVisits += normalizeNumber(region.pt?.scheduledVisits);
@@ -3229,6 +3245,11 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
     abandonedCallRate: row.weekCount ? row.abandonedCallRateTotal / row.weekCount : 0,
     visitVolumeBudget: row.visitVolumeBudget,
     newPatientsBudget: row.newPatientsBudget,
+    emEstBudget: row.emEstBudget,
+    surgeryBudget: row.surgeryBudget,
+    ptVisitsBudget: row.ptVisitsBudget,
+    imagingBudget: row.imagingBudget,
+    totalVisitsBudget: row.totalVisitsBudget,
     pt: {
       scheduledVisits: row.ptScheduledVisits,
       cancellations: row.ptCancellations,
@@ -3254,14 +3275,25 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
     piCashCollection: regions.reduce((sum, r) => sum + normalizeNumber(r.piCashCollection), 0)
   };
 
+  const sumReg = (k) => regions.reduce((sum, r) => sum + normalizeNumber(r[k]), 0);
   const budgetTotals = includeBudget
     ? {
-        visitVolumeBudget: regions.reduce((sum, r) => sum + normalizeNumber(r.visitVolumeBudget), 0),
-        newPatientsBudget: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatientsBudget), 0)
+        visitVolumeBudget: sumReg("visitVolumeBudget"),
+        newPatientsBudget: sumReg("newPatientsBudget"),
+        emEstBudget: sumReg("emEstBudget"),
+        surgeryBudget: sumReg("surgeryBudget"),
+        ptVisitsBudget: sumReg("ptVisitsBudget"),
+        imagingBudget: sumReg("imagingBudget"),
+        totalVisitsBudget: sumReg("totalVisitsBudget")
       }
     : {
         visitVolumeBudget: 0,
-        newPatientsBudget: 0
+        newPatientsBudget: 0,
+        emEstBudget: 0,
+        surgeryBudget: 0,
+        ptVisitsBudget: 0,
+        imagingBudget: 0,
+        totalVisitsBudget: 0
       };
 
   const ptTotals = {

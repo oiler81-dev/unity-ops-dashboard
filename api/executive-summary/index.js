@@ -137,8 +137,19 @@ module.exports = async function (context, req) {
       const workingDaysInMonth =
         toNumber(budgetRecord?.workingDaysInMonth, 0) || getWorkingDaysForMonth(monthKey);
 
+      // visitBudgetMonthly is the ortho-only total (E&M New + E&M Est + Surgery).
+      // The 2026 xlsx ingest also populates per-service-line budgets so the
+      // dashboard can compare PT, Surgery, Imaging, and total-visit targets.
       const visitBudgetMonthly = toNumber(budgetRecord?.visitBudgetMonthly, 0);
       const newPatientsBudgetMonthly = toNumber(budgetRecord?.newPatientsBudgetMonthly, 0);
+      const emEstBudgetMonthly = toNumber(budgetRecord?.emEstBudgetMonthly, 0);
+      const surgeryBudgetMonthly = toNumber(budgetRecord?.surgeryBudgetMonthly, 0);
+      const ptBudgetMonthly = toNumber(budgetRecord?.ptBudgetMonthly, 0);
+      const imagingBudgetMonthly = toNumber(budgetRecord?.imagingBudgetMonthly, 0);
+      const totalVisitsBudgetMonthlyStored = toNumber(budgetRecord?.totalVisitsBudgetMonthly, 0);
+      // Prefer the stored total, fall back to a sum so pre-2026-xlsx rows still work.
+      const totalVisitsBudgetMonthly = totalVisitsBudgetMonthlyStored ||
+        (visitBudgetMonthly + ptBudgetMonthly + imagingBudgetMonthly);
 
       // PT data is now stored directly on the WeeklyRegionData record
       const ptScheduledVisits = toNumber(record?.ptScheduledVisits ?? values.ptScheduledVisits, 0);
@@ -221,23 +232,28 @@ module.exports = async function (context, req) {
           : 0,
 
         budget: {
-          visitVolumeBudget: prorateMonthlyToWeek(
-            visitBudgetMonthly,
-            workingDaysInMonth,
-            daysInPeriod
-          ),
-          newPatientsBudget: prorateMonthlyToWeek(
-            newPatientsBudgetMonthly,
-            workingDaysInMonth,
-            daysInPeriod
-          ),
+          // Ortho-only total (back-compat): E&M New + E&M Est + Surgery
+          visitVolumeBudget: prorateMonthlyToWeek(visitBudgetMonthly, workingDaysInMonth, daysInPeriod),
+          newPatientsBudget: prorateMonthlyToWeek(newPatientsBudgetMonthly, workingDaysInMonth, daysInPeriod),
+          // Per-service-line budgets from the 2026 xlsx ingest
+          emEstBudget: prorateMonthlyToWeek(emEstBudgetMonthly, workingDaysInMonth, daysInPeriod),
+          surgeryBudget: prorateMonthlyToWeek(surgeryBudgetMonthly, workingDaysInMonth, daysInPeriod),
+          ptVisitsBudget: prorateMonthlyToWeek(ptBudgetMonthly, workingDaysInMonth, daysInPeriod),
+          imagingBudget: prorateMonthlyToWeek(imagingBudgetMonthly, workingDaysInMonth, daysInPeriod),
+          // Total = ortho + PT + imaging. Used for the lumped "Visits (incl. PT)" variance.
+          totalVisitsBudget: prorateMonthlyToWeek(totalVisitsBudgetMonthly, workingDaysInMonth, daysInPeriod),
           workingDaysInMonth,
           daysInPeriod,
           monthKey,
           monthLabel: budgetRecord?.monthLabel || "",
           hasBudgetRecord: !!budgetRecord,
           visitBudgetMonthly,
-          newPatientsBudgetMonthly
+          newPatientsBudgetMonthly,
+          emEstBudgetMonthly,
+          surgeryBudgetMonthly,
+          ptBudgetMonthly,
+          imagingBudgetMonthly,
+          totalVisitsBudgetMonthly
         },
 
         pt: {
@@ -267,9 +283,15 @@ module.exports = async function (context, req) {
       imaging: regions.reduce((sum, r) => sum + toNumber(r.imaging, 0), 0)
     };
 
+    const sumB = (key) => regions.reduce((sum, r) => sum + toNumber(r.budget?.[key], 0), 0);
     const budgetTotals = {
-      visitVolumeBudget: regions.reduce((sum, r) => sum + toNumber(r.budget?.visitVolumeBudget, 0), 0),
-      newPatientsBudget: regions.reduce((sum, r) => sum + toNumber(r.budget?.newPatientsBudget, 0), 0)
+      visitVolumeBudget: sumB("visitVolumeBudget"),
+      newPatientsBudget: sumB("newPatientsBudget"),
+      emEstBudget: sumB("emEstBudget"),
+      surgeryBudget: sumB("surgeryBudget"),
+      ptVisitsBudget: sumB("ptVisitsBudget"),
+      imagingBudget: sumB("imagingBudget"),
+      totalVisitsBudget: sumB("totalVisitsBudget")
     };
 
     const ptTotals = {
