@@ -2694,48 +2694,6 @@ body.lightView .callDataBannerSynced {
 body.lightView .callDataBannerText strong { color: #0d9c7e; }
 body.lightView .callDataBannerMissing { border-color: rgba(0,0,0,0.08); color: #8fa3b8; }
 
-/* ── AMD OAK source badges + sync button ────────────────────── */
-.amdSourceBadge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  border-radius: 3px;
-  background: rgba(13,156,126,0.12);
-  color: #0d9c7e;
-  border: 1px solid rgba(13,156,126,0.35);
-  cursor: help;
-}
-.amdSourceBadge.amdSourceBadgeEdited {
-  background: rgba(217,119,6,0.12);
-  color: #b06800;
-  border-color: rgba(217,119,6,0.35);
-}
-.amdSyncBtn {
-  margin-left: 12px;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid rgba(13,156,126,0.45);
-  background: rgba(13,156,126,0.1);
-  color: #0d9c7e;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.amdSyncBtn:hover { background: rgba(13,156,126,0.2); }
-
-/* Link shown in entity-card detail drawer (phase 1: PTO Forecast link) */
-.entityDetailLink {
-  color: var(--accent-strong, #0d9c7e);
-  text-decoration: none;
-  font-weight: 600;
-  border-bottom: 1px dotted currentColor;
-}
-.entityDetailLink:hover { border-bottom-style: solid; }
-
 /* ── Week Ending Field Guardrails ────────────────────────────── */
 .fieldHint {
   font-size: 10px;

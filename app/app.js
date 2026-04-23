@@ -3495,13 +3495,6 @@ async function loadWeek() {
     loadCallDataBadge(entity, weekEnding);
   }
 
-  // Pre-fill LAOSS fields from AMD OAK if the record is new / empty.
-  if (entity === "LAOSS") {
-    loadAmdPreviewForLaoss(weekEnding, existingValues);
-  } else {
-    clearAmdPreviewBadges();
-  }
-
   setStatus(`Loaded ${selectedLabel} for ${weekEnding} (${result.status || "saved"})`);
   setDebug({
     selectedEntry: selectedLabel,
@@ -3634,156 +3627,6 @@ async function loadCallDataBadge(entity, weekEnding) {
       `;
     }
   } catch (e) { /* silent */ }
-}
-
-// ── AMD OAK auto-populate for LAOSS weekly entry ───────────────────────
-//
-// Flow:
-//   1. When LAOSS is selected on the weekly entry, fetch /api/amd-weekly-preview
-//      for the week ending. Response carries per-field computed values +
-//      the rule used for each, plus a freshness timestamp.
-//   2. If the weekly record is fresh/empty, pre-fill the inputs from AMD.
-//   3. If the weekly record is already saved, DON'T overwrite — show a
-//      "Sync from AMD" button the user can click if they want to overwrite.
-//   4. Every pre-filled field gets a small "AMD" badge with a tooltip
-//      showing the rule used. Operator overtypes → badge dims to "edited".
-//   5. Snapshot the AMD values on window so saveWeek can include them in
-//      the payload as `amdPreview` for audit/drift analysis (phase 3F).
-
-const AMD_FIELDS = ["newPatients", "surgeries", "established", "noShows", "cancelled", "cashCollected"];
-let _amdPreviewSnapshot = null;
-
-function clearAmdPreviewBadges() {
-  _amdPreviewSnapshot = null;
-  document.querySelectorAll(".amdSourceBadge").forEach((b) => b.remove());
-  const banner = byId("amdPreviewBanner");
-  if (banner) banner.style.display = "none";
-}
-
-function recordHasAnyValue(values) {
-  return AMD_FIELDS.some((k) => normalizeNumber(values?.[k]) > 0);
-}
-
-async function loadAmdPreviewForLaoss(weekEnding, existingValues) {
-  clearAmdPreviewBadges();
-  let preview;
-  try {
-    preview = await apiGet(`/api/amd-weekly-preview?weekEnding=${encodeURIComponent(weekEnding)}`);
-  } catch (err) {
-    // Silent — AMD is best-effort. Operators can still enter manually.
-    return;
-  }
-  if (!preview?.ok || !preview.fields) return;
-
-  _amdPreviewSnapshot = {
-    weekEnding,
-    fetchedAt: preview.fetchedAt,
-    dataStagedAt: preview.dataStagedAt,
-    source: preview.source,
-    fields: preview.fields,
-    rules: preview.rules
-  };
-
-  const recordAlreadySaved = !!(existingValues && recordHasAnyValue(existingValues));
-
-  // Show the banner so the operator knows AMD is the source + can sync if needed.
-  renderAmdPreviewBanner(preview, recordAlreadySaved);
-
-  if (!recordAlreadySaved) {
-    applyAmdPreviewToForm(preview.fields);
-    updateDerivedDisplays();
-  }
-  markAmdSourceBadges(preview);
-}
-
-function renderAmdPreviewBanner(preview, alreadySaved) {
-  // Find or create the banner element. Reuses call-data-banner location.
-  let banner = byId("amdPreviewBanner");
-  if (!banner) {
-    banner = document.createElement("div");
-    banner.id = "amdPreviewBanner";
-    banner.className = "callDataBanner";
-    banner.style.marginTop = "8px";
-    const callBanner = byId("callDataBanner");
-    if (callBanner && callBanner.parentElement) {
-      callBanner.parentElement.insertBefore(banner, callBanner.nextSibling);
-    } else {
-      (byId("entryView") || document.body).prepend(banner);
-    }
-  }
-  banner.style.display = "";
-  banner.className = "callDataBanner callDataBannerSynced";
-  const stageDate = preview.dataStagedAt ? new Date(preview.dataStagedAt).toLocaleString() : "unknown";
-  const action = alreadySaved
-    ? `<button type="button" class="amdSyncBtn" onclick="amdSyncOverwrite()">Sync from AMD</button>`
-    : "";
-  banner.innerHTML = `
-    <span class="callDataBannerIcon">📊</span>
-    <span class="callDataBannerText">
-      <strong>AMD OAK data pre-filled</strong>
-      &nbsp;·&nbsp; New ${formatWhole(preview.fields.newPatients)}
-      &nbsp;·&nbsp; Surg ${formatWhole(preview.fields.surgeries)}
-      &nbsp;·&nbsp; Est ${formatWhole(preview.fields.established)}
-      &nbsp;·&nbsp; Visits ${formatWhole(preview.fields.visitVolume)}
-      &nbsp;·&nbsp; Cash ${formatCurrency(preview.fields.cashCollected)}
-      ${alreadySaved ? " — form already has saved values; your entries stay unless you click Sync" : " — you can overtype any value"}
-      <br /><span class="callDataBannerSource">Source: AMD OAK (office key 137388) · staged ${stageDate}</span>
-    </span>
-    ${action}
-  `;
-}
-
-function applyAmdPreviewToForm(fields) {
-  AMD_FIELDS.forEach((key) => {
-    const input = byId(key);
-    if (!input) return;
-    const val = fields[key];
-    if (val != null) input.value = String(val);
-  });
-}
-
-function markAmdSourceBadges(preview) {
-  AMD_FIELDS.forEach((key) => {
-    const input = byId(key);
-    if (!input) return;
-    const wrap = input.closest(".fieldGroup, .formField, .formGroup, label, div");
-    if (!wrap) return;
-    // Remove any prior badge
-    wrap.querySelectorAll(".amdSourceBadge").forEach((b) => b.remove());
-    const badge = document.createElement("span");
-    badge.className = "amdSourceBadge";
-    badge.textContent = "AMD";
-    badge.title = `${preview.rules[key] || "From AMD OAK"}\n\nAMD value: ${preview.fields[key]}`;
-    wrap.appendChild(badge);
-    // Flag drift when operator edits away from AMD
-    input.addEventListener("input", () => {
-      const current = normalizeNumber(input.value);
-      const amdVal = normalizeNumber(preview.fields[key]);
-      if (current !== amdVal) {
-        badge.classList.add("amdSourceBadgeEdited");
-        badge.textContent = "edited";
-        badge.title = `Operator edit. AMD said ${amdVal}, you entered ${current}.`;
-      } else {
-        badge.classList.remove("amdSourceBadgeEdited");
-        badge.textContent = "AMD";
-        badge.title = `${preview.rules[key] || "From AMD OAK"}\n\nAMD value: ${preview.fields[key]}`;
-      }
-    }, { passive: true });
-  });
-}
-
-function amdSyncOverwrite() {
-  if (!_amdPreviewSnapshot) return;
-  if (!confirm("Overwrite the form with current AMD OAK values? Any edits you've made will be replaced.")) return;
-  applyAmdPreviewToForm(_amdPreviewSnapshot.fields);
-  markAmdSourceBadges(_amdPreviewSnapshot);
-  updateDerivedDisplays();
-  setStatus("Synced from AMD OAK. Save to persist.");
-}
-window.amdSyncOverwrite = amdSyncOverwrite;
-
-function getAmdPreviewForSave() {
-  return _amdPreviewSnapshot;
 }
 
 // ── Entry-form draft autosave + destructive-change confirmation ────────
@@ -3994,19 +3837,6 @@ async function saveWeek() {
   }
 
   const payload = { weekEnding, entity, data: nextValues };
-
-  // Attach AMD OAK snapshot when available so the activity log can show
-  // drift between AMD's computed values and what the operator saved.
-  // Back-end persists it on the record and the activity-log row.
-  const amdSnapshot = typeof getAmdPreviewForSave === "function" ? getAmdPreviewForSave() : null;
-  if (amdSnapshot && amdSnapshot.weekEnding === weekEnding && entity === "LAOSS") {
-    payload.amdPreview = {
-      source: amdSnapshot.source,
-      fetchedAt: amdSnapshot.fetchedAt,
-      dataStagedAt: amdSnapshot.dataStagedAt,
-      fields: amdSnapshot.fields
-    };
-  }
 
   setStatus("Saving...");
   setDebug({
