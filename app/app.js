@@ -4480,8 +4480,9 @@ function injectUiPolishStyles() {
     .entityLogo { max-width:100%; max-height:100%; object-fit:contain; }
 
     .entityTopMetrics {
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
       gap: 1px;
       margin-bottom:10px;
       border:1px solid var(--border-soft);

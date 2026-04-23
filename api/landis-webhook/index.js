@@ -89,15 +89,28 @@ async function upsertCallData(client, entity, dateKey, updates) {
     if (e?.statusCode !== 404) throw e;
   }
 
+  // Queue webhooks send the running daily aggregate — take max.
+  // IVR/Agent events are per-call, so they carry { incrementCalls: 1 }
+  // (or similar) and we ADD instead of max'ing. The prior code used
+  // Math.max(existing, 1) for IVR events which meant the counter
+  // never moved past 1 after the first event of the day.
+  const base = {
+    totalCalls:     Number(existing.totalCalls     || 0),
+    answeredCalls:  Number(existing.answeredCalls  || 0),
+    abandonedCalls: Number(existing.abandonedCalls || 0)
+  };
   const merged = {
     partitionKey:     entity,
     rowKey:           dateKey,
     entity,
     date:             dateKey,
     source:           "landis",
-    totalCalls:       Math.max(Number(existing.totalCalls || 0), Number(updates.totalCalls || 0)),
-    answeredCalls:    Math.max(Number(existing.answeredCalls || 0), Number(updates.answeredCalls || 0)),
-    abandonedCalls:   Math.max(Number(existing.abandonedCalls || 0), Number(updates.abandonedCalls || 0)),
+    totalCalls:       base.totalCalls     + Number(updates.incrementCalls     || 0) +
+                        Math.max(0, Number(updates.totalCalls     || 0) - base.totalCalls),
+    answeredCalls:    base.answeredCalls  + Number(updates.incrementAnswered  || 0) +
+                        Math.max(0, Number(updates.answeredCalls  || 0) - base.answeredCalls),
+    abandonedCalls:   base.abandonedCalls + Number(updates.incrementAbandoned || 0) +
+                        Math.max(0, Number(updates.abandonedCalls || 0) - base.abandonedCalls),
     avgWaitSeconds:   updates.avgWaitSeconds   ?? existing.avgWaitSeconds   ?? 0,
     avgTalkSeconds:   updates.avgTalkSeconds   ?? existing.avgTalkSeconds   ?? 0,
     avgHandleSeconds: updates.avgHandleSeconds ?? existing.avgHandleSeconds ?? 0,
@@ -159,8 +172,18 @@ module.exports = async function (context, req) {
 
     const entity = resolveEntity(body);
     if (!entity) {
-      // Don't log raw body — may contain caller identifiers. Log event type only.
-      context.log.warn("Landis webhook: could not resolve entity", eventType);
+      // Log the routing-relevant fields (queue/ou/site names) so we can
+      // diagnose why Landis events aren't being matched to entities.
+      // These fields shouldn't carry caller PHI — they're config labels.
+      context.log.warn("Landis webhook: unresolved entity", {
+        eventType,
+        queueName: body.QueueName || body.queueName,
+        teamName: body.TeamName || body.teamName,
+        location: body.Location || body.location,
+        site: body.Site || body.site,
+        ouPath: body.OUPath || body.ouPath,
+        interactionObjectName: body.InteractionObjectName || body.interactionObjectName
+      });
       return { status: 200, body: { ok: true, skipped: true, reason: "entity not resolved" } };
     }
 
@@ -173,8 +196,10 @@ module.exports = async function (context, req) {
     } else if (evtLower.includes("agent")) {
       updates = parseAgentWebhook(body);
     } else if (evtLower.includes("ivr")) {
-      // IVR — just count the call
-      updates = { totalCalls: 1 };
+      // IVR — one call per event. incrementCalls avoids the Math.max(1,1)
+      // bug where the daily total got stuck at 1 no matter how many
+      // IVR events came in.
+      updates = { incrementCalls: 1 };
     } else {
       context.log("Landis webhook: unknown event type", eventType);
       return { status: 200, body: { ok: true, skipped: true, reason: "unhandled event type" } };
