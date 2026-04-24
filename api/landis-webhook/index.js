@@ -21,6 +21,26 @@ function timingSafeStringCompare(a, b) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
+// Landis Contact Center's webhook header editor saves the value with
+// literal surrounding quotation marks (visible in the admin UI as
+// `"x-landis-secret"` : `"<token>"`). Their server then transmits the
+// value still wrapped in quotes, so a byte-for-byte compare against our
+// quote-less env-var fails. Strip a single pair of surrounding ASCII
+// quotes (single or double) so the secret matches regardless of how the
+// admin entered it.
+function unquoteHeader(v) {
+  if (v == null) return "";
+  const s = String(v).trim();
+  if (s.length >= 2) {
+    const first = s[0];
+    const last = s[s.length - 1];
+    if ((first === '"' || first === "'") && first === last) {
+      return s.slice(1, -1);
+    }
+  }
+  return s;
+}
+
 const TABLE_NAME = "CallData";
 
 // Known entity tokens that appear inside Landis queue names, OU paths, interaction
@@ -155,9 +175,18 @@ module.exports = async function (context, req) {
     context.log.error("Landis webhook: LANDIS_WEBHOOK_SECRET not configured — rejecting request");
     return { status: 500, body: { ok: false, error: "Webhook not configured" } };
   }
-  const incoming = req.headers["x-landis-secret"] || req.headers["x-webhook-secret"] || "";
+  // Lookup tries both the unquoted and quoted header NAME variants because
+  // Landis admin UI saves the key with surrounding quotes; some HTTP stacks
+  // strip them before sending, others don't. Then strip surrounding quotes
+  // from the VALUE before comparing — same Landis admin oddity.
+  const incoming = unquoteHeader(
+    req.headers["x-landis-secret"]
+    || req.headers['"x-landis-secret"']
+    || req.headers["x-webhook-secret"]
+    || ""
+  );
   if (!timingSafeStringCompare(incoming, secret)) {
-    context.log.warn("Landis webhook: invalid secret");
+    context.log.warn("Landis webhook: invalid secret", { headerKeys: Object.keys(req.headers || {}).filter(k => /landis|secret/i.test(k)) });
     return { status: 401, body: { ok: false, error: "Unauthorized" } };
   }
 
