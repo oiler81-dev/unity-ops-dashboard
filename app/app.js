@@ -1727,6 +1727,8 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
     return;
   }
 
+  // Entity Snapshot: dropped the PTO column (PTO is on PTO Forecast now)
+  // and renamed headers for clarity in the narrow Detail-View card.
   container.innerHTML = `
     <table class="regionTable">
       <thead>
@@ -1735,10 +1737,9 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
           <th>Visit</th>
           <th>PT</th>
           <th>Cash</th>
-          <th>PTO</th>
           <th>No Show</th>
           <th>Cancel</th>
-          <th>Abandoned</th>
+          <th>Aband</th>
         </tr>
       </thead>
       <tbody>
@@ -1748,7 +1749,6 @@ function renderDashboardSnapshot(current, entityScope, compareAgainst) {
             <td>${formatWhole(r.visitVolume)}</td>
             <td>${formatWhole(r.pt?.visitsSeen || 0)}</td>
             <td>${formatCurrency(r.cashCollected || 0)}</td>
-            <td>${formatWhole(r.ptoDays || 0)}</td>
             <td>${formatPercent(r.noShowRate)}</td>
             <td>${formatPercent(r.cancellationRate)}</td>
             <td>${formatPercent(r.abandonedCallRate)}</td>
@@ -2158,7 +2158,24 @@ function renderTrendsTable(result) {
   if (!wrap) return;
 
   const entity = getSelectedTrendsEntity();
-  const items = result.items || [];
+  // Backend returns every row in WeeklyRegionData for this entity, including
+  // legacy Sunday/Monday placeholder rows seeded with all zeros. Operations
+  // weeks always end on Friday, so filter to weekEnding=Friday and rows that
+  // actually have something in them. Otherwise the trend table fills with
+  // noisy zeros that hide the real signal.
+  const isFriday = (yyyymmdd) => {
+    if (!yyyymmdd) return false;
+    const d = new Date(`${yyyymmdd}T12:00:00Z`);
+    return d.getUTCDay() === 5;
+  };
+  const isPopulated = (item) => {
+    return (item.visitVolume || 0) > 0
+      || (item.callVolume || 0) > 0
+      || (item.cashCollected || 0) > 0
+      || (item.ptVisitsSeen || 0) > 0
+      || (item.newPatients || 0) > 0;
+  };
+  const items = (result.items || []).filter((it) => isFriday(it.weekEnding) || isPopulated(it));
 
   if (!items.length) {
     wrap.innerHTML = "<p>No trend data found for this entity.</p>";
@@ -3573,6 +3590,12 @@ async function loadWeek() {
 
 async function loadAndPopulateCallData(entity, weekEnding) {
   const banner = byId("callDataBanner");
+  // Landis (LAOSS, NES) is broken on the vendor side; suppress the banner
+  // and let operators enter Total Calls / Abandoned Calls manually.
+  if (entity === "LAOSS" || entity === "NES") {
+    if (banner) banner.style.display = "none";
+    return;
+  }
   if (banner) { banner.textContent = "Checking phone system data..."; banner.style.display = ""; banner.className = "callDataBanner callDataBannerLoading"; }
 
   try {
@@ -3635,6 +3658,17 @@ async function populateEntityLivePhones(entity, weekEnding) {
       `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
     );
 
+    // Landis (LAOSS, NES) is currently broken on the vendor side — we get
+    // 0-1 events trickled through and the panel previously showed a misleading
+    // "Landis · 2/5 days · 1 call" badge. Hide the panel for landis-source
+    // entities until Landis admin re-enables the webhook.
+    const SUPPRESS_LANDIS = true;
+    const isLandisEntity = entity === "LAOSS" || entity === "NES";
+    if (SUPPRESS_LANDIS && isLandisEntity) {
+      container.style.display = "none";
+      return;
+    }
+
     if (!callData?.ok || !callData.hasData) {
       if (stateEl) stateEl.textContent = callData?.source ? "no data this week" : "not connected";
       if (gridEl) gridEl.innerHTML = "";
@@ -3675,6 +3709,13 @@ async function populateEntityLivePhones(entity, weekEnding) {
 }
 
 async function loadCallDataBadge(entity, weekEnding) {
+  // See loadAndPopulateCallData — suppress for Landis-served entities while
+  // the upstream feed is broken.
+  if (entity === "LAOSS" || entity === "NES") {
+    const banner = byId("callDataBanner");
+    if (banner) banner.style.display = "none";
+    return;
+  }
   try {
     const callData = await apiGet(
       `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
