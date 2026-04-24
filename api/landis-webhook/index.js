@@ -197,72 +197,91 @@ module.exports = async function (context, req) {
     return { status: 401, body: { ok: false, error: "Unauthorized" } };
   }
 
-  const body = req.body || {};
-  const eventType = body.EventType || body.eventType || body.Event || body.event || "";
+  const envelope = req.body || {};
+  // Real Landis webhooks ship with a wrapper:
+  //   { Id, WebhookEventUtc, Attempt, Data: { ...actual call fields... }, CreationTimeUtc }
+  // The call fields (CallId, QueueName, OUPath, AgentUpn, TotalCalls, ...)
+  // live INSIDE Data, not at the top level. Unwrap before routing/parsing.
+  // Fallback to the envelope itself for older/test payloads that send fields flat.
+  const data = (envelope && typeof envelope.Data === "object" && envelope.Data !== null)
+    ? envelope.Data
+    : (envelope && typeof envelope.data === "object" && envelope.data !== null)
+      ? envelope.data
+      : envelope;
+  const eventType = envelope.EventType || envelope.eventType || envelope.Event || envelope.event
+    || data.EventType || data.eventType || data.Event || data.event || "";
   // Log event type only — payload bodies can include caller identifiers (PHI-adjacent).
-  context.log("Landis webhook received:", eventType);
+  context.log("Landis webhook received:", eventType, "Attempt:", envelope.Attempt);
 
   try {
     const client = getTableClient();
     await client.createTable().catch(e => { if (e?.statusCode !== 409) throw e; });
 
-    const entity = resolveEntity(body);
+    const entity = resolveEntity(data);
     if (!entity) {
-      // Echo back the keys we can see + the values for routing-relevant
-      // fields so the response surfaced in Landis's "Webhook Send Attempts"
-      // table tells us exactly what shape to add to ENTITY_TOKENS. The
-      // keys/values we surface are config labels (queue/OU names), not
-      // caller PHI.
+      // Echo back keys at BOTH layers so misshapen payloads are easy to debug
+      // from Landis's "Webhook Send Attempts" view without server-side logs.
       const debug = {
-        bodyKeys: Object.keys(body || {}),
+        envelopeKeys: Object.keys(envelope || {}),
+        dataKeys: Object.keys(data || {}),
         eventType,
-        queueName: body.QueueName || body.queueName,
-        teamName: body.TeamName || body.teamName,
-        location: body.Location || body.location,
-        site: body.Site || body.site,
-        ouPath: body.OUPath || body.ouPath,
-        interactionObjectName: body.InteractionObjectName || body.interactionObjectName,
-        agentUpn: body.AgentUpn || body.agentUpn,
-        agentName: body.AgentName || body.agentName
+        queueName: data.QueueName || data.queueName,
+        teamName: data.TeamName || data.teamName,
+        location: data.Location || data.location,
+        site: data.Site || data.site,
+        ouPath: data.OUPath || data.ouPath,
+        interactionObjectName: data.InteractionObjectName || data.interactionObjectName,
+        agentUpn: data.AgentUpn || data.agentUpn,
+        agentName: data.AgentName || data.agentName
       };
       context.log.warn("Landis webhook: unresolved entity", debug);
       return { status: 200, body: { ok: true, skipped: true, reason: "entity not resolved", debug } };
     }
 
-    // Landis IVR/queue events use StartDateTime, not Date. Fall back through
-    // every common timestamp field so we always land in the right day bucket.
+    // Landis events carry timestamps under a few possible names. Look at both
+    // the envelope (CreationTimeUtc, WebhookEventUtc) and the inner data
+    // payload (StartDateTime, EndDateTime, etc.).
     const dateKey = toDateKey(
-      body.Date || body.date
-      || body.Timestamp || body.timestamp
-      || body.StartDateTime || body.startDateTime
-      || body.EndDateTime || body.endDateTime
-      || body.PeriodStart || body.periodStart
+      data.Date || data.date
+      || data.Timestamp || data.timestamp
+      || data.StartDateTime || data.startDateTime
+      || data.EndDateTime || data.endDateTime
+      || data.PeriodStart || data.periodStart
+      || envelope.CreationTimeUtc || envelope.creationTimeUtc
+      || envelope.WebhookEventUtc || envelope.webhookEventUtc
     );
     let updates    = {};
 
     const evtLower = eventType.toLowerCase();
-    // Landis doesn't put EventType in the body; the field that distinguishes
-    // event shape is the event NAME on the subscription, which we don't see
-    // server-side. Infer from body shape: TotalCalls/AnsweredCalls => queue,
-    // AvgTalkTime alone => agent, CallId without aggregates => single IVR call.
+    // Landis doesn't put EventType in the inner Data; the event NAME lives
+    // only on the subscription. Infer the shape from fields actually present:
+    //   TotalCalls/AnsweredCalls => queue aggregate
+    //   AvgTalkTime alone        => agent rollup
+    //   CallId on its own        => single per-call event (treat as IVR/inbound)
     const looksQueue = evtLower.includes("queue")
-      || body.TotalCalls != null || body.totalCalls != null
-      || body.AnsweredCalls != null || body.answeredCalls != null
-      || body.AbandonedCalls != null || body.abandonedCalls != null;
-    const looksAgent = evtLower.includes("agent") || (!looksQueue && (body.AvgTalkTime != null || body.avgTalkTime != null));
-    const looksIvr = evtLower.includes("ivr") || (!looksQueue && !looksAgent && (body.CallId != null || body.callId != null));
+      || data.TotalCalls != null || data.totalCalls != null
+      || data.AnsweredCalls != null || data.answeredCalls != null
+      || data.AbandonedCalls != null || data.abandonedCalls != null;
+    const looksAgent = evtLower.includes("agent") || (!looksQueue && (data.AvgTalkTime != null || data.avgTalkTime != null));
+    const looksIvr = evtLower.includes("ivr") || (!looksQueue && !looksAgent && (data.CallId != null || data.callId != null));
 
     if (looksQueue) {
-      updates = parseQueueWebhook(body);
+      // Queue events carry the running daily totals — Math.max keeps the
+      // highest seen value so retries and out-of-order events are safe.
+      updates = parseQueueWebhook(data);
     } else if (looksAgent) {
-      updates = parseAgentWebhook(body);
+      // Agent events update talk-time averages but not the call counters
+      // (those would double-count against queue aggregates).
+      updates = parseAgentWebhook(data);
     } else if (looksIvr) {
-      // Per-call event. incrementCalls avoids the Math.max(1,1) bug where
-      // the daily total got stuck at 1 no matter how many events came in.
-      updates = { incrementCalls: 1 };
+      // Per-call IVR events. We DON'T increment totalCalls here — the
+      // QueueWebhook stream already carries the running daily total for
+      // every queue, so adding +1 per IVR event would double-count.
+      // Treat these as a no-op heartbeat for now.
+      return { status: 200, body: { ok: true, skipped: true, reason: "per-call ivr event (counted via queue aggregate)", callId: data.CallId } };
     } else {
-      context.log("Landis webhook: unknown event shape", { eventType, bodyKeys: Object.keys(body || {}) });
-      return { status: 200, body: { ok: true, skipped: true, reason: "unhandled event shape", bodyKeys: Object.keys(body || {}) } };
+      context.log("Landis webhook: unknown event shape", { eventType, dataKeys: Object.keys(data || {}) });
+      return { status: 200, body: { ok: true, skipped: true, reason: "unhandled event shape", dataKeys: Object.keys(data || {}) } };
     }
 
     const merged = await upsertCallData(client, entity, dateKey, updates);
