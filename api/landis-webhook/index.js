@@ -79,6 +79,13 @@ function getTableClient() {
   return TableClient.fromConnectionString(connStr, TABLE_NAME);
 }
 
+const CALL_EVENT_LOG_TABLE = "CallEventLog";
+function getCallEventLogClient() {
+  const connStr = process.env.AZURE_STORAGE_CONNECTION_STRING;
+  if (!connStr) throw new Error("AZURE_STORAGE_CONNECTION_STRING not set");
+  return TableClient.fromConnectionString(connStr, CALL_EVENT_LOG_TABLE);
+}
+
 function toDateKey(dateStr) {
   // Normalize to YYYY-MM-DD
   if (!dateStr) return new Date().toISOString().slice(0, 10);
@@ -137,12 +144,21 @@ async function upsertCallData(client, entity, dateKey, updates) {
 
   const qName = updates.queueName ? String(updates.queueName) : null;
 
+  // Aggregate mode: event carries running totals for this queue, take max.
   if (qName && updates.totalCalls != null) {
     queueTotalsMap[qName]   = Math.max(Number(queueTotalsMap[qName]   || 0), Number(updates.totalCalls     || 0));
     queueAnsweredMap[qName] = Math.max(Number(queueAnsweredMap[qName] || 0), Number(updates.answeredCalls  || 0));
     queueAbandMap[qName]    = Math.max(Number(queueAbandMap[qName]    || 0), Number(updates.abandonedCalls || 0));
     if (updates.avgWaitSeconds   != null) queueWaitMap[qName]   = Number(updates.avgWaitSeconds);
     if (updates.avgHandleSeconds != null) queueHandleMap[qName] = Number(updates.avgHandleSeconds);
+  }
+
+  // Per-call mode: event is one unique call (already deduped by CallId at the
+  // caller). Increment the per-queue tally for this queue.
+  if (qName && updates.incrementCalls) {
+    queueTotalsMap[qName]   = Number(queueTotalsMap[qName]   || 0) + Number(updates.incrementCalls     || 0);
+    queueAnsweredMap[qName] = Number(queueAnsweredMap[qName] || 0) + Number(updates.incrementAnswered  || 0);
+    queueAbandMap[qName]    = Number(queueAbandMap[qName]    || 0) + Number(updates.incrementAbandoned || 0);
   }
 
   // Sum across queues for the entity-day total. If the event didn't carry
@@ -291,46 +307,78 @@ module.exports = async function (context, req) {
     );
     let updates    = {};
 
-    const evtLower = eventType.toLowerCase();
-    // Landis doesn't put EventType in the inner Data; the event NAME lives
-    // only on the subscription. Infer the shape from fields actually present:
-    //   TotalCalls/AnsweredCalls => queue aggregate
-    //   AvgTalkTime alone        => agent rollup
-    //   CallId on its own        => single per-call event (treat as IVR/inbound)
-    const looksQueue = evtLower.includes("queue")
-      || data.TotalCalls != null || data.totalCalls != null
-      || data.AnsweredCalls != null || data.answeredCalls != null
-      || data.AbandonedCalls != null || data.abandonedCalls != null;
-    const looksAgent = evtLower.includes("agent") || (!looksQueue && (data.AvgTalkTime != null || data.avgTalkTime != null));
-    const looksIvr = evtLower.includes("ivr") || (!looksQueue && !looksAgent && (data.CallId != null || data.callId != null));
-
-    if (looksQueue) {
-      // Queue events carry the running daily totals — Math.max keeps the
-      // highest seen value so retries and out-of-order events are safe.
-      updates = parseQueueWebhook(data);
-    } else if (looksAgent) {
-      // Agent events update talk-time averages but not the call counters
-      // (those would double-count against queue aggregates).
-      updates = parseAgentWebhook(data);
-    } else if (looksIvr) {
-      // Per-call IVR events. We DON'T increment totalCalls here — the
-      // QueueWebhook stream already carries the running daily total for
-      // every queue, so adding +1 per IVR event would double-count.
-      // Treat these as a no-op heartbeat for now.
-      return { status: 200, body: { ok: true, skipped: true, reason: "per-call ivr event (counted via queue aggregate)", callId: data.CallId } };
-    } else {
-      context.log("Landis webhook: unknown event shape", { eventType, dataKeys: Object.keys(data || {}) });
-      return { status: 200, body: { ok: true, skipped: true, reason: "unhandled event shape", dataKeys: Object.keys(data || {}) } };
+    // Real Landis events are PER CALL, not pre-aggregated. Each event has a
+    // CallId and represents one call going through a queue (App.QueueWebhook),
+    // being routed to an agent (App.AgentWebhook), or traversing IVR
+    // (App.IvrWebhook). The same CallId appears 2-3 times across event types,
+    // so naive +1 per event would 2-3x the count.
+    //
+    // Strategy: dedupe on (entity, date, CallId) via a separate
+    // CallEventLog table. INSERT-only: 201 on first sighting, 409 on dupes.
+    // Only on first sighting do we update the CallData totals.
+    const callId = data.CallId ?? data.callId;
+    if (callId == null) {
+      // No CallId — possibly an aggregate or test event. Fall back to old
+      // logic: queue aggregate fields if present, otherwise skip.
+      if (data.TotalCalls != null || data.AnsweredCalls != null) {
+        updates = parseQueueWebhook(data);
+        const merged = await upsertCallData(client, entity, dateKey, updates);
+        return { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, entity, date: dateKey, mode: "aggregate", saved: merged }) };
+      }
+      return { status: 200, body: { ok: true, skipped: true, reason: "no CallId, no aggregate", dataKeys: Object.keys(data || {}) } };
     }
 
-    const merged = await upsertCallData(client, entity, dateKey, updates);
-    context.log("Landis webhook: saved", entity, dateKey);
+    // Dedup: try to insert a CallEventLog row. If 409 → already counted today.
+    const logClient = getCallEventLogClient();
+    await logClient.createTable().catch(e => { if (e?.statusCode !== 409) throw e; });
+    const logPk = `${entity}_${dateKey}`;
+    const logRk = String(callId);
+    const isAnswered = (Number(data.AgentId) > 0) || !!data.AgentUpn || !!data.AgentName;
+    const queueName = data.QueueName || data.queueName || "";
 
-    return {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ok: true, entity, date: dateKey, saved: merged })
+    let firstSighting = false;
+    try {
+      await logClient.createEntity({
+        partitionKey: logPk,
+        rowKey: logRk,
+        callId: String(callId),
+        entity,
+        date: dateKey,
+        queueName,
+        answered: isAnswered,
+        agentId: data.AgentId || 0,
+        eventType,
+        firstSeenAt: new Date().toISOString()
+      });
+      firstSighting = true;
+    } catch (e) {
+      if (e?.statusCode === 409) {
+        // Already counted this CallId today. Update agent/queue if THIS event
+        // gives us new info (e.g. originally seen as queue event with AgentId=0,
+        // now seeing the agent assignment).
+        if (isAnswered) {
+          try {
+            await logClient.updateEntity({ partitionKey: logPk, rowKey: logRk, answered: true, agentId: data.AgentId || 0 }, "Merge");
+          } catch (_) {}
+        }
+      } else {
+        throw e;
+      }
+    }
+
+    if (!firstSighting) {
+      return { status: 200, body: { ok: true, skipped: true, reason: "duplicate CallId for day", callId, entity, date: dateKey } };
+    }
+
+    // First sighting — bump the CallData entity-day row.
+    updates = {
+      queueName,
+      incrementCalls: 1,
+      incrementAnswered: isAnswered ? 1 : 0,
+      incrementAbandoned: isAnswered ? 0 : 1
     };
+    const merged = await upsertCallData(client, entity, dateKey, updates);
+    return { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, entity, date: dateKey, mode: "per-call", callId, answered: isAnswered, saved: { totalCalls: merged.totalCalls, answeredCalls: merged.answeredCalls, abandonedCalls: merged.abandonedCalls, queueCount: merged.queueCount } }) };
   } catch (error) {
     context.log.error("Landis webhook error:", error.message);
     return {
