@@ -566,7 +566,11 @@ const ENTRY_FIELDS = [
   { key: "totalCalls",      label: "Total Calls",         mode: "ortho", step: "1",    min: "0", aliases: ["callVolume", "totalCallsActual"] },
   { key: "abandonedCalls",  label: "Abandoned Calls",     mode: "ortho", step: "1",    min: "0" },
   { key: "cashCollected",   label: "Cash Collected",      mode: "ortho", step: "0.01", min: "0", aliases: ["cashActual"] },
-  { key: "ptoDays",         label: "PTO Days",            mode: "all",   step: "0.5",  min: "0", preserveOnOppositeMode: false },
+  // PTO Days removed from Weekly Entry 2026-04-24: PTO Forecast page is the
+  // sole source of truth for PTO. Stored field is kept on the registry as
+  // hidden so existing records don't lose the value (defaultValue = 0 keeps
+  // the form payload consistent for back-compat).
+  { key: "ptoDays",         label: "PTO Days",            mode: "hidden", step: "0.5",  min: "0", preserveOnOppositeMode: false, defaultValue: 0 },
 
   { section: "pt", sectionHeader: true, mode: "pt", label: "PT Inputs" },
 
@@ -603,6 +607,7 @@ const ENTRY_INPUT_FIELDS = ENTRY_FIELDS.filter((f) => f.key && !f.derived && !f.
 const ENTRY_STORED_FIELDS = ENTRY_FIELDS.filter((f) => f.key && !f.sectionHeader);
 
 function fieldWrapperClass(f) {
+  if (f.mode === "hidden") return "hiddenEntryField";
   if (f.mode === "all") return "allEntryField";
   if (f.mode === "pt") return "ptField";
   // ortho mode
@@ -1445,11 +1450,11 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
                 <strong>${formatWhole(totalVisits)}</strong>
                 ${hasPt ? `<span class="entityMetricSub">Ortho ${formatWhole(row.visitVolume)} · PT ${formatWhole(ptVisits)}</span>` : ""}
               </div>
-              ${hasPt ? `
-              <div class="entityMetricHero">
+              <div class="entityMetricHero${hasPt ? "" : " entityMetricHeroPlaceholder"}">
                 <span class="entityMetricLabel">PT Visits</span>
-                <strong>${formatWhole(ptVisits)}</strong>
-              </div>` : ""}
+                <strong>${hasPt ? formatWhole(ptVisits) : "—"}</strong>
+                ${hasPt ? "" : `<span class="entityMetricSub">no PT program</span>`}
+              </div>
               <div class="entityMetricHero">
                 <span class="entityMetricLabel">Cash</span>
                 <strong class="entityCurrencyValue">${formatCurrency(row.cashCollected || 0)}</strong>
@@ -1885,7 +1890,13 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
     window.visitsChartInstance.destroy();
   }
 
-  // Series palette matches design tokens: visits=blue, PT=green, calls=amber, NP=purple
+  // Two y-axes so big series (Visits, Calls — usually 5,000-15,000) don't
+  // flatten the small ones (PT Visits, New Patients — typically 100-1,500).
+  // Left axis: Visits + Visit Budget. Right axis: PT Visits + New Patients.
+  // Calls live on a hidden series toggleable from the legend.
+  const tickStyle = { color: "#6B7280", font: { size: 10, family: "Geist Mono, monospace" } };
+  const gridStyle = { color: "#ECEAE3", drawBorder: false };
+
   window.visitsChartInstance = new Chart(ctx, {
     type: "line",
     data: {
@@ -1894,46 +1905,50 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
         {
           label: "Visits",
           data: visitData,
+          yAxisID: "yLeft",
           tension: 0.3,
           borderColor: "#2D4BA3",
-          backgroundColor: "rgba(45,75,163,0.04)",
-          borderWidth: 1.8,
-          pointRadius: 2,
-          pointHoverRadius: 4,
-          fill: false
+          backgroundColor: "rgba(45,75,163,0.08)",
+          borderWidth: 2.2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          fill: true
         },
         {
           label: "PT Visits",
           data: ptData,
+          yAxisID: "yRight",
           tension: 0.3,
           borderColor: "#1E6B4F",
           backgroundColor: "rgba(30,107,79,0.04)",
-          borderWidth: 1.8,
-          pointRadius: 2,
-          pointHoverRadius: 4,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
           fill: false
         },
         {
           label: "Calls",
           data: callData,
+          yAxisID: "yLeft",
           tension: 0.3,
           borderColor: "#B8893D",
           backgroundColor: "rgba(184,137,61,0.04)",
-          borderWidth: 1.8,
-          pointRadius: 2,
-          pointHoverRadius: 4,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
           fill: false,
           hidden: true
         },
         {
           label: "New Patients",
           data: npData,
+          yAxisID: "yRight",
           tension: 0.3,
           borderColor: "#8B5CF6",
           backgroundColor: "rgba(139,92,246,0.04)",
-          borderWidth: 1.8,
-          pointRadius: 2,
-          pointHoverRadius: 4,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
           fill: false
         },
         ...(compareAgainst === "budget"
@@ -1941,11 +1956,12 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
               {
                 label: "Visit Budget",
                 data: budgetData,
+                yAxisID: "yLeft",
                 tension: 0.3,
                 borderColor: "#B23A3A",
                 backgroundColor: "rgba(178,58,58,0.04)",
                 borderDash: [6, 6],
-                borderWidth: 1.6,
+                borderWidth: 1.8,
                 pointRadius: 2,
                 pointHoverRadius: 4,
                 fill: false
@@ -1960,22 +1976,30 @@ function renderVisitsChart(weeks, currentData, compareAgainst = "priorPeriod") {
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: {
-          labels: {
-            color: "#6B7280",
-            boxWidth: 10,
-            boxHeight: 10,
-            font: { size: 11.5, family: "Geist, 'Inter Tight', sans-serif" }
-          }
-        }
+          labels: { color: "#6B7280", boxWidth: 10, boxHeight: 10, font: { size: 11.5, family: "Geist, 'Inter Tight', sans-serif" } }
+        },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatWhole(ctx.parsed.y)}` } }
       },
       scales: {
-        x: {
-          ticks: { color: "#6B7280", font: { size: 10, family: "Geist Mono, monospace" } },
-          grid: { color: "#ECEAE3", drawBorder: false }
+        x: { ticks: tickStyle, grid: gridStyle },
+        // Left axis: large-volume series. beginAtZero=false zooms to the
+        // active range so dips and spikes are visible instead of flattened.
+        yLeft: {
+          type: "linear",
+          position: "left",
+          beginAtZero: false,
+          title: { display: true, text: "Visits / Calls", color: "#6B7280", font: { size: 10 } },
+          ticks: tickStyle,
+          grid: gridStyle
         },
-        y: {
-          ticks: { color: "#6B7280", font: { size: 10, family: "Geist Mono, monospace" } },
-          grid: { color: "#ECEAE3", drawBorder: false }
+        // Right axis: small-volume series, also auto-zoomed.
+        yRight: {
+          type: "linear",
+          position: "right",
+          beginAtZero: false,
+          title: { display: true, text: "PT / NP", color: "#6B7280", font: { size: 10 } },
+          ticks: tickStyle,
+          grid: { display: false }
         }
       }
     }
@@ -2151,6 +2175,112 @@ function renderTrendsCards(result) {
   }
 
   renderMetricCards("trendsCards", baseCards);
+}
+
+let _trendsChartInstance = null;
+function renderTrendsChart(result) {
+  const canvas = byId("trendsChartCanvas");
+  if (!canvas || typeof Chart === "undefined") return;
+  if (_trendsChartInstance) _trendsChartInstance.destroy();
+
+  // API returns rows newest-first; reverse so the chart reads left→right oldest→newest
+  // and filter out the legacy non-Friday placeholder rows that bloat the table.
+  const isFriday = (yyyymmdd) => {
+    if (!yyyymmdd) return false;
+    const d = new Date(`${yyyymmdd}T12:00:00Z`);
+    return d.getUTCDay() === 5;
+  };
+  const isPopulated = (it) => (it.visitVolume || 0) > 0 || (it.callVolume || 0) > 0 || (it.ptVisitsSeen || 0) > 0 || (it.cashCollected || 0) > 0 || (it.newPatients || 0) > 0;
+  const items = (result.items || []).filter((it) => isFriday(it.weekEnding) || isPopulated(it)).slice().reverse();
+
+  if (!items.length) {
+    canvas.style.display = "none";
+    return;
+  }
+  canvas.style.display = "";
+
+  const labels = items.map((it) => {
+    const p = String(it.weekEnding).split("-");
+    return p.length === 3 ? `${p[1]}/${p[2]}` : it.weekEnding;
+  });
+
+  const tickStyle = { color: "#6B7280", font: { size: 10, family: "Geist Mono, monospace" } };
+  const gridStyle = { color: "#ECEAE3", drawBorder: false };
+  const entity = getSelectedTrendsEntity();
+  const showPt = entity === "NES" || entity === "SpineOne" || entity === "MRO";
+
+  _trendsChartInstance = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Visits",
+          data: items.map((it) => normalizeNumber(it.visitVolume)),
+          yAxisID: "yLeft",
+          borderColor: "#2D4BA3",
+          backgroundColor: "rgba(45,75,163,0.08)",
+          tension: 0.3, borderWidth: 2.4, pointRadius: 3, pointHoverRadius: 5, fill: true
+        },
+        {
+          label: "Calls",
+          data: items.map((it) => normalizeNumber(it.callVolume)),
+          yAxisID: "yLeft",
+          borderColor: "#B8893D",
+          backgroundColor: "rgba(184,137,61,0.04)",
+          tension: 0.3, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, fill: false
+        },
+        {
+          label: "New Patients",
+          data: items.map((it) => normalizeNumber(it.newPatients)),
+          yAxisID: "yRight",
+          borderColor: "#8B5CF6",
+          backgroundColor: "rgba(139,92,246,0.04)",
+          tension: 0.3, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, fill: false
+        },
+        ...(showPt ? [{
+          label: "PT Visits",
+          data: items.map((it) => normalizeNumber(it.ptVisitsSeen)),
+          yAxisID: "yRight",
+          borderColor: "#1E6B4F",
+          backgroundColor: "rgba(30,107,79,0.04)",
+          tension: 0.3, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, fill: false
+        }] : []),
+        {
+          label: "Cash ($k)",
+          data: items.map((it) => Math.round(normalizeNumber(it.cashCollected) / 1000)),
+          yAxisID: "yRight",
+          borderColor: "#0d9c7e",
+          backgroundColor: "rgba(13,156,126,0.04)",
+          borderDash: [4, 4],
+          tension: 0.3, borderWidth: 1.6, pointRadius: 2, pointHoverRadius: 4, fill: false,
+          hidden: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { labels: { color: "#6B7280", boxWidth: 10, boxHeight: 10, font: { size: 11.5, family: "Geist, 'Inter Tight', sans-serif" } } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatWhole(ctx.parsed.y)}` } }
+      },
+      scales: {
+        x: { ticks: tickStyle, grid: gridStyle },
+        yLeft: {
+          type: "linear", position: "left", beginAtZero: false,
+          title: { display: true, text: "Visits / Calls", color: "#6B7280", font: { size: 10 } },
+          ticks: tickStyle, grid: gridStyle
+        },
+        yRight: {
+          type: "linear", position: "right", beginAtZero: false,
+          title: { display: true, text: "NP / PT / Cash($k)", color: "#6B7280", font: { size: 10 } },
+          ticks: tickStyle, grid: { display: false }
+        }
+      }
+    }
+  });
 }
 
 function renderTrendsTable(result) {
@@ -4428,6 +4558,7 @@ async function loadTrends() {
   const result = { ...raw, items: limited, count: limited.length };
 
   renderTrendsCards(result);
+  renderTrendsChart(result);
   renderTrendsTable(result);
   syncTrendsPtVisibility();
   setTrendsDebug(result);
@@ -4684,14 +4815,19 @@ function injectUiPolishStyles() {
 
     .entityTopMetrics {
       display: grid;
-      grid-auto-flow: column;
-      grid-auto-columns: minmax(0, 1fr);
+      /* Fixed 3-col so all entity cards line up (LAOSS renders a placeholder
+         "PT Visits — no PT program" tile so it matches NES/SpineOne/MRO). */
+      grid-template-columns: repeat(3, 1fr);
       gap: 1px;
       margin-bottom:10px;
       border:1px solid var(--border-soft);
       border-radius: var(--radius-sm);
       overflow:hidden;
       background: var(--border-soft);
+    }
+    .entityMetricHeroPlaceholder strong {
+      color: var(--text-muted);
+      font-weight: 400;
     }
 
     .entityMetricHero {

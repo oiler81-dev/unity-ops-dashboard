@@ -1094,6 +1094,10 @@ canvas { width:100% !important; max-height:252px; }
    contains a section header (otherwise the next input crowds in beside
    the heading). */
 #kpiForm > div:has(> .formSectionBreak) { grid-column: 1/-1; }
+/* Fields marked mode="hidden" stay in the registry (so save/load logic still
+   handles their stored value) but never render. Used for ptoDays, which now
+   lives only on the PTO Forecast page. */
+.hiddenEntryField { display: none !important; }
 .formSectionBreak { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-soft); }
 .formSectionBreak h4 { margin: 0 0 4px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
 #kpiForm > div { display: flex; flex-direction: column; }
