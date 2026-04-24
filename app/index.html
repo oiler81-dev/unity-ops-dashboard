@@ -27,6 +27,7 @@
         <button id="navEntryBtn" type="button"><span class="sidebarIcon">✎</span>Weekly Entry</button>
         <button id="navExecutiveBtn" type="button"><span class="sidebarIcon">◈</span>Executive Summary</button>
         <button id="navTrendsBtn" type="button"><span class="sidebarIcon">↗</span>Trends</button>
+        <button id="navCallCenterBtn" type="button"><span class="sidebarIcon">☏</span>Call Center</button>
         <button id="navActivityBtn" type="button"><span class="sidebarIcon">≡</span>Activity Log</button>
       </div>
 
@@ -447,6 +448,84 @@
             <details class="debugPanel">
               <summary>Trends Debug Output</summary>
               <pre id="trendsDebugOutput" class="debugOutput"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section id="callCenterView" style="display:none;">
+          <div class="panel">
+            <div class="sectionHeader">
+              <div class="sectionEyebrow">Phone Operations</div>
+              <h3>Call Center Report</h3>
+              <p>Total call volume, answer/abandon rates, day-of-week patterns, and per-entity breakdown across the selected period. Driven live from Landis (LAOSS, NES) and RingCentral (SpineOne, MRO).</p>
+            </div>
+
+            <div class="filterRow">
+              <div class="formGroup">
+                <label for="callCenterPeriod">Period</label>
+                <select id="callCenterPeriod">
+                  <option value="thisWeek">This Week (Mon–Fri)</option>
+                  <option value="lastWeek">Last Week (Mon–Fri)</option>
+                  <option value="rolling4">Rolling 4 Weeks</option>
+                  <option value="mtd">Month to Date</option>
+                  <option value="last30">Last 30 Days</option>
+                  <option value="last90">Last 90 Days</option>
+                  <option value="custom">Custom Range…</option>
+                </select>
+              </div>
+              <div class="formGroup" id="callCenterCustomStartWrap" style="display:none;">
+                <label for="callCenterStartDate">Start</label>
+                <input type="date" id="callCenterStartDate" />
+              </div>
+              <div class="formGroup" id="callCenterCustomEndWrap" style="display:none;">
+                <label for="callCenterEndDate">End</label>
+                <input type="date" id="callCenterEndDate" />
+              </div>
+              <div class="formGroup">
+                <label for="callCenterEntity">Entity</label>
+                <select id="callCenterEntity">
+                  <option value="">All Accessible</option>
+                  <option value="LAOSS">LAOSS</option>
+                  <option value="NES">NES</option>
+                  <option value="SpineOne">SpineOne</option>
+                  <option value="MRO">MRO</option>
+                </select>
+              </div>
+              <button id="callCenterLoadBtn" type="button" class="primaryBtn">Load Report</button>
+            </div>
+
+            <div id="callCenterRangeSummary" class="ptoForecastBanner" style="display:none;"></div>
+
+            <div id="callCenterKpis" class="cardGrid" style="margin-top:18px;"></div>
+
+            <div class="dashboardThreeUp" style="margin-top:18px;">
+              <div class="panel">
+                <div class="sectionEyebrow">Daily Trend</div>
+                <h4 class="panelTitle">Calls per Day</h4>
+                <canvas id="callCenterDailyChart" height="220"></canvas>
+              </div>
+              <div class="panel">
+                <div class="sectionEyebrow">Day of Week</div>
+                <h4 class="panelTitle">Average Calls by Day</h4>
+                <canvas id="callCenterDowChart" height="220"></canvas>
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:18px;">
+              <div class="sectionEyebrow">Entity Breakdown</div>
+              <h4 class="panelTitle">By Operating Unit</h4>
+              <div id="callCenterEntityTable"></div>
+            </div>
+
+            <div class="panel" style="margin-top:18px;">
+              <div class="sectionEyebrow">Detail</div>
+              <h4 class="panelTitle">Day-by-Day</h4>
+              <div id="callCenterDayTable"></div>
+            </div>
+
+            <details class="debugPanel">
+              <summary>Call Center Debug Output</summary>
+              <pre id="callCenterDebugOutput" class="debugOutput"></pre>
             </details>
           </div>
         </section>

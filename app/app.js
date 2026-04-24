@@ -2224,7 +2224,7 @@ function renderTrendsTable(result) {
 }
 
 function hideAllViews() {
-  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "ptoForecastView", "activityView", "importView", "providerSettingsView", "changelogView", "goalSettingsView", "thresholdSettingsView", "helpView"];
+  const ids = ["dashboardView", "entryView", "executiveView", "trendsView", "callCenterView", "ptoForecastView", "activityView", "importView", "providerSettingsView", "changelogView", "goalSettingsView", "thresholdSettingsView", "helpView"];
   ids.forEach((id) => {
     const el = byId(id);
     if (el) el.style.display = "none";
@@ -2280,6 +2280,294 @@ function showTrendsView() {
   renderEntityBrand("trendsBrandWrap", getSelectedTrendsEntity());
   syncTrendsRangeUi();
   syncTrendsPtVisibility();
+}
+
+// ── Call Center Report ────────────────────────────────────────
+//
+// One page that aggregates CallData (Landis + RingCentral) across a
+// chosen date range. Uses /api/call-center which returns:
+//   totals, byEntity, byDate, byDayOfWeek, perEntityByDate
+// and renders KPI cards, two charts (daily trend + day-of-week), an
+// entity breakdown table, and a per-day detail table.
+
+let _callCenterDailyChart = null;
+let _callCenterDowChart = null;
+
+function showCallCenterView() {
+  hideAllViews();
+  const el = byId("callCenterView");
+  if (el) el.style.display = "";
+  setActiveNav("navCallCenterBtn");
+}
+
+function setCallCenterDebug(payload) {
+  const out = byId("callCenterDebugOutput");
+  if (!out) return;
+  try {
+    out.textContent = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+  } catch {
+    out.textContent = String(payload);
+  }
+}
+
+function callCenterRangeFromPeriod(period) {
+  // Returns { startDate, endDate } as YYYY-MM-DD strings, week boundaries
+  // Mon-Fri so weekend nulls don't dilute averages.
+  const today = new Date();
+  const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const fmt = (d) => d.toISOString().slice(0, 10);
+
+  function mondayOf(d) {
+    const x = new Date(d);
+    const dow = x.getUTCDay(); // 0=Sun..6=Sat
+    const diff = dow === 0 ? -6 : 1 - dow;
+    x.setUTCDate(x.getUTCDate() + diff);
+    return x;
+  }
+  function add(d, days) {
+    const x = new Date(d);
+    x.setUTCDate(x.getUTCDate() + days);
+    return x;
+  }
+
+  if (period === "thisWeek") {
+    const mon = mondayOf(todayUtc);
+    return { startDate: fmt(mon), endDate: fmt(add(mon, 4)) };
+  }
+  if (period === "lastWeek") {
+    const mon = add(mondayOf(todayUtc), -7);
+    return { startDate: fmt(mon), endDate: fmt(add(mon, 4)) };
+  }
+  if (period === "rolling4") {
+    const friThis = add(mondayOf(todayUtc), 4);
+    const monStart = add(friThis, -4 * 7 + 1);
+    return { startDate: fmt(monStart), endDate: fmt(friThis) };
+  }
+  if (period === "mtd") {
+    const monthStart = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), 1));
+    return { startDate: fmt(monthStart), endDate: fmt(todayUtc) };
+  }
+  if (period === "last30") {
+    return { startDate: fmt(add(todayUtc, -29)), endDate: fmt(todayUtc) };
+  }
+  if (period === "last90") {
+    return { startDate: fmt(add(todayUtc, -89)), endDate: fmt(todayUtc) };
+  }
+  // custom: caller reads inputs directly
+  const startEl = byId("callCenterStartDate");
+  const endEl = byId("callCenterEndDate");
+  return {
+    startDate: startEl?.value || fmt(add(todayUtc, -6)),
+    endDate: endEl?.value || fmt(todayUtc)
+  };
+}
+
+function syncCallCenterCustomVisibility() {
+  const period = byId("callCenterPeriod")?.value || "lastWeek";
+  const wraps = ["callCenterCustomStartWrap", "callCenterCustomEndWrap"];
+  wraps.forEach((id) => {
+    const el = byId(id);
+    if (el) el.style.display = period === "custom" ? "" : "none";
+  });
+  // When the user picks a non-custom period, keep the date inputs in sync
+  // so flipping back to custom shows a sensible starting range.
+  if (period !== "custom") {
+    const r = callCenterRangeFromPeriod(period);
+    const startEl = byId("callCenterStartDate");
+    const endEl = byId("callCenterEndDate");
+    if (startEl) startEl.value = r.startDate;
+    if (endEl) endEl.value = r.endDate;
+  }
+}
+
+async function loadCallCenterReport() {
+  const period = byId("callCenterPeriod")?.value || "lastWeek";
+  const range = callCenterRangeFromPeriod(period);
+  const entity = byId("callCenterEntity")?.value || "";
+
+  const banner = byId("callCenterRangeSummary");
+  if (banner) {
+    banner.style.display = "";
+    banner.textContent = `Loading ${range.startDate} → ${range.endDate}${entity ? " · " + entity : " · all entities"}…`;
+  }
+
+  let qs = `startDate=${encodeURIComponent(range.startDate)}&endDate=${encodeURIComponent(range.endDate)}`;
+  if (entity) qs += `&entity=${encodeURIComponent(entity)}`;
+
+  const data = await apiGet(`/api/call-center?${qs}`);
+  setCallCenterDebug(data);
+  if (!data?.ok) {
+    if (banner) banner.textContent = data?.error || "Failed to load report.";
+    return;
+  }
+
+  if (banner) {
+    banner.textContent = `Showing ${range.startDate} → ${range.endDate} (${data.days} day${data.days === 1 ? "" : "s"}) · Entities: ${data.entities.join(", ")}`;
+  }
+
+  renderCallCenterKpis(data);
+  renderCallCenterDailyChart(data);
+  renderCallCenterDowChart(data);
+  renderCallCenterEntityTable(data);
+  renderCallCenterDayTable(data);
+}
+
+function renderCallCenterKpis(data) {
+  const t = data.totals || {};
+  renderMetricCards("callCenterKpis", [
+    { label: "Total Calls",   value: formatWhole(t.totalCalls || 0),     meta: `${data.days} day${data.days === 1 ? "" : "s"} · ${data.entities.length} entit${data.entities.length === 1 ? "y" : "ies"}`, className: "kpi-neutral" },
+    { label: "Answered",      value: formatWhole(t.answeredCalls || 0),  meta: `${(t.answerRate || 0).toFixed(1)}% answer rate`,   className: t.answerRate >= 85 ? "kpi-positive" : t.answerRate >= 70 ? "kpi-neutral" : "kpi-negative" },
+    { label: "Abandoned",     value: formatWhole(t.abandonedCalls || 0), meta: `${(t.abandonedRate || 0).toFixed(1)}% abandoned`,  className: t.abandonedRate <= 5 ? "kpi-positive" : t.abandonedRate <= 10 ? "kpi-neutral" : "kpi-negative" },
+    { label: "Avg Wait",      value: t.avgWaitFormatted || "0:00",       meta: "across days with data",                            className: (t.avgWaitSeconds || 0) <= 30 ? "kpi-positive" : (t.avgWaitSeconds || 0) <= 60 ? "kpi-neutral" : "kpi-negative" },
+    { label: "Avg Talk",      value: t.avgTalkFormatted || "0:00",       meta: "across days with data",                            className: "kpi-neutral" },
+    { label: "Avg Handle",    value: t.avgHandleFormatted || "0:00",     meta: "wait + talk per day avg",                          className: "kpi-neutral" },
+    { label: "Days w/ Data",  value: formatWhole(t.daysWithData || 0),   meta: `of ${data.days * data.entities.length} possible entity-days`, className: "kpi-neutral" },
+    { label: "Avg Calls/Day", value: formatWhole(Math.round((t.totalCalls || 0) / Math.max(1, t.daysWithData || 1))), meta: "per entity-day with data", className: "kpi-neutral" }
+  ]);
+}
+
+function renderCallCenterDailyChart(data) {
+  const canvas = byId("callCenterDailyChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  if (_callCenterDailyChart) _callCenterDailyChart.destroy();
+
+  const labels = (data.byDate || []).map((d) => d.date.slice(5)); // MM-DD
+  // Per-entity stacked bars so you can see attribution
+  const colors = ["#0d9c7e", "#5b6df0", "#f0b95b", "#e15b73", "#8c5bf0"];
+  const datasets = (data.perEntityByDate || []).map((row, idx) => ({
+    label: row.entity,
+    data: row.data,
+    backgroundColor: colors[idx % colors.length],
+    borderRadius: 2,
+    stack: "calls"
+  }));
+
+  _callCenterDailyChart = new Chart(canvas, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 10 } } },
+        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 } } }
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 11 } } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatWhole(ctx.parsed.y)}` } }
+      }
+    }
+  });
+}
+
+function renderCallCenterDowChart(data) {
+  const canvas = byId("callCenterDowChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  if (_callCenterDowChart) _callCenterDowChart.destroy();
+
+  // Show Mon-Fri only by default — clinics rarely operate weekends.
+  const dows = (data.byDayOfWeek || []).filter((d) => d.dayIndex >= 1 && d.dayIndex <= 5);
+  const labels = dows.map((d) => d.dayOfWeek.slice(0, 3));
+  const values = dows.map((d) => d.avgCallsPerDay);
+
+  _callCenterDowChart = new Chart(canvas, {
+    type: "bar",
+    data: { labels, datasets: [{ label: "Avg Calls / Day", data: values, backgroundColor: "#5b6df0", borderRadius: 4 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 } } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `Avg: ${formatWhole(ctx.parsed.y)} calls` } }
+      }
+    }
+  });
+}
+
+function renderCallCenterEntityTable(data) {
+  const wrap = byId("callCenterEntityTable");
+  if (!wrap) return;
+  const rows = data.byEntity || [];
+  if (!rows.length) {
+    wrap.innerHTML = "<p style='color:var(--text-muted);'>No entity data for this range.</p>";
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Source</th>
+          <th>Total Calls</th>
+          <th>Answered</th>
+          <th>Abandoned</th>
+          <th>Answer %</th>
+          <th>Aband %</th>
+          <th>Avg Wait</th>
+          <th>Days w/ Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr>
+            <td><strong>${escapeHtml(r.entity)}</strong></td>
+            <td>${escapeHtml((r.sources || []).join(", ") || "—")}</td>
+            <td>${formatWhole(r.totalCalls)}</td>
+            <td>${formatWhole(r.answeredCalls)}</td>
+            <td>${formatWhole(r.abandonedCalls)}</td>
+            <td>${(r.answerRate || 0).toFixed(1)}%</td>
+            <td>${(r.abandonedRate || 0).toFixed(1)}%</td>
+            <td>${escapeHtml(r.avgWaitFormatted || "0:00")}</td>
+            <td>${formatWhole(r.daysWithData)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderCallCenterDayTable(data) {
+  const wrap = byId("callCenterDayTable");
+  if (!wrap) return;
+  const rows = (data.byDate || []).filter((d) => d.totalCalls > 0); // hide empty days
+  if (!rows.length) {
+    wrap.innerHTML = "<p style='color:var(--text-muted);'>No calls recorded in this range.</p>";
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="regionTable">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Day</th>
+          <th>Total Calls</th>
+          <th>Answered</th>
+          <th>Abandoned</th>
+          <th>Answer %</th>
+          <th>Aband %</th>
+          <th>Avg Wait</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr>
+            <td>${escapeHtml(r.date)}</td>
+            <td>${escapeHtml(r.dayOfWeek)}</td>
+            <td>${formatWhole(r.totalCalls)}</td>
+            <td>${formatWhole(r.answeredCalls)}</td>
+            <td>${formatWhole(r.abandonedCalls)}</td>
+            <td>${(r.answerRate || 0).toFixed(1)}%</td>
+            <td>${(r.abandonedRate || 0).toFixed(1)}%</td>
+            <td>${escapeHtml(r.avgWaitFormatted || "0:00")}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 function showActivityView() {
@@ -5097,6 +5385,32 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
           await loadTrends();
         } catch (e) {
           setTrendsDebug(String(e));
+        }
+      });
+    }
+
+    if (byId("navCallCenterBtn")) {
+      byId("navCallCenterBtn").addEventListener("click", async () => {
+        showCallCenterView();
+        syncCallCenterCustomVisibility();
+        try {
+          await loadCallCenterReport();
+        } catch (e) {
+          setCallCenterDebug(String(e));
+        }
+      });
+    }
+    if (byId("callCenterPeriod")) {
+      byId("callCenterPeriod").addEventListener("change", () => {
+        syncCallCenterCustomVisibility();
+      });
+    }
+    if (byId("callCenterLoadBtn")) {
+      byId("callCenterLoadBtn").addEventListener("click", async () => {
+        try {
+          await loadCallCenterReport();
+        } catch (e) {
+          setCallCenterDebug(String(e));
         }
       });
     }
