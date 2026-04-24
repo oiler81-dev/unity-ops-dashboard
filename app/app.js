@@ -3590,12 +3590,6 @@ async function loadWeek() {
 
 async function loadAndPopulateCallData(entity, weekEnding) {
   const banner = byId("callDataBanner");
-  // Landis (LAOSS, NES) is broken on the vendor side; suppress the banner
-  // and let operators enter Total Calls / Abandoned Calls manually.
-  if (entity === "LAOSS" || entity === "NES") {
-    if (banner) banner.style.display = "none";
-    return;
-  }
   if (banner) { banner.textContent = "Checking phone system data..."; banner.style.display = ""; banner.className = "callDataBanner callDataBannerLoading"; }
 
   try {
@@ -3658,17 +3652,6 @@ async function populateEntityLivePhones(entity, weekEnding) {
       `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
     );
 
-    // Landis (LAOSS, NES) is currently broken on the vendor side — we get
-    // 0-1 events trickled through and the panel previously showed a misleading
-    // "Landis · 2/5 days · 1 call" badge. Hide the panel for landis-source
-    // entities until Landis admin re-enables the webhook.
-    const SUPPRESS_LANDIS = true;
-    const isLandisEntity = entity === "LAOSS" || entity === "NES";
-    if (SUPPRESS_LANDIS && isLandisEntity) {
-      container.style.display = "none";
-      return;
-    }
-
     if (!callData?.ok || !callData.hasData) {
       if (stateEl) stateEl.textContent = callData?.source ? "no data this week" : "not connected";
       if (gridEl) gridEl.innerHTML = "";
@@ -3709,13 +3692,6 @@ async function populateEntityLivePhones(entity, weekEnding) {
 }
 
 async function loadCallDataBadge(entity, weekEnding) {
-  // See loadAndPopulateCallData — suppress for Landis-served entities while
-  // the upstream feed is broken.
-  if (entity === "LAOSS" || entity === "NES") {
-    const banner = byId("callDataBanner");
-    if (banner) banner.style.display = "none";
-    return;
-  }
   try {
     const callData = await apiGet(
       `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
