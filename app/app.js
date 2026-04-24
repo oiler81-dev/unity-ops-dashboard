@@ -331,10 +331,19 @@ function setDashboardDebug(data) {
 }
 
 function getDefaultWeekEnding() {
-  // Always return the most recent past Friday (or today if today is Friday)
+  // Default to the most recent FULLY-completed reporting week. Operators
+  // file Mon–Fri data either Friday EOD or Monday morning; on Friday itself
+  // the current week isn't done yet, so showing it as the dashboard default
+  // produced a wall of -100% red on every entity that hadn't filed. Roll
+  // back to the prior Friday in that case.
+  //
+  // Today is Fri (day=5)  → daysBack = 7  (skip this week, show last week)
+  // Today is Sat (day=6)  → daysBack = 1  (yesterday's Friday)
+  // Today is Sun (day=0)  → daysBack = 2  (Friday two days ago)
+  // Today is Mon-Thu (1-4) → daysBack = day + 2 (the most recent past Friday)
   const d = new Date();
-  const day = d.getDay(); // 0=Sun, 5=Fri
-  const daysBack = day >= 5 ? day - 5 : day + 2; // how many days back to reach Friday
+  const day = d.getDay();
+  const daysBack = day === 5 ? 7 : (day > 5 ? day - 5 : day + 2);
   d.setDate(d.getDate() - daysBack);
   return d.toISOString().slice(0, 10);
 }
@@ -1410,22 +1419,38 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
               </div>
             </div>
           `
-          : `
-            <div class="entityCompareGrid">
-              <div class="entityMiniStat">
-                <span class="entityMiniLabel">Visits vs Prior</span>
-                <strong>${fmtPct(visitPct)}</strong>
+          : (() => {
+            // When the entity hasn't entered data for the selected period,
+            // -100% red on every variance is misleading noise. Detect that
+            // case and show a single neutral chip instead.
+            const noCurrentData = (totalVisits || 0) === 0 && normalizeNumber(row.callVolume) === 0 && normalizeNumber(row.newPatients) === 0;
+            if (noCurrentData) {
+              return `
+                <div class="entityCompareGrid">
+                  <div class="entityMiniStat entityMiniStatPending" style="grid-column:1/-1;">
+                    <span class="entityMiniLabel">Status</span>
+                    <strong style="color:var(--text-muted);font-weight:500;">Not entered for this period</strong>
+                  </div>
+                </div>
+              `;
+            }
+            return `
+              <div class="entityCompareGrid">
+                <div class="entityMiniStat">
+                  <span class="entityMiniLabel">Visits vs Prior</span>
+                  <strong>${fmtPct(visitPct)}</strong>
+                </div>
+                <div class="entityMiniStat">
+                  <span class="entityMiniLabel">Calls vs Prior</span>
+                  <strong>${fmtPct(callPct)}</strong>
+                </div>
+                <div class="entityMiniStat">
+                  <span class="entityMiniLabel">NP vs Prior</span>
+                  <strong>${fmtPct(npPct)}</strong>
+                </div>
               </div>
-              <div class="entityMiniStat">
-                <span class="entityMiniLabel">Calls vs Prior</span>
-                <strong>${fmtPct(callPct)}</strong>
-              </div>
-              <div class="entityMiniStat">
-                <span class="entityMiniLabel">NP vs Prior</span>
-                <strong>${fmtPct(npPct)}</strong>
-              </div>
-            </div>
-          `;
+            `;
+          })();
 
         return `
           <div class="entityCard" style="border-top:4px solid ${brand.accent};">
@@ -1453,7 +1478,6 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
               <div class="entityMetricHero${hasPt ? "" : " entityMetricHeroPlaceholder"}">
                 <span class="entityMetricLabel">PT Visits</span>
                 <strong>${hasPt ? formatWhole(ptVisits) : "—"}</strong>
-                ${hasPt ? "" : `<span class="entityMetricSub">no PT program</span>`}
               </div>
               <div class="entityMetricHero">
                 <span class="entityMetricLabel">Cash</span>
