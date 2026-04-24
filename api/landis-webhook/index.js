@@ -56,11 +56,18 @@ const ENTITY_TOKENS = {
 function tokenMatchesEntity(haystack) {
   if (!haystack) return null;
   const hay = String(haystack);
+  const hayLower = hay.toLowerCase();
   for (const [entity, tokens] of Object.entries(ENTITY_TOKENS)) {
     for (const token of tokens) {
-      // Word-boundary: token must be surrounded by start/end or non-alphanumeric chars.
+      // First try a word-boundary match (preferred; safer for short tokens).
       const re = new RegExp(`(^|[^a-z0-9])${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`, "i");
       if (re.test(hay)) return entity;
+      // Fallback: simple case-insensitive substring. Landis queue/OU names
+      // sometimes contain unusual characters around the token (e.g. tabs,
+      // unicode dashes, NBSPs) that defeat the word-boundary regex. The
+      // tokens we use ("LAOSS", "NES", "laorthos.com", "nespecialists.com")
+      // are unique enough that a substring match is safe.
+      if (hayLower.includes(token.toLowerCase())) return entity;
     }
   }
   return null;
@@ -201,37 +208,61 @@ module.exports = async function (context, req) {
 
     const entity = resolveEntity(body);
     if (!entity) {
-      // Log the routing-relevant fields (queue/ou/site names) so we can
-      // diagnose why Landis events aren't being matched to entities.
-      // These fields shouldn't carry caller PHI — they're config labels.
-      context.log.warn("Landis webhook: unresolved entity", {
+      // Echo back the keys we can see + the values for routing-relevant
+      // fields so the response surfaced in Landis's "Webhook Send Attempts"
+      // table tells us exactly what shape to add to ENTITY_TOKENS. The
+      // keys/values we surface are config labels (queue/OU names), not
+      // caller PHI.
+      const debug = {
+        bodyKeys: Object.keys(body || {}),
         eventType,
         queueName: body.QueueName || body.queueName,
         teamName: body.TeamName || body.teamName,
         location: body.Location || body.location,
         site: body.Site || body.site,
         ouPath: body.OUPath || body.ouPath,
-        interactionObjectName: body.InteractionObjectName || body.interactionObjectName
-      });
-      return { status: 200, body: { ok: true, skipped: true, reason: "entity not resolved" } };
+        interactionObjectName: body.InteractionObjectName || body.interactionObjectName,
+        agentUpn: body.AgentUpn || body.agentUpn,
+        agentName: body.AgentName || body.agentName
+      };
+      context.log.warn("Landis webhook: unresolved entity", debug);
+      return { status: 200, body: { ok: true, skipped: true, reason: "entity not resolved", debug } };
     }
 
-    const dateKey  = toDateKey(body.Date || body.date || body.Timestamp || body.timestamp);
+    // Landis IVR/queue events use StartDateTime, not Date. Fall back through
+    // every common timestamp field so we always land in the right day bucket.
+    const dateKey = toDateKey(
+      body.Date || body.date
+      || body.Timestamp || body.timestamp
+      || body.StartDateTime || body.startDateTime
+      || body.EndDateTime || body.endDateTime
+      || body.PeriodStart || body.periodStart
+    );
     let updates    = {};
 
     const evtLower = eventType.toLowerCase();
-    if (evtLower.includes("queue")) {
+    // Landis doesn't put EventType in the body; the field that distinguishes
+    // event shape is the event NAME on the subscription, which we don't see
+    // server-side. Infer from body shape: TotalCalls/AnsweredCalls => queue,
+    // AvgTalkTime alone => agent, CallId without aggregates => single IVR call.
+    const looksQueue = evtLower.includes("queue")
+      || body.TotalCalls != null || body.totalCalls != null
+      || body.AnsweredCalls != null || body.answeredCalls != null
+      || body.AbandonedCalls != null || body.abandonedCalls != null;
+    const looksAgent = evtLower.includes("agent") || (!looksQueue && (body.AvgTalkTime != null || body.avgTalkTime != null));
+    const looksIvr = evtLower.includes("ivr") || (!looksQueue && !looksAgent && (body.CallId != null || body.callId != null));
+
+    if (looksQueue) {
       updates = parseQueueWebhook(body);
-    } else if (evtLower.includes("agent")) {
+    } else if (looksAgent) {
       updates = parseAgentWebhook(body);
-    } else if (evtLower.includes("ivr")) {
-      // IVR — one call per event. incrementCalls avoids the Math.max(1,1)
-      // bug where the daily total got stuck at 1 no matter how many
-      // IVR events came in.
+    } else if (looksIvr) {
+      // Per-call event. incrementCalls avoids the Math.max(1,1) bug where
+      // the daily total got stuck at 1 no matter how many events came in.
       updates = { incrementCalls: 1 };
     } else {
-      context.log("Landis webhook: unknown event type", eventType);
-      return { status: 200, body: { ok: true, skipped: true, reason: "unhandled event type" } };
+      context.log("Landis webhook: unknown event shape", { eventType, bodyKeys: Object.keys(body || {}) });
+      return { status: 200, body: { ok: true, skipped: true, reason: "unhandled event shape", bodyKeys: Object.keys(body || {}) } };
     }
 
     const merged = await upsertCallData(client, entity, dateKey, updates);
