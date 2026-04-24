@@ -106,6 +106,11 @@ function resolveEntity(payload) {
   return null;
 }
 
+function safeParseJson(s, fallback) {
+  if (!s) return fallback;
+  try { return JSON.parse(String(s)); } catch { return fallback; }
+}
+
 async function upsertCallData(client, entity, dateKey, updates) {
   // Read existing record first so we can merge, not overwrite
   let existing = {};
@@ -116,32 +121,63 @@ async function upsertCallData(client, entity, dateKey, updates) {
     if (e?.statusCode !== 404) throw e;
   }
 
-  // Queue webhooks send the running daily aggregate — take max.
-  // IVR/Agent events are per-call, so they carry { incrementCalls: 1 }
-  // (or similar) and we ADD instead of max'ing. The prior code used
-  // Math.max(existing, 1) for IVR events which meant the counter
-  // never moved past 1 after the first event of the day.
-  const base = {
-    totalCalls:     Number(existing.totalCalls     || 0),
-    answeredCalls:  Number(existing.answeredCalls  || 0),
-    abandonedCalls: Number(existing.abandonedCalls || 0)
+  // Per-queue running totals stored as JSON inside the row. Each entity has
+  // ~10 queues (East LA, Whittier, Tarzana, …). Landis fires one event per
+  // queue per refresh interval; each event carries that queue's running
+  // daily total. Math.max per-queue catches the latest value, then we sum
+  // across queues to get the entity-day total.
+  //
+  // Without this, Math.max applied directly to the entity row would only
+  // remember the SINGLE highest queue ever seen, not the sum of all queues.
+  const queueTotalsMap   = safeParseJson(existing.queueTotalsJson,   {});
+  const queueAnsweredMap = safeParseJson(existing.queueAnsweredJson, {});
+  const queueAbandMap    = safeParseJson(existing.queueAbandonedJson, {});
+  const queueWaitMap     = safeParseJson(existing.queueWaitSecondsJson, {});
+  const queueHandleMap   = safeParseJson(existing.queueHandleSecondsJson, {});
+
+  const qName = updates.queueName ? String(updates.queueName) : null;
+
+  if (qName && updates.totalCalls != null) {
+    queueTotalsMap[qName]   = Math.max(Number(queueTotalsMap[qName]   || 0), Number(updates.totalCalls     || 0));
+    queueAnsweredMap[qName] = Math.max(Number(queueAnsweredMap[qName] || 0), Number(updates.answeredCalls  || 0));
+    queueAbandMap[qName]    = Math.max(Number(queueAbandMap[qName]    || 0), Number(updates.abandonedCalls || 0));
+    if (updates.avgWaitSeconds   != null) queueWaitMap[qName]   = Number(updates.avgWaitSeconds);
+    if (updates.avgHandleSeconds != null) queueHandleMap[qName] = Number(updates.avgHandleSeconds);
+  }
+
+  // Sum across queues for the entity-day total. If the event didn't carry
+  // a queueName (older test payloads), we still allow ad-hoc per-call
+  // increment via incrementCalls.
+  const sumValues = (m) => Object.values(m).reduce((a, b) => a + Number(b || 0), 0);
+  const baseTotal = sumValues(queueTotalsMap);
+  const baseAns   = sumValues(queueAnsweredMap);
+  const baseAban  = sumValues(queueAbandMap);
+
+  // Average wait/handle across queues that have non-zero values.
+  const avgOf = (m) => {
+    const vals = Object.values(m).map(Number).filter((n) => Number.isFinite(n) && n > 0);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
   };
+
   const merged = {
     partitionKey:     entity,
     rowKey:           dateKey,
     entity,
     date:             dateKey,
     source:           "landis",
-    totalCalls:       base.totalCalls     + Number(updates.incrementCalls     || 0) +
-                        Math.max(0, Number(updates.totalCalls     || 0) - base.totalCalls),
-    answeredCalls:    base.answeredCalls  + Number(updates.incrementAnswered  || 0) +
-                        Math.max(0, Number(updates.answeredCalls  || 0) - base.answeredCalls),
-    abandonedCalls:   base.abandonedCalls + Number(updates.incrementAbandoned || 0) +
-                        Math.max(0, Number(updates.abandonedCalls || 0) - base.abandonedCalls),
-    avgWaitSeconds:   updates.avgWaitSeconds   ?? existing.avgWaitSeconds   ?? 0,
+    totalCalls:       baseTotal + Number(updates.incrementCalls     || 0),
+    answeredCalls:    baseAns   + Number(updates.incrementAnswered  || 0),
+    abandonedCalls:   baseAban  + Number(updates.incrementAbandoned || 0),
+    avgWaitSeconds:   avgOf(queueWaitMap)   || updates.avgWaitSeconds   || existing.avgWaitSeconds   || 0,
     avgTalkSeconds:   updates.avgTalkSeconds   ?? existing.avgTalkSeconds   ?? 0,
-    avgHandleSeconds: updates.avgHandleSeconds ?? existing.avgHandleSeconds ?? 0,
-    updatedAt:        new Date().toISOString()
+    avgHandleSeconds: avgOf(queueHandleMap) || updates.avgHandleSeconds || existing.avgHandleSeconds || 0,
+    queueTotalsJson:        JSON.stringify(queueTotalsMap),
+    queueAnsweredJson:      JSON.stringify(queueAnsweredMap),
+    queueAbandonedJson:     JSON.stringify(queueAbandMap),
+    queueWaitSecondsJson:   JSON.stringify(queueWaitMap),
+    queueHandleSecondsJson: JSON.stringify(queueHandleMap),
+    queueCount:             Object.keys(queueTotalsMap).length,
+    updatedAt:              new Date().toISOString()
   };
 
   // Compute derived rates
@@ -157,8 +193,11 @@ async function upsertCallData(client, entity, dateKey, updates) {
 }
 
 function parseQueueWebhook(payload) {
-  // App.QueueWebhook — queue-level aggregates
+  // App.QueueWebhook — queue-level aggregates. queueName is propagated so
+  // upsertCallData can store per-queue running totals (multiple queues per
+  // entity sum to the entity's day total).
   return {
+    queueName:        payload.QueueName || payload.queueName || "",
     totalCalls:       Number(payload.TotalCalls       || payload.totalCalls       || 0),
     answeredCalls:    Number(payload.AnsweredCalls     || payload.answeredCalls    || 0),
     abandonedCalls:   Number(payload.AbandonedCalls    || payload.abandonedCalls   || 0),
