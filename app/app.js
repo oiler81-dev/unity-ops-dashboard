@@ -1183,12 +1183,22 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope, 
   const avgCancel = averageMetric(current.regions, "cancellationRate");
   const avgCxnsCombined = avgNoShow + avgCancel;
 
-  // For entities/scopes with PT, include PT visits seen in the combined visit volume
+  // Total Visits = ortho + PT + imaging. Mirrors the budget-side
+  // totalVisitsBudget definition so the "Total Visits vs Budget" variance
+  // is apples-to-apples. Imaging is SpineOne-only (zero elsewhere) so it
+  // contributes nothing to LAOSS/NES/MRO totals. Note: visitVolume itself
+  // remains ortho-only — it's the denominator for No-Show % and
+  // Cancellation %, so changing its formula would dilute those rates and
+  // break comparisons against historical records.
   const hasPt = entityHasPtData(entityScope) || entityScope === "ALL";
   const orthoVisitCurrent    = normalizeNumber(current.totals?.visitVolume);
   const orthoVisitComparison = normalizeNumber(comparison.totals?.visitVolume);
-  const visitCurrent    = hasPt ? orthoVisitCurrent    + normalizeNumber(current.ptTotals?.visitsSeen)    : orthoVisitCurrent;
-  const visitComparison = hasPt ? orthoVisitComparison + normalizeNumber(comparison.ptTotals?.visitsSeen) : orthoVisitComparison;
+  const imagingCurrent    = normalizeNumber(current.totals?.imaging);
+  const imagingComparison = normalizeNumber(comparison.totals?.imaging);
+  const ptCurrent    = hasPt ? normalizeNumber(current.ptTotals?.visitsSeen)    : 0;
+  const ptComparison = hasPt ? normalizeNumber(comparison.ptTotals?.visitsSeen) : 0;
+  const visitCurrent    = orthoVisitCurrent    + ptCurrent    + imagingCurrent;
+  const visitComparison = orthoVisitComparison + ptComparison + imagingComparison;
   const visitVariance = visitCurrent - visitComparison;
   const numWeeks = weekSets?.primaryWeeks?.length || 1;
   const daysPerWeek = entityScope === "NES" ? 4.5 : 5;
@@ -1199,10 +1209,11 @@ function renderDashboardCards(current, comparison, compareAgainst, entityScope, 
 
   const cards = [
     {
-      // Budget comparison uses totalVisitsBudget (ortho + PT + imaging) so it
-      // matches the PT-lumped actuals above. Falls back to visitVolumeBudget
-      // for pre-2026-xlsx data that only has the ortho total.
-      label: "Visit Volume",
+      // Headline KPI now reports Total Visits (ortho + PT + imaging) to
+      // match the budget-side totalVisitsBudget definition. visitVolume
+      // remains ortho-only inside the data layer; the combined number is
+      // computed at render time so rate denominators stay coherent.
+      label: "Total Visits",
       value: formatWhole(visitCurrent),
       movement: isVsBudget
         ? buildKpiMovement(visitCurrent, normalizeNumber(current.budgetTotals?.totalVisitsBudget || current.budgetTotals?.visitVolumeBudget), formatWhole)
@@ -1342,14 +1353,17 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           newPatientsBudget: 0
         };
 
-        // Tessa: lump PT visits into total visits for entities that have a PT line
-        // (NES, SpineOne, MRO). Entity cards previously showed ortho-only, which
-        // didn't match the top-line KPI card that already combines both.
+        // Total Visits = ortho + PT + imaging, matching the headline KPI and
+        // the budget-side totalVisitsBudget. Imaging is SpineOne-only so it
+        // contributes zero to LAOSS/NES/MRO. PT is included only when the
+        // entity actually has a PT program.
         const hasPt = entityHasPtData(entity);
         const ptVisits = hasPt ? normalizeNumber(row.pt?.visitsSeen) : 0;
         const priorPtVisits = hasPt ? normalizeNumber(prior.pt?.visitsSeen) : 0;
-        const totalVisits = normalizeNumber(row.visitVolume) + ptVisits;
-        const priorTotalVisits = normalizeNumber(prior.visitVolume) + priorPtVisits;
+        const imagingVisits = normalizeNumber(row.imaging);
+        const priorImagingVisits = normalizeNumber(prior.imaging);
+        const totalVisits = normalizeNumber(row.visitVolume) + ptVisits + imagingVisits;
+        const priorTotalVisits = normalizeNumber(prior.visitVolume) + priorPtVisits + priorImagingVisits;
         // Budget now carries PT + Surgery + Imaging + ortho totals (2026 xlsx ingest).
         // totalVisitsBudget = ortho + PT + imaging; fall back to ortho + PT if the
         // row somehow predates the xlsx ingest.
@@ -5815,9 +5829,44 @@ function renderDashboardEntitiesPt(current, comparison, entities, compareAgainst
 
 const CHANGELOG = [
   {
+    version: "2.2.0",
+    date: "2026-04-27",
+    label: "Latest",
+    sections: [
+      {
+        type: "feature",
+        title: "New Features",
+        items: [
+          "Total Visits headline KPI — the dashboard's top 'Visit Volume' card is now 'Total Visits' and includes ortho + PT + imaging. Mirrors the budget-side totalVisitsBudget so the 'Total Visits vs Budget' variance is finally apples-to-apples instead of comparing ortho-only actuals against the lumped budget. visitVolume itself stays ortho-only inside the data layer so No-Show % and Cancellation % rate denominators don't drift.",
+          "Multi-week aggregation on entity-card live phones — Rolling 4 Weeks, MTD, Last 30/90 Days, YTD, and Custom Range now sum call data across every week in the selected period. Header reads 'Live Phones (N weeks)' and the source line shows 'x/N days synced'. Previously only the trailing week's data appeared.",
+          "Call Center Report — dedicated sidebar view with 8 KPI cards, daily-trend stacked bar chart, day-of-week chart, and entity-by-entity breakdown. Period picker covers This Week, Last Week, Rolling 4 Weeks, MTD, Last 30/90 Days, and Custom Range."
+        ]
+      },
+      {
+        type: "fix",
+        title: "Bug Fixes",
+        items: [
+          "Imaging and Reschedules silently dropped on save — the manual-entry weekly-save endpoint never persisted either field, so SpineOne couldn't save imaging counts and no non-LAOSS entity could save reschedules. The frontend submitted the values, the backend dropped them before reaching Table Storage, and the load endpoint filtered them again on the way back. Reported by Chris (SpineOne ACOD); both fields now round-trip through every API path.",
+          "Imaging and Reschedules missing from dashboard rollups — even after the save fix, the executive-summary region builder, Trends endpoint, and the frontend dashboard aggregator each filtered both fields out at separate stages. All three paths now carry the values end-to-end so totals on the dashboard, executive view, and trends chart all reflect what was entered.",
+          "Landis events were never producing CallData rows — Landis sends per-call events without an EventType field, so our handler kept dropping them as 'unhandled'. Resolver now infers shape from body fields (TotalCalls present → queue, AvgTalkTime → agent, just CallId → IVR), and the entity matcher tolerates unicode/whitespace edge cases via a substring fallback. CallData now reflects real-time LAOSS and NES traffic alongside MRO/SpineOne RingCentral.",
+          "Landis webhook secret comparison failed when the admin UI saved the header value with surrounding quotes — defensive unquoteHeader strips them before timing-safe compare so the secret matches regardless of how it was entered.",
+          "Per-call CallId dedup added so the same call appearing across QueueWebhook + AgentWebhook + IvrWebhook events is only counted once per day. Per-queue running totals are stored separately and summed across queues so multi-queue entities (LAOSS East LA + Whittier + Tarzana, etc.) get a correct day total instead of just the largest queue's count."
+        ]
+      },
+      {
+        type: "improvement",
+        title: "Improvements",
+        items: [
+          "/api/call-data accepts a weeksEnding=date,date,... list (capped at 26) and aggregates server-side instead of forcing the frontend to fan out one request per week. Cuts dashboard render from up to 52 parallel requests down to 4 (one per entity) and adds a request-id token to ignore stale responses if the user changes period mid-load.",
+          "Live Phones strip header and source line both reflect the actual selected period — was hardcoded 'this week / x of 5 days'.",
+          "Registry-driven save/load audit script added so any future field added to ENTRY_FIELDS that isn't mirrored in the API endpoints fails fast instead of silently dropping the value (the root cause of the imaging+reschedules regression)."
+        ]
+      }
+    ]
+  },
+  {
     version: "2.1.0",
     date: "2026-04-22",
-    label: "Latest",
     sections: [
       {
         type: "feature",
