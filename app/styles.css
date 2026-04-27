@@ -70,6 +70,63 @@
   --font-mono:       'Geist Mono', ui-monospace, SFMono-Regular, 'Menlo', monospace;
 }
 
+/* ── Dark theme — token overrides ───────────────────────────────────
+   Activated via body.darkView class (toggled from the sidebar). The
+   163 body.lightView CSS rules in this file all use var(--token), so
+   re-pointing the tokens is enough to recolor the whole app — no
+   per-component dark variants needed. Keeps the same blue accent
+   family as light, brightened slightly for contrast against the dark
+   navy surfaces. */
+body.darkView {
+  --bg-main:         #0F1B2D;
+  --bg-sidebar:      #142440;
+  --bg-panel:        #1A2842;
+  --bg-panel-soft:   #243358;
+  --bg-panel-inner:  #1A2842;
+  --bg-glass:        #1A2842;
+  --bg-glass-strong: #243358;
+  --border-soft:     rgba(255,255,255,0.08);
+  --border-mid:      rgba(255,255,255,0.14);
+  --border-strong:   rgba(99,143,235,0.35);
+
+  --text:            #E8EAF0;
+  --text-main:       #E8EAF0;
+  --text-soft:       #C4C9D6;
+  --text-muted:      #8B94A8;
+  --text-mutedest:   #5C6680;
+
+  --accent:          #5B7BD6;
+  --accent-hover:    #7593E0;
+  --accent-soft:     rgba(91,123,214,0.16);
+  --accent-dim:      rgba(91,123,214,0.10);
+
+  --gold:            #5B7BD6;
+  --gold-2:          #7593E0;
+  --gold-soft:       rgba(91,123,214,0.16);
+  --accent-2:        #5B7BD6;
+  --accent-3:        #4FBE8E;
+  --pt-accent:       #4FBE8E;
+  --pt-accent-2:     #B591F0;
+
+  --good:            #4FBE8E;
+  --good-soft:       rgba(79,190,142,0.18);
+  --warning:         #E0A845;
+  --warning-soft:    rgba(224,168,69,0.18);
+  --bad:             #E26A6A;
+  --bad-soft:        rgba(226,106,106,0.18);
+
+  --shadow-xs:       0 1px 0 rgba(0,0,0,0.20);
+  --shadow-sm:       0 1px 0 rgba(0,0,0,0.20), 0 1px 2px rgba(0,0,0,0.30);
+  --shadow-md:       0 2px 4px rgba(0,0,0,0.25), 0 6px 14px rgba(0,0,0,0.40);
+  --shadow-lg:       0 20px 40px rgba(0,0,0,0.50), 0 4px 10px rgba(0,0,0,0.30);
+  --shadow-xl:       0 24px 48px rgba(0,0,0,0.55), 0 6px 12px rgba(0,0,0,0.35);
+}
+
+/* Native form elements still default to OS palette unless we hint —
+   tells the UA to render scrollbars and form controls in dark mode. */
+body.darkView { color-scheme: dark; }
+body.lightView { color-scheme: light; }
+
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;padding:0;min-height:100%;}
 html{scroll-behavior:smooth;}

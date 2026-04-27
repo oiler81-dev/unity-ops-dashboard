@@ -247,23 +247,53 @@ function currentDashboardMonthKey() {
 }
 
 // ── View mode ─────────────────────────────────────────────────
-// The app only ships one theme now — a light SaaS console inspired by
-// Ramp / Linear / Retool. The legacy Command and Default (dark) themes
-// have been retired. The `lightView` class is applied on every load so
-// every `body.lightView` CSS rule acts as the base style.
-function setViewMode(mode) {
-  // Legacy signature kept for any callers; unconditionally applies light.
-  document.body.classList.remove("commandView");
-  document.body.classList.add("lightView");
-  localStorage.setItem("viewMode", "light");
+// Two themes: "light" (default SaaS console — white surfaces, navy
+// accent) and "dark" (deep navy surfaces, brighter blue accent). Both
+// share the same component CSS — only the palette tokens differ, so
+// adding/removing a body class is enough to re-color the whole app.
+// Preference persists in localStorage("viewMode").
+const THEME_KEY = "viewMode";
+const THEME_LIGHT = "light";
+const THEME_DARK  = "dark";
+const VALID_THEMES = new Set([THEME_LIGHT, THEME_DARK]);
+
+function applyThemeClass(mode) {
+  document.body.classList.remove("commandView", "lightView", "darkView");
+  document.body.classList.add(mode === THEME_DARK ? "darkView" : "lightView");
 }
 
-function toggleLightView() { setViewMode("light"); }
+function syncThemeToggleUI(mode) {
+  const icon  = byId("themeToggleIcon");
+  const label = byId("themeToggleLabel");
+  // Icon shows the destination state (the mode you'd switch TO), not
+  // the current — same convention as iOS/macOS toggles.
+  if (icon)  icon.textContent  = mode === THEME_DARK ? "☀" : "☾";
+  if (label) label.textContent = mode === THEME_DARK ? "Light" : "Dark";
+}
+
+function setViewMode(mode) {
+  const target = VALID_THEMES.has(mode) ? mode : THEME_LIGHT;
+  applyThemeClass(target);
+  try { localStorage.setItem(THEME_KEY, target); } catch (_) {}
+  syncThemeToggleUI(target);
+  return target;
+}
+
+function toggleLightView() {
+  const current = document.body.classList.contains("darkView") ? THEME_DARK : THEME_LIGHT;
+  setViewMode(current === THEME_DARK ? THEME_LIGHT : THEME_DARK);
+}
 window.toggleLightView = toggleLightView;
 
 function initCommandView() {
-  // Ensure light is applied even when localStorage has a legacy value.
-  setViewMode("light");
+  // Read stored preference, falling back to light. Legacy "command" /
+  // unrecognized values map to light too.
+  let stored = THEME_LIGHT;
+  try { stored = localStorage.getItem(THEME_KEY) || THEME_LIGHT; } catch (_) {}
+  setViewMode(stored);
+  const btn = byId("themeToggleBtn");
+  if (btn) btn.addEventListener("click", toggleLightView);
+  // Back-compat: an older button id still wired in some forks.
   const lvBtn = byId("lightViewToggle");
   if (lvBtn) lvBtn.addEventListener("click", toggleLightView);
 }
