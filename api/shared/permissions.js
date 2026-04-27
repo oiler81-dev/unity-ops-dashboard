@@ -27,7 +27,17 @@ function resolveAccess(user) {
   }
 
   // Unknown authenticated user (passed Azure AD but not in region map).
-  // Do NOT treat as "allowed" — unmapped users have no entity and no data access.
+  // Surface in App Insights traces so a UPN typo or new-hire onboarding
+  // gap shows up in monitoring instead of waiting for a user complaint.
+  // console.warn is captured by the Functions host into App Insights
+  // automatically, so no context threading is needed at every caller.
+  // The user already passed Azure AD, so logging their email is staff
+  // identity, not a privacy leak.
+  try {
+    console.warn(`auth: authenticated user not in REGION_USER_MAP: ${email}`);
+  } catch (_) {
+    // Logging must never throw on the auth path.
+  }
   return {
     authenticated: true,
     email,
