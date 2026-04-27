@@ -92,25 +92,39 @@ function toDateKey(dateStr) {
   return new Date(dateStr).toISOString().slice(0, 10);
 }
 
+// Two-tier entity resolution. QueueName/OUPath/Site/etc. are AUTHORITATIVE
+// because a queue belongs to exactly one entity. Agent/caller UPNs are a
+// fallback because cross-coverage (NES agent picking up a LAOSS call when
+// LAOSS is busy) means the UPN's domain does NOT necessarily match the
+// queue's owner. Earlier code returned the first match across both tiers,
+// which silently misattributed cross-covered calls to the answering
+// agent's entity instead of the queue's owner — that's how Landis truth
+// of LAOSS=7,736 / NES=1,978 became dashboard 6,086 / 3,247.
+const QUEUE_FIELDS = (payload) => [
+  payload.QueueName, payload.queueName,
+  payload.TeamName, payload.teamName,
+  payload.CampaignName,
+  payload.Location, payload.location, payload.Site, payload.site,
+  payload.OUPath, payload.ouPath,
+  payload.InteractionObjectName, payload.interactionObjectName
+];
+const AGENT_FIELDS = (payload) => [
+  payload.AgentUpn, payload.agentUpn,
+  payload.CallerUpn, payload.callerUpn
+];
+
 function resolveEntity(payload) {
-  // Landis naming: "Landis-LAOSS-Tarzana", OUPath "Default\\Landis-LAOSS-WC" or
-  // "NES OU\\Landis-NES-New Patients", agent UPNs "*@laorthos.com" / "*@nespecialists.com".
-  // Check each candidate with a word-boundary token match.
-  const candidates = [
-    payload.QueueName, payload.TeamName, payload.CampaignName,
-    payload.queueName, payload.teamName, payload.Location,
-    payload.location, payload.Site, payload.site,
-    payload.OUPath, payload.ouPath,
-    payload.InteractionObjectName, payload.interactionObjectName,
-    // Agent/caller UPNs as last-resort fallback — domain identifies the entity.
-    payload.AgentUpn, payload.agentUpn,
-    payload.CallerUpn, payload.callerUpn
-  ];
-  for (const c of candidates) {
+  // Returns { entity, source } where source is "queue" (authoritative) or
+  // "agent" (fallback when no queue context is present on the event).
+  for (const c of QUEUE_FIELDS(payload)) {
     const match = tokenMatchesEntity(c);
-    if (match) return match;
+    if (match) return { entity: match, source: "queue" };
   }
-  return null;
+  for (const c of AGENT_FIELDS(payload)) {
+    const match = tokenMatchesEntity(c);
+    if (match) return { entity: match, source: "agent" };
+  }
+  return { entity: null, source: null };
 }
 
 function safeParseJson(s, fallback) {
@@ -154,11 +168,21 @@ async function upsertCallData(client, entity, dateKey, updates) {
   }
 
   // Per-call mode: event is one unique call (already deduped by CallId at the
-  // caller). Increment the per-queue tally for this queue.
-  if (qName && updates.incrementCalls) {
-    queueTotalsMap[qName]   = Number(queueTotalsMap[qName]   || 0) + Number(updates.incrementCalls     || 0);
-    queueAnsweredMap[qName] = Number(queueAnsweredMap[qName] || 0) + Number(updates.incrementAnswered  || 0);
-    queueAbandMap[qName]    = Number(queueAbandMap[qName]    || 0) + Number(updates.incrementAbandoned || 0);
+  // caller). Increment the per-queue tally for this queue. Increments may be
+  // negative when reconciling a prior misattribution (entity reassign) or
+  // flipping an abandoned call to answered when an agent event reveals the
+  // call was actually picked up. Trigger the block whenever ANY of the three
+  // counters is changing — gating only on incrementCalls would skip pure
+  // answered/abandoned reshuffles where incrementCalls = 0. Clamp at zero
+  // afterwards so a race condition can never persist a negative count.
+  const hasIncrement =
+    Number(updates.incrementCalls    || 0) !== 0 ||
+    Number(updates.incrementAnswered || 0) !== 0 ||
+    Number(updates.incrementAbandoned|| 0) !== 0;
+  if (qName && hasIncrement) {
+    queueTotalsMap[qName]   = Math.max(0, Number(queueTotalsMap[qName]   || 0) + Number(updates.incrementCalls     || 0));
+    queueAnsweredMap[qName] = Math.max(0, Number(queueAnsweredMap[qName] || 0) + Number(updates.incrementAnswered  || 0));
+    queueAbandMap[qName]    = Math.max(0, Number(queueAbandMap[qName]    || 0) + Number(updates.incrementAbandoned || 0));
   }
 
   // Sum across queues for the entity-day total. If the event didn't carry
@@ -175,15 +199,28 @@ async function upsertCallData(client, entity, dateKey, updates) {
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
   };
 
+  // When a queue name is provided the increment is already folded into
+  // queueTotalsMap[qName] above, so baseTotal already reflects it — adding
+  // updates.increment* again would double-count (a long-standing latent
+  // bug that becomes load-bearing once we start passing negative
+  // increments to reassign attributions). The increment is only added on
+  // top of baseTotal when qName is missing, in which case the running
+  // total isn't tracked per-queue and the increment is the entity-level
+  // delta. Math.max-clamped at zero so a reconciliation race never
+  // persists a negative entity total.
+  const incCallsOutside = qName ? 0 : Number(updates.incrementCalls     || 0);
+  const incAnsOutside   = qName ? 0 : Number(updates.incrementAnswered  || 0);
+  const incAbnOutside   = qName ? 0 : Number(updates.incrementAbandoned || 0);
+
   const merged = {
     partitionKey:     entity,
     rowKey:           dateKey,
     entity,
     date:             dateKey,
     source:           "landis",
-    totalCalls:       baseTotal + Number(updates.incrementCalls     || 0),
-    answeredCalls:    baseAns   + Number(updates.incrementAnswered  || 0),
-    abandonedCalls:   baseAban  + Number(updates.incrementAbandoned || 0),
+    totalCalls:       Math.max(0, baseTotal + incCallsOutside),
+    answeredCalls:    Math.max(0, baseAns   + incAnsOutside),
+    abandonedCalls:   Math.max(0, baseAban  + incAbnOutside),
     avgWaitSeconds:   avgOf(queueWaitMap)   || updates.avgWaitSeconds   || existing.avgWaitSeconds   || 0,
     avgTalkSeconds:   updates.avgTalkSeconds   ?? existing.avgTalkSeconds   ?? 0,
     avgHandleSeconds: avgOf(queueHandleMap) || updates.avgHandleSeconds || existing.avgHandleSeconds || 0,
@@ -272,26 +309,7 @@ module.exports = async function (context, req) {
     const client = getTableClient();
     await client.createTable().catch(e => { if (e?.statusCode !== 409) throw e; });
 
-    const entity = resolveEntity(data);
-    if (!entity) {
-      // Echo back keys at BOTH layers so misshapen payloads are easy to debug
-      // from Landis's "Webhook Send Attempts" view without server-side logs.
-      const debug = {
-        envelopeKeys: Object.keys(envelope || {}),
-        dataKeys: Object.keys(data || {}),
-        eventType,
-        queueName: data.QueueName || data.queueName,
-        teamName: data.TeamName || data.teamName,
-        location: data.Location || data.location,
-        site: data.Site || data.site,
-        ouPath: data.OUPath || data.ouPath,
-        interactionObjectName: data.InteractionObjectName || data.interactionObjectName,
-        agentUpn: data.AgentUpn || data.agentUpn,
-        agentName: data.AgentName || data.agentName
-      };
-      context.log.warn("Landis webhook: unresolved entity", debug);
-      return { status: 200, body: { ok: true, skipped: true, reason: "entity not resolved", debug } };
-    }
+    const { entity: resolvedEntity, source: resolvedSource } = resolveEntity(data);
 
     // Landis events carry timestamps under a few possible names. Look at both
     // the envelope (CreationTimeUtc, WebhookEventUtc) and the inner data
@@ -305,44 +323,90 @@ module.exports = async function (context, req) {
       || envelope.CreationTimeUtc || envelope.creationTimeUtc
       || envelope.WebhookEventUtc || envelope.webhookEventUtc
     );
-    let updates    = {};
 
-    // Real Landis events are PER CALL, not pre-aggregated. Each event has a
-    // CallId and represents one call going through a queue (App.QueueWebhook),
-    // being routed to an agent (App.AgentWebhook), or traversing IVR
-    // (App.IvrWebhook). The same CallId appears 2-3 times across event types,
-    // so naive +1 per event would 2-3x the count.
-    //
-    // Strategy: dedupe on (entity, date, CallId) via a separate
-    // CallEventLog table. INSERT-only: 201 on first sighting, 409 on dupes.
-    // Only on first sighting do we update the CallData totals.
-    const callId = data.CallId ?? data.callId;
+    const callId    = data.CallId ?? data.callId;
+    const isAnswered = (Number(data.AgentId) > 0) || !!data.AgentUpn || !!data.AgentName;
+    const queueName  = data.QueueName || data.queueName || "";
+
+    const buildUnresolvedDebug = () => ({
+      envelopeKeys: Object.keys(envelope || {}),
+      dataKeys: Object.keys(data || {}),
+      eventType,
+      queueName: data.QueueName || data.queueName,
+      teamName: data.TeamName || data.teamName,
+      location: data.Location || data.location,
+      site: data.Site || data.site,
+      ouPath: data.OUPath || data.ouPath,
+      interactionObjectName: data.InteractionObjectName || data.interactionObjectName,
+      agentUpn: data.AgentUpn || data.agentUpn,
+      agentName: data.AgentName || data.agentName
+    });
+
+    // Aggregate-only path (no CallId — older test events or aggregate dumps).
     if (callId == null) {
-      // No CallId — possibly an aggregate or test event. Fall back to old
-      // logic: queue aggregate fields if present, otherwise skip.
+      if (!resolvedEntity) {
+        const debug = buildUnresolvedDebug();
+        context.log.warn("Landis webhook: unresolved entity", debug);
+        return { status: 200, body: { ok: true, skipped: true, reason: "entity not resolved", debug } };
+      }
       if (data.TotalCalls != null || data.AnsweredCalls != null) {
-        updates = parseQueueWebhook(data);
-        const merged = await upsertCallData(client, entity, dateKey, updates);
-        return { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, entity, date: dateKey, mode: "aggregate", saved: merged }) };
+        const updates = parseQueueWebhook(data);
+        const merged = await upsertCallData(client, resolvedEntity, dateKey, updates);
+        return { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, entity: resolvedEntity, date: dateKey, mode: "aggregate", saved: merged }) };
       }
       return { status: 200, body: { ok: true, skipped: true, reason: "no CallId, no aggregate", dataKeys: Object.keys(data || {}) } };
     }
 
-    // Dedup: try to insert a CallEventLog row. If 409 → already counted today.
+    // Per-call path. Each Landis call fires multiple events (Queue → IVR →
+    // Agent), so we dedupe globally by (date, callId) — NOT per-entity. The
+    // earlier per-entity scheme allowed the same call to be counted under
+    // both LAOSS (via QueueName) and NES (via cross-coverage AgentUpn),
+    // which inflated NES by ~64% and undercounted LAOSS by ~21%.
+    //
+    // Authority order for entity attribution:
+    //   1. Queue context on THIS event (QueueName/OUPath/Site/etc.) — most
+    //      authoritative because a queue belongs to exactly one entity.
+    //   2. Prior log entry's recorded entity — trust the dedupe state.
+    //   3. Agent/caller UPN on this event — fallback ONLY when the call has
+    //      never been seen with a queue context. Cross-coverage means the
+    //      agent's email domain doesn't necessarily match the queue's owner.
+    //
+    // If a call's first event was tentative agent-derived and a later event
+    // arrives with authoritative queue context disagreeing, we REASSIGN —
+    // decrement the wrong entity's CallData and increment the right one.
     const logClient = getCallEventLogClient();
     await logClient.createTable().catch(e => { if (e?.statusCode !== 409) throw e; });
-    const logPk = `${entity}_${dateKey}`;
+    const logPk = dateKey;
     const logRk = String(callId);
-    const isAnswered = (Number(data.AgentId) > 0) || !!data.AgentUpn || !!data.AgentName;
-    const queueName = data.QueueName || data.queueName || "";
 
-    let firstSighting = false;
-    try {
+    let priorLog = null;
+    try { priorLog = await logClient.getEntity(logPk, logRk); }
+    catch (e) { if (e?.statusCode !== 404) throw e; }
+
+    let entity = null;
+    let entitySource = null;
+    if (resolvedEntity && resolvedSource === "queue") {
+      entity = resolvedEntity; entitySource = "queue";
+    } else if (priorLog?.entity) {
+      entity = priorLog.entity; entitySource = priorLog.entitySource || "agent";
+    } else if (resolvedEntity) {
+      entity = resolvedEntity; entitySource = resolvedSource;
+    }
+
+    if (!entity) {
+      const debug = buildUnresolvedDebug();
+      context.log.warn("Landis webhook: unresolved entity (per-call)", { callId, ...debug });
+      return { status: 200, body: { ok: true, skipped: true, reason: "entity not resolved", callId, debug } };
+    }
+
+    if (!priorLog) {
+      // First sighting — log it and bump CallData.
       await logClient.createEntity({
         partitionKey: logPk,
         rowKey: logRk,
         callId: String(callId),
         entity,
+        entitySource,
         date: dateKey,
         queueName,
         answered: isAnswered,
@@ -350,35 +414,82 @@ module.exports = async function (context, req) {
         eventType,
         firstSeenAt: new Date().toISOString()
       });
-      firstSighting = true;
-    } catch (e) {
-      if (e?.statusCode === 409) {
-        // Already counted this CallId today. Update agent/queue if THIS event
-        // gives us new info (e.g. originally seen as queue event with AgentId=0,
-        // now seeing the agent assignment).
-        if (isAnswered) {
-          try {
-            await logClient.updateEntity({ partitionKey: logPk, rowKey: logRk, answered: true, agentId: data.AgentId || 0 }, "Merge");
-          } catch (_) {}
-        }
-      } else {
-        throw e;
-      }
+      const merged = await upsertCallData(client, entity, dateKey, {
+        queueName,
+        incrementCalls: 1,
+        incrementAnswered: isAnswered ? 1 : 0,
+        incrementAbandoned: isAnswered ? 0 : 1
+      });
+      return { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, entity, date: dateKey, mode: "per-call", callId, answered: isAnswered, source: entitySource, saved: { totalCalls: merged.totalCalls, answeredCalls: merged.answeredCalls, abandonedCalls: merged.abandonedCalls, queueCount: merged.queueCount } }) };
     }
 
-    if (!firstSighting) {
-      return { status: 200, body: { ok: true, skipped: true, reason: "duplicate CallId for day", callId, entity, date: dateKey } };
+    // Duplicate sighting — reconcile if this event reveals new info.
+    const priorEntity   = priorLog.entity;
+    const priorSource   = priorLog.entitySource || "agent";
+    const priorQueue    = priorLog.queueName || "";
+    const priorAnswered = !!priorLog.answered;
+
+    let currentEntity = priorEntity;
+    let currentSource = priorSource;
+    let currentQueue  = priorQueue;
+    let reassigned    = false;
+
+    // (A) Reassign: this event has authoritative queue context that disagrees
+    //     with a tentative agent-derived prior attribution.
+    if (
+      resolvedSource === "queue" &&
+      priorSource === "agent" &&
+      resolvedEntity &&
+      resolvedEntity !== priorEntity
+    ) {
+      await upsertCallData(client, priorEntity, dateKey, {
+        queueName: priorQueue,
+        incrementCalls: -1,
+        incrementAnswered: priorAnswered ? -1 : 0,
+        incrementAbandoned: priorAnswered ? 0 : -1
+      });
+      await upsertCallData(client, resolvedEntity, dateKey, {
+        queueName,
+        incrementCalls: 1,
+        incrementAnswered: priorAnswered ? 1 : 0,
+        incrementAbandoned: priorAnswered ? 0 : 1
+      });
+      currentEntity = resolvedEntity;
+      currentSource = "queue";
+      currentQueue  = queueName;
+      reassigned    = true;
     }
 
-    // First sighting — bump the CallData entity-day row.
-    updates = {
-      queueName,
-      incrementCalls: 1,
-      incrementAnswered: isAnswered ? 1 : 0,
-      incrementAbandoned: isAnswered ? 0 : 1
-    };
-    const merged = await upsertCallData(client, entity, dateKey, updates);
-    return { status: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, entity, date: dateKey, mode: "per-call", callId, answered: isAnswered, saved: { totalCalls: merged.totalCalls, answeredCalls: merged.answeredCalls, abandonedCalls: merged.abandonedCalls, queueCount: merged.queueCount } }) };
+    // (B) Answered flip: prior was abandoned (no agent), this event reveals
+    //     an agent picked up the call. Move the count from abandoned to
+    //     answered for whichever entity now owns it.
+    let answeredFlip = false;
+    if (!priorAnswered && isAnswered) {
+      await upsertCallData(client, currentEntity, dateKey, {
+        queueName: currentQueue,
+        incrementCalls: 0,
+        incrementAnswered: 1,
+        incrementAbandoned: -1
+      });
+      answeredFlip = true;
+    }
+
+    // Persist the reconciled state on the log row.
+    if (reassigned || answeredFlip || priorSource !== currentSource) {
+      try {
+        await logClient.updateEntity({
+          partitionKey: logPk,
+          rowKey: logRk,
+          entity: currentEntity,
+          entitySource: currentSource,
+          queueName: currentQueue,
+          answered: priorAnswered || isAnswered,
+          agentId: data.AgentId || priorLog.agentId || 0
+        }, "Merge");
+      } catch (_) {}
+    }
+
+    return { status: 200, body: { ok: true, entity: currentEntity, date: dateKey, mode: "per-call", callId, duplicate: true, reassigned, answeredFlip, source: currentSource } };
   } catch (error) {
     context.log.error("Landis webhook error:", error.message);
     return {
