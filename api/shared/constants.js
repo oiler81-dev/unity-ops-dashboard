@@ -31,6 +31,7 @@ const REGION_USER_MAP = {
 
   // MRO — Chicago
   "greg.lundgren@mrorthopedics.com": { entity: "MRO", role: "regional" },
+  "glundgren@mrorthopedics.com":     { entity: "MRO", role: "regional" },  // actual UPN, alias
 
   // Admins
   "nperez@unitymsk.com":       { entity: "admin", role: "admin" },
