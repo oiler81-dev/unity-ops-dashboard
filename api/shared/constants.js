@@ -24,6 +24,7 @@ const REGION_USER_MAP = {
   // NES — Portland
   "annette@nespecialists.com":         { entity: "NES", role: "regional" },
   "marketa.stuck@nespecialists.com":   { entity: "NES", role: "regional" },
+  "marketa@nespecialists.com":         { entity: "NES", role: "regional" },  // actual UPN, alias
 
   // SpineOne — Denver
   "chris.zamucen@spineone.com":  { entity: "SpineOne", role: "regional" },
