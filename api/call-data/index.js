@@ -1,7 +1,12 @@
 /**
  * Azure Function: call-data
  * GET  /api/call-data?entity=LAOSS&weekEnding=2026-04-12
- *   Returns aggregated call metrics for the week ending on that Friday
+ *   Single-week aggregate (Mon–Fri ending on that Friday).
+ * GET  /api/call-data?entity=LAOSS&weeksEnding=2026-04-05,2026-04-12,2026-04-19
+ *   Multi-week aggregate, summed across the union of all listed week-Mon–Fri ranges.
+ *   Used by the dashboard entity cards when the user selects a multi-week period
+ *   (Rolling 4 Weeks, MTD, Last 30/90 Days, etc.) so all weeks contribute, not
+ *   just the trailing one.
  *
  * Deploy to: /api/call-data/index.js
  */
@@ -48,19 +53,33 @@ module.exports = async function (context, req) {
   const authError = requireAccess(access);
   if (authError) return respond(authError.status, authError.body);
 
-  const entity     = String(req.query.entity     || "").trim();
-  const weekEnding = String(req.query.weekEnding || "").trim();
+  const entity      = String(req.query.entity      || "").trim();
+  const weekEnding  = String(req.query.weekEnding  || "").trim();
+  const weeksEnding = String(req.query.weeksEnding || "").trim();
 
-  if (!entity || !weekEnding) {
-    return respond(400, { ok: false, error: "Missing entity or weekEnding" });
+  if (!entity || (!weekEnding && !weeksEnding)) {
+    return respond(400, { ok: false, error: "Missing entity or weekEnding/weeksEnding" });
   }
 
   if (!ENTITIES.includes(entity)) {
     return respond(400, { ok: false, error: "Invalid entity" });
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekEnding)) {
-    return respond(400, { ok: false, error: "Invalid weekEnding format (expected YYYY-MM-DD)" });
+  // Parse week list. Single-week mode normalises to a one-element list.
+  // Cap at 26 weeks (~6 months) to keep storage fan-out bounded — the dashboard's
+  // longest preset is "Last 90 Days" (~13 weeks) plus YTD which can go higher,
+  // so 26 is a comfortable ceiling without inviting accidental full-table scans.
+  const WEEK_LIMIT = 26;
+  const weekList = weeksEnding
+    ? weeksEnding.split(",").map((w) => w.trim()).filter(Boolean)
+    : [weekEnding];
+  if (weekList.length === 0 || weekList.length > WEEK_LIMIT) {
+    return respond(400, { ok: false, error: `weeksEnding must contain 1–${WEEK_LIMIT} dates` });
+  }
+  for (const w of weekList) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(w)) {
+      return respond(400, { ok: false, error: `Invalid week format ${w} (expected YYYY-MM-DD)` });
+    }
   }
 
   const entityError = requireEntityAccess(access, entity);
@@ -68,7 +87,12 @@ module.exports = async function (context, req) {
 
   try {
     const client = getTableClient();
-    const dates  = getWeekDates(weekEnding);
+    // Union of all Mon–Fri days across every week in the list. Dedupe in case
+    // the caller passes overlapping ranges (e.g. Custom Range that includes
+    // adjacent Fridays — same Mon–Fri set won't appear twice).
+    const dateSet = new Set();
+    for (const w of weekList) for (const d of getWeekDates(w)) dateSet.add(d);
+    const dates = Array.from(dateSet).sort();
 
     // Fetch all days in the week for this entity
     const records = [];
@@ -103,9 +127,12 @@ module.exports = async function (context, req) {
     return respond(200, {
       ok: true,
       entity,
-      weekEnding,
+      weekEnding:      weekList[weekList.length - 1], // anchor week (latest) for back-compat
+      weeksEnding:     weekList,
+      weekCount:       weekList.length,
       datesFound:      records.map(r => r.date),
       datesRequested:  dates,
+      datesExpected:   dates.length, // total Mon–Fri days across all weeks
       totalCalls:      agg.totalCalls,
       answeredCalls:   agg.answeredCalls,
       abandonedCalls:  agg.abandonedCalls,

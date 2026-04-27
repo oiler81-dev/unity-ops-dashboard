@@ -1514,7 +1514,7 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
 
             <div class="entityLivePhones" id="livePhones_${entity}" data-entity="${entity}">
               <div class="entityLivePhonesHeader">
-                <span class="entityLivePhonesLabel">Live Phones (this week)</span>
+                <span class="entityLivePhonesLabel">Live Phones</span>
                 <span class="entityLivePhonesState">loading…</span>
               </div>
               <div class="entityLivePhonesGrid"></div>
@@ -3949,12 +3949,17 @@ async function loadDashboardLanding() {
   renderVisitsChart(weekSets.primaryWeeks, current, compareAgainst);
 
   // Live call activity per entity card — pulled from Landis (LAOSS/NES)
-  // and RingCentral (MRO/SpineOne). Follows the dashboard's selected week
-  // so the numbers change when the user picks a different period. Fires
-  // in parallel after the main render.
-  const livePhonesWeek = weekSets?.primaryWeeks?.[weekSets.primaryWeeks.length - 1] || getCurrentWeekEnding();
+  // and RingCentral (MRO/SpineOne). Aggregates across every week in the
+  // selected period (Rolling 4 Weeks, MTD, etc.) so multi-week selections
+  // sum all weeks rather than only the trailing one. Fires in parallel
+  // after the main render.
+  const livePhonesWeeks = (weekSets?.primaryWeeks?.length ? weekSets.primaryWeeks : [getCurrentWeekEnding()]);
+  // Bump a request token so late-arriving responses from a previous period
+  // can detect they're stale and bail before mutating the DOM.
+  window._livePhonesRequestId = (window._livePhonesRequestId || 0) + 1;
+  const livePhonesReqId = window._livePhonesRequestId;
   const livePhonesEntities = entityScope === "ALL" ? ENTITIES : [entityScope];
-  livePhonesEntities.forEach((e) => { populateEntityLivePhones(e, livePhonesWeek); });
+  livePhonesEntities.forEach((e) => { populateEntityLivePhones(e, livePhonesWeeks, livePhonesReqId); });
 
   // Store for digest generator
   window._lastDashboardCurrent        = current;
@@ -4082,29 +4087,49 @@ async function loadAndPopulateCallData(entity, weekEnding) {
 // directly from Landis/RingCentral (via /api/call-data). Runs after the main
 // dashboard render so the primary KPIs show immediately and the phones strip
 // fills in progressively.
-async function populateEntityLivePhones(entity, weekEnding) {
+async function populateEntityLivePhones(entity, weeksEnding, reqId) {
   const container = byId(`livePhones_${entity}`);
   if (!container) return;
 
   const stateEl = container.querySelector(".entityLivePhonesState");
   const gridEl  = container.querySelector(".entityLivePhonesGrid");
+  const labelEl = container.querySelector(".entityLivePhonesLabel");
+
+  // Normalize: callers may pass a single string (legacy) or an array of weeks.
+  const weeksList = Array.isArray(weeksEnding) ? weeksEnding : [weeksEnding];
+  const anchorWeek = weeksList[weeksList.length - 1];
+
+  // Update header label so it reflects the actual period rather than the
+  // hardcoded "this week". Single-week selections still read naturally.
+  if (labelEl) {
+    labelEl.textContent = weeksList.length === 1
+      ? "Live Phones (week)"
+      : `Live Phones (${weeksList.length} weeks)`;
+  }
 
   try {
+    const query = weeksList.length > 1
+      ? `weeksEnding=${encodeURIComponent(weeksList.join(","))}`
+      : `weekEnding=${encodeURIComponent(anchorWeek)}`;
     const callData = await apiGet(
-      `/api/call-data?entity=${encodeURIComponent(entity)}&weekEnding=${encodeURIComponent(weekEnding)}`
+      `/api/call-data?entity=${encodeURIComponent(entity)}&${query}`
     );
 
+    // Bail if a newer render has been triggered since we kicked off this fetch.
+    if (reqId != null && reqId !== window._livePhonesRequestId) return;
+
     if (!callData?.ok || !callData.hasData) {
-      if (stateEl) stateEl.textContent = callData?.source ? "no data this week" : "not connected";
+      if (stateEl) stateEl.textContent = callData?.source ? "no data this period" : "not connected";
       if (gridEl) gridEl.innerHTML = "";
       return;
     }
 
     const sourceLabel = callData.source === "ringcentral" ? "RingCentral" : callData.source === "landis" ? "Landis" : callData.source;
-    const daysLabel = callData.datesFound?.length ? `${callData.datesFound.length}/5 days` : "";
+    const expectedDays = callData.datesExpected || (weeksList.length * 5);
+    const daysLabel = callData.datesFound?.length ? `${callData.datesFound.length}/${expectedDays} days` : "";
     if (stateEl) stateEl.textContent = [sourceLabel, daysLabel].filter(Boolean).join(" · ");
 
-    const abandonedBad = normalizeNumber(callData.abandonedRate) >= getThreshold("abandonedCallRate", 10, { region: entity, monthKey: monthKeyFromWeekEnding(weekEnding) });
+    const abandonedBad = normalizeNumber(callData.abandonedRate) >= getThreshold("abandonedCallRate", 10, { region: entity, monthKey: monthKeyFromWeekEnding(anchorWeek) });
     const waitBad = normalizeNumber(callData.avgWaitSeconds) >= 60;
 
     if (gridEl) {
