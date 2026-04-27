@@ -1313,6 +1313,7 @@ function renderDashboardEntities(current, comparison, compareAgainst, entityScop
           newPatients: 0,
           surgeries: 0,
           imaging: 0,
+          reschedules: 0,
           cashCollected: 0,
           ptoDays: 0,
           noShowRate: 0,
@@ -3677,6 +3678,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
           newPatients: 0,
           surgeries: 0,
           imaging: 0,
+          reschedules: 0,
           cashCollected: 0,
           ptoDays: 0,
           piNp: 0,
@@ -3710,6 +3712,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
       row.newPatients += normalizeNumber(region.newPatients);
       row.surgeries += normalizeNumber(region.surgeries);
       row.imaging += normalizeNumber(region.imaging);
+      row.reschedules += normalizeNumber(region.reschedules);
       row.cashCollected += normalizeNumber(region.cashCollected);
       row.ptoDays += normalizeNumber(region.ptoDays);
       row.piNp += normalizeNumber(region.piNp);
@@ -3763,6 +3766,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
     newPatients: row.newPatients,
     surgeries: row.surgeries,
     imaging: row.imaging,
+    reschedules: row.reschedules,
     cashCollected: row.cashCollected,
     ptoDays: row.ptoDays,
     piNp: row.piNp,
@@ -3796,6 +3800,7 @@ function aggregateExecutiveSummaries(summaries, entityScope, options = {}) {
     newPatients: regions.reduce((sum, r) => sum + normalizeNumber(r.newPatients), 0),
     surgeries: regions.reduce((sum, r) => sum + normalizeNumber(r.surgeries), 0),
     imaging: regions.reduce((sum, r) => sum + normalizeNumber(r.imaging), 0),
+    reschedules: regions.reduce((sum, r) => sum + normalizeNumber(r.reschedules), 0),
     cashCollected: regions.reduce((sum, r) => sum + normalizeNumber(r.cashCollected), 0),
     ptoDays: regions.reduce((sum, r) => sum + normalizeNumber(r.ptoDays), 0),
     piNp: regions.reduce((sum, r) => sum + normalizeNumber(r.piNp), 0),

@@ -57,7 +57,10 @@ function normalizeWeeklyValues(values = {}, record = null) {
     ptVisitsSeen: toNumber(values.ptVisitsSeen ?? record?.ptVisitsSeen, 0),
     ptWorkingDays: toNumber(values.ptWorkingDays ?? record?.ptWorkingDays, 5),
     ptUnitsPerVisit: toNumber(values.ptUnitsPerVisit ?? record?.ptUnitsPerVisit, 0),
-    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record?.ptVisitsPerDay, 0)
+    ptVisitsPerDay: toNumber(values.ptVisitsPerDay ?? record?.ptVisitsPerDay, 0),
+
+    imaging: toNumber(values.imaging ?? record?.imaging, 0),
+    reschedules: toNumber(values.reschedules ?? record?.reschedules, 0)
   };
 }
 
@@ -99,6 +102,9 @@ function mapRecord(record) {
     ptWorkingDays: values.ptWorkingDays,
     ptUnitsPerVisit: values.ptUnitsPerVisit,
     ptVisitsPerDay: values.ptVisitsPerDay,
+
+    imaging: values.imaging,
+    reschedules: values.reschedules,
 
     createdBy: toText(record.createdBy),
     createdAt: toText(record.createdAt),

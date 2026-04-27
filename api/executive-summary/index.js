@@ -230,6 +230,12 @@ module.exports = async function (context, req) {
         imaging: entity === "SpineOne"
           ? toNumber(values.imaging ?? record?.imaging, 0)
           : 0,
+        // Ortho reschedules — captured for NES, MRO, SpineOne. LAOSS doesn't
+        // track this in the weekly form, so its column is forced to 0 to
+        // keep entity-level totals comparable.
+        reschedules: entity === "LAOSS"
+          ? 0
+          : toNumber(values.reschedules ?? record?.reschedules, 0),
 
         budget: {
           // Ortho-only total (back-compat): E&M New + E&M Est + Surgery
@@ -280,7 +286,8 @@ module.exports = async function (context, req) {
       ptoDays: regions.reduce((sum, r) => sum + toNumber(r.ptoDays, 0), 0),
       piNp: regions.reduce((sum, r) => sum + toNumber(r.piNp, 0), 0),
       piCashCollection: regions.reduce((sum, r) => sum + toNumber(r.piCashCollection, 0), 0),
-      imaging: regions.reduce((sum, r) => sum + toNumber(r.imaging, 0), 0)
+      imaging: regions.reduce((sum, r) => sum + toNumber(r.imaging, 0), 0),
+      reschedules: regions.reduce((sum, r) => sum + toNumber(r.reschedules, 0), 0)
     };
 
     const sumB = (key) => regions.reduce((sum, r) => sum + toNumber(r.budget?.[key], 0), 0);
