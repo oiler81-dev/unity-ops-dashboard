@@ -2462,6 +2462,23 @@ function showEntryView() {
   setActiveNav("navEntryBtn");
   renderEntityBrand("entryBrandWrap", getSelectedEntity());
   syncEntryModeVisibility();
+
+  // Auto-load the saved record so the form isn't blank on first visit.
+  // Previously loadWeek() only fired on entity/week-input change events,
+  // so navigating to Weekly Entry showed an empty form even when a record
+  // existed for that entity+week — operators thought their data had been
+  // wiped (it hadn't; it was just unloaded). Default the week to the
+  // most-recent-completed Friday if blank, then trigger a load. Errors
+  // surface via setStatus so they don't crash the navigation.
+  const weekInput = byId("weekEnding");
+  if (weekInput && !weekInput.value) {
+    weekInput.value = getDefaultWeekEnding();
+  }
+  if (typeof loadWeek === "function") {
+    Promise.resolve(loadWeek()).catch((e) => {
+      try { setStatus(e?.message || "Failed to load week", true); } catch (_) {}
+    });
+  }
 }
 
 function showExecutiveView() {
