@@ -25,6 +25,7 @@ const REGION_USER_MAP = {
   "annette@nespecialists.com":         { entity: "NES", role: "regional" },
   "marketa.stuck@nespecialists.com":   { entity: "NES", role: "regional" },
   "marketa@nespecialists.com":         { entity: "NES", role: "regional" },  // actual UPN, alias
+  "tdominick@nespecialists.com":       { entity: "NES", role: "regional" },  // NES PT lead
 
   // SpineOne — Denver
   "chris.zamucen@spineone.com":  { entity: "SpineOne", role: "regional" },
@@ -33,6 +34,7 @@ const REGION_USER_MAP = {
   // MRO — Chicago
   "greg.lundgren@mrorthopedics.com": { entity: "MRO", role: "regional" },
   "glundgren@mrorthopedics.com":     { entity: "MRO", role: "regional" },  // actual UPN, alias
+  "amandlik@mrorthopedics.com":      { entity: "MRO", role: "regional" },  // MRO PT lead
 
   // Admins
   "nperez@unitymsk.com":       { entity: "admin", role: "admin" },
