@@ -834,7 +834,22 @@ button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow
   font-variant-numeric: tabular-nums;
 }
 .entityLivePhonesPct { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+/* Secondary value (e.g. "78.1%" under the answered count). Block-level so
+   it stacks under the primary count instead of running into the next
+   column's tile when the card gets narrow. min-height keeps the four
+   tiles vertically aligned even when one tile (Calls, Avg Wait) has no
+   secondary value. */
+.entityLivePhonesSub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.2;
+  min-height: 13px;
+  font-variant-numeric: tabular-nums;
+}
 .entityLivePhonesTileBad .entityLivePhonesTileValue { color: var(--bad); }
+.entityLivePhonesTileBad .entityLivePhonesSub { color: var(--bad); }
 
 body.lightView .entityLivePhones { background: linear-gradient(180deg, var(--bg-panel-soft), var(--bg-panel)); border-color: var(--border-soft); }
 body.lightView .entityLivePhonesLabel { color: var(--text-muted); }

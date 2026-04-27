@@ -4152,22 +4152,33 @@ async function populateEntityLivePhones(entity, weeksEnding, reqId) {
     const waitBad = normalizeNumber(callData.avgWaitSeconds) >= 60;
 
     if (gridEl) {
+      // Stack count above pct in each tile so the percentage doesn't
+      // collide with the next column's number when entity-card width
+      // gets tight (LAOSS in particular hits 6,000+ calls / week and
+      // pct + count on one line overflows). Tiles without a secondary
+      // value get an empty .entityLivePhonesSub so all four tiles stay
+      // the same vertical height.
+      const sub = (text) => `<span class="entityLivePhonesSub">${text || "&nbsp;"}</span>`;
       gridEl.innerHTML = `
         <div class="entityLivePhonesTile">
           <span class="entityLivePhonesTileLabel">Calls</span>
           <strong class="entityLivePhonesTileValue">${formatWhole(callData.totalCalls)}</strong>
+          ${sub("")}
         </div>
         <div class="entityLivePhonesTile">
           <span class="entityLivePhonesTileLabel">Answered</span>
-          <strong class="entityLivePhonesTileValue">${formatWhole(callData.answeredCalls)}<span class="entityLivePhonesPct">&nbsp;${callData.answerRate}%</span></strong>
+          <strong class="entityLivePhonesTileValue">${formatWhole(callData.answeredCalls)}</strong>
+          ${sub(`${callData.answerRate}%`)}
         </div>
         <div class="entityLivePhonesTile ${abandonedBad ? "entityLivePhonesTileBad" : ""}">
           <span class="entityLivePhonesTileLabel">Abandoned</span>
-          <strong class="entityLivePhonesTileValue">${formatWhole(callData.abandonedCalls)}<span class="entityLivePhonesPct">&nbsp;${callData.abandonedRate}%</span></strong>
+          <strong class="entityLivePhonesTileValue">${formatWhole(callData.abandonedCalls)}</strong>
+          ${sub(`${callData.abandonedRate}%`)}
         </div>
         <div class="entityLivePhonesTile ${waitBad ? "entityLivePhonesTileBad" : ""}">
           <span class="entityLivePhonesTileLabel">Avg Wait</span>
           <strong class="entityLivePhonesTileValue">${escapeHtml(callData.avgWaitFormatted || "0:00")}</strong>
+          ${sub("")}
         </div>
       `;
     }
