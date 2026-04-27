@@ -62,6 +62,8 @@ function normalizeWeeklyValues(values = {}, record = null) {
     cashCollected: toNumber(values.cashCollected ?? values.cashActual ?? record?.cashCollected ?? record?.cashActual, 0),
     piNp: toNumber(values.piNp ?? record?.piNp, 0),
     piCashCollection: toNumber(values.piCashCollection ?? record?.piCashCollection, 0),
+    imaging: toNumber(values.imaging ?? record?.imaging, 0),
+    reschedules: toNumber(values.reschedules ?? record?.reschedules, 0),
     operationsNarrative: toText(values.operationsNarrative ?? record?.operationsNarrative, "")
   };
 }

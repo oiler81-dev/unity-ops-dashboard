@@ -58,6 +58,12 @@ function calculateDerived(values = {}) {
   const cashCollected = toNumber(values.cashCollected, 0);
   const piNp = toNumber(values.piNp, 0);
   const piCashCollection = toNumber(values.piCashCollection, 0);
+  // Imaging is SpineOne-only; reschedules is non-LAOSS. Both come from the
+  // ortho input section. Historically these were missing from this function,
+  // which silently dropped any value the user typed (regression of an earlier
+  // bug — the frontend registry had them, but the API never mirrored them).
+  const imaging = toNumber(values.imaging, 0);
+  const reschedules = toNumber(values.reschedules, 0);
   const operationsNarrative = toText(values.operationsNarrative, "");
 
   return {
@@ -88,6 +94,8 @@ function calculateDerived(values = {}) {
     cashCollected,
     piNp,
     piCashCollection,
+    imaging,
+    reschedules,
     operationsNarrative
   };
 }
@@ -170,6 +178,8 @@ module.exports = async function (context, req) {
       cashCollected: values.cashCollected,
       piNp: values.piNp,
       piCashCollection: values.piCashCollection,
+      imaging: values.imaging,
+      reschedules: values.reschedules,
       operationsNarrative: values.operationsNarrative,
 
       source: existing?.source || "app",
