@@ -2,7 +2,7 @@ const { getUserFromRequest } = require("../shared/auth");
 const {
   resolveAccess,
   requireAccess,
-  requireEntityAccess,
+  requireEntityViewAccess,
   safeErrorResponse
 } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
@@ -138,7 +138,7 @@ module.exports = async function (context, req) {
       };
     }
 
-    const entityError = requireEntityAccess(access, entity);
+    const entityError = requireEntityViewAccess(access, entity);
     if (entityError) return entityError;
 
     const table = getTableClient(TABLE_NAME);

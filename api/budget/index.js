@@ -3,7 +3,7 @@ const { getUserFromRequest } = require("../shared/auth");
 const {
   resolveAccess,
   requireAccess,
-  canAccessEntity,
+  canViewEntity,
   scopeEntitiesToAccess,
   safeErrorResponse
 } = require("../shared/permissions");
@@ -56,7 +56,7 @@ module.exports = async function (context, req) {
     const includeAll = safeText(req.query?.all).toLowerCase() === "true";
 
     // Scope entity queries to what the caller may read.
-    if (entity && !canAccessEntity(access, entity)) {
+    if (entity && !canViewEntity(access, entity)) {
       context.res = {
         status: 404,
         headers: { "Content-Type": "application/json" },

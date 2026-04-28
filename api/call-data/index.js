@@ -16,7 +16,7 @@ const { getUserFromRequest } = require("../shared/auth");
 const {
   resolveAccess,
   requireAccess,
-  requireEntityAccess
+  requireEntityViewAccess
 } = require("../shared/permissions");
 
 const TABLE_NAME = "CallData";
@@ -82,7 +82,7 @@ module.exports = async function (context, req) {
     }
   }
 
-  const entityError = requireEntityAccess(access, entity);
+  const entityError = requireEntityViewAccess(access, entity);
   if (entityError) return respond(entityError.status, entityError.body);
 
   try {

@@ -3,7 +3,7 @@ const {
   resolveAccess,
   requireAccess,
   scopeEntitiesToAccess,
-  canAccessEntity,
+  canViewEntity,
   safeErrorResponse
 } = require("../shared/permissions");
 const { getTableClient } = require("../shared/table");
@@ -32,7 +32,7 @@ module.exports = async function (context, req) {
     const allEntities = ["LAOSS", "NES", "SpineOne", "MRO"];
     let entitiesToQuery;
     if (entity) {
-      if (!canAccessEntity(access, entity)) {
+      if (!canViewEntity(access, entity)) {
         return { status: 404, body: { ok: false, error: "Not found" } };
       }
       entitiesToQuery = [entity];

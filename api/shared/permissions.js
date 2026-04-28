@@ -48,9 +48,11 @@ function resolveAccess(user) {
   };
 }
 
-// Returns true only if the caller is an admin, or the requested entity
-// matches the caller's own entity. Every function that reads or writes
-// entity-scoped data MUST call this before the data operation.
+// STRICT (write-side) entity gate. Returns true only if the caller is an
+// admin or the requested entity matches the caller's own entity. Use on
+// every endpoint that mutates entity-scoped data — saves, submits,
+// approvals, deletes — so a regional user can't overwrite another
+// region's record.
 function canAccessEntity(access, entity) {
   if (!access?.allowed) return false;
   if (access.isAdmin) return true;
@@ -58,17 +60,24 @@ function canAccessEntity(access, entity) {
   return String(entity).toLowerCase() === String(access.entity || "").toLowerCase();
 }
 
-// Filter an explicit list of entities down to the ones the caller may access.
-// Admins keep the whole list; regional users get only their own entity.
-// Used by endpoints that default to "all four practices" when the request
-// omits an entity parameter.
+// LAX (read-side) entity gate. Any authenticated, mapped user may VIEW
+// any entity's data — the dashboard is a cross-region operating view, so
+// every leader needs to see how the other practices are doing. Writes
+// stay strict via canAccessEntity above.
+function canViewEntity(access, entity) {
+  if (!access?.allowed) return false;
+  if (!entity) return false;
+  return true;
+}
+
+// Filter an explicit list of entities to those the caller may VIEW.
+// Any allowed user gets the full list — read access is universal across
+// regions. Per-write protection is enforced separately at the write
+// endpoint via canAccessEntity.
 function scopeEntitiesToAccess(access, entities) {
   const list = Array.isArray(entities) ? entities : [];
   if (!access?.allowed) return [];
-  if (access.isAdmin) return list.slice();
-  if (!access.entity) return [];
-  const match = String(access.entity).toLowerCase();
-  return list.filter((e) => String(e || "").toLowerCase() === match);
+  return list.slice();
 }
 
 // Standard 401/403 response builder. Use on every function right after
@@ -89,11 +98,26 @@ function requireAccess(access) {
   return null;
 }
 
-// Standard 403 response for an authenticated user trying to access an entity
-// outside their scope. Returns 404 to avoid leaking whether the entity exists
-// at all — standard IDOR prevention.
+// STRICT (write-side) gate. Returns 404 if the caller can't WRITE to this
+// entity. Use on save/submit/approve/delete endpoints. Returns 404 (not
+// 403) to avoid leaking whether the entity exists at all — IDOR
+// prevention.
 function requireEntityAccess(access, entity) {
   if (!canAccessEntity(access, entity)) {
+    return {
+      status: 404,
+      body: { ok: false, error: "Not found" }
+    };
+  }
+  return null;
+}
+
+// LAX (read-side) gate. Returns 404 only if the caller is unauthenticated
+// or unmapped. Use on GET/list endpoints — every authenticated leader
+// can view every region's data; cross-region visibility is the whole
+// point of the dashboard.
+function requireEntityViewAccess(access, entity) {
+  if (!canViewEntity(access, entity)) {
     return {
       status: 404,
       body: { ok: false, error: "Not found" }
@@ -130,9 +154,11 @@ function toSafeNumber(value, fallback = 0, { min = 0, max = Number.MAX_SAFE_INTE
 module.exports = {
   resolveAccess,
   canAccessEntity,
+  canViewEntity,
   scopeEntitiesToAccess,
   requireAccess,
   requireEntityAccess,
+  requireEntityViewAccess,
   safeErrorResponse,
   toSafeNumber
 };

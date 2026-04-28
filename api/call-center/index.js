@@ -18,7 +18,7 @@ const { getUserFromRequest } = require("../shared/auth");
 const {
   resolveAccess,
   requireAccess,
-  canAccessEntity,
+  canViewEntity,
   scopeEntitiesToAccess,
   safeErrorResponse
 } = require("../shared/permissions");
@@ -136,7 +136,7 @@ module.exports = async function (context, req) {
 
     let entities = scopeEntitiesToAccess(access, ALL_ENTITIES);
     if (entityQuery) {
-      if (!canAccessEntity(access, entityQuery)) {
+      if (!canViewEntity(access, entityQuery)) {
         context.res = { status: 404, headers: { "Content-Type": "application/json" }, body: { ok: false, error: "Not found" } };
         return;
       }
