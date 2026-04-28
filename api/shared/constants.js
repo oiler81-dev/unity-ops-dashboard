@@ -23,6 +23,7 @@ const REGION_USER_MAP = {
 
   // NES — Portland
   "annette@nespecialists.com":         { entity: "NES", role: "regional" },
+  "agutierrez@nespecialists.com":      { entity: "NES", role: "regional" },  // Annette's actual UPN, alias
   "marketa.stuck@nespecialists.com":   { entity: "NES", role: "regional" },
   "marketa@nespecialists.com":         { entity: "NES", role: "regional" },  // actual UPN, alias
   "tdominick@nespecialists.com":       { entity: "NES", role: "regional" },  // NES PT lead
