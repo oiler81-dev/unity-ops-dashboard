@@ -29,8 +29,9 @@ const REGION_USER_MAP = {
   "tdominick@nespecialists.com":       { entity: "NES", role: "regional" },  // NES PT lead
 
   // SpineOne — Denver
-  "chris.zamucen@spineone.com":  { entity: "SpineOne", role: "regional" },
-  "lauren.bradley@spineone.com": { entity: "SpineOne", role: "regional" },
+  "chris.zamucen@spineone.com":   { entity: "SpineOne", role: "regional" },
+  "lauren.bradley@spineone.com":  { entity: "SpineOne", role: "regional" },
+  "catherine.bosard@spineone.com": { entity: "SpineOne", role: "regional" },  // PI lead
 
   // MRO — Chicago
   "greg.lundgren@mrorthopedics.com": { entity: "MRO", role: "regional" },
